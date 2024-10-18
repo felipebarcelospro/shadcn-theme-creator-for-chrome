@@ -1,5 +1,5 @@
 {
-  "name": "@repo/chrome-extension",
+  "name": "chrome-extension",
   "version": "1.0.0",
   "description": "Chrome extension to customize ShadCN UI themes",
   "main": "index.js",
