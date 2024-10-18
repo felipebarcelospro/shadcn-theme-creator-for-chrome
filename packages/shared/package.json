@@ -1,0 +1,9 @@
+{
+  "name": "@repo/shared",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "exports": {
+    "./config": "./src/config.tsx"
+  }
+}

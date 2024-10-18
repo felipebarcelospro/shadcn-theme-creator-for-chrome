@@ -1,0 +1,75 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@layer base {
+  body {
+    @apply bg-white dark:bg-zinc-900 text-gray-900 dark:text-zinc-100;
+  }
+}
+
+@layer components {
+  body {
+    @apply w-[500px] font-sans text-[#1d1d1f] shadow-[-5px_0_15px_rgba(0,0,0,0.1)];
+  }
+
+  body.open {
+    @apply translate-x-0;
+  }
+
+  h1 {
+    @apply text-xl font-semibold mb-4;
+  }
+
+  input[type="color"] {
+    @apply w-full h-10 mb-4 border-none rounded-lg cursor-pointer;
+  }
+
+  button {
+    @apply bg-white dark:bg-zinc-800 text-[#1d1d1f] dark:text-white border border-[#d2d2d7] dark:border-zinc-700 rounded-md text-sm font-medium cursor-pointer transition-all duration-200 flex items-center justify-center p-2;
+  }
+
+  button svg {
+    @apply h-4 w-4;
+  }
+
+  button:has(svg:only-child) {
+    @apply p-2;
+  }
+
+  button:has(svg:first-child:not(:only-child)) {
+    @apply pl-2 pr-3;
+  }
+
+  button:has(svg:last-child:not(:only-child)) {
+    @apply pl-3 pr-2;
+  }
+
+  button:has(svg:first-child:not(:only-child)) svg:first-child {
+    @apply mr-2;
+  }
+
+  button:has(svg:last-child:not(:only-child)) svg:last-child {
+    @apply ml-2;
+  }
+
+  button:hover:not(:disabled) {
+    @apply bg-[#f5f5f7] dark:bg-zinc-700 border-[#c7c7cc] dark:border-zinc-600;
+  }
+
+  button:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .container {
+    @apply bg-white dark:bg-zinc-800 rounded-xl p-6 shadow-md;
+  }
+
+  .label {
+    @apply text-sm font-medium mb-2 text-gray-500 dark:text-zinc-400;
+  }
+
+  .input {
+    @apply w-full p-2.5 border border-[#d2d2d7] dark:border-zinc-700 rounded-lg text-sm transition-colors duration-200 focus:outline-none focus:border-blue-500 dark:bg-zinc-800 dark:text-white;
+  }
+}

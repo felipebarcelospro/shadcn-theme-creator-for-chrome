@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "ShadCN Theme Creator for Chrome",
+  "version": "1.0.1",
+  "description": "Boost productivity and create stunning ShadCN UI themes in real-time. Customize, preview, and export with ease using our Chrome extension.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["shadcn-variables.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "author": "Felipe Barcelos",
+  "homepage_url": "https://github.com/felipebarcelospro/shadcn-theme-creator-for-chrome",
+  "short_name": "ShadCN Themes",
+  "offline_enabled": true,
+  "minimum_chrome_version": "88"
+}
