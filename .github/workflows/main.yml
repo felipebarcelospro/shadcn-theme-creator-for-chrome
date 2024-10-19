@@ -70,6 +70,7 @@ jobs:
             echo "branches_matrix=${branches_matrix}" >> $GITHUB_OUTPUT
           else
             echo "branches_matrix=[]" >> $GITHUB_OUTPUT
+          fi
 
   create_pr:
     needs: [check_open_branches, set_matrix]
