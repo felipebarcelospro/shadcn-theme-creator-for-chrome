@@ -29,7 +29,7 @@ jobs:
         run: sudo apt-get install -y gh
 
       - name: Authenticate GitHub CLI
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+        run: echo "${{ secrets.GH_TOKEN }}" | gh auth login --with-token
 
       - name: Check for Open Branches without PRs
         id: check_branches
