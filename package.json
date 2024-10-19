@@ -1,18 +1,17 @@
 {
   "name": "shadcn-theme-creator-for-chrome",
+  "version": "1.0.0",
+  "description": "Boost productivity and create stunning Shadcn/UI themes in real-time. Customize, preview, and export with ease using our Chrome extension.",
   "private": true,
-  "scripts": {
-    "build": "dotenv -e .env -- turbo build --env-mode=loose",
-    "dev": "dotenv -e .env -- turbo dev --env-mode=loose",
-    "lint": "turbo lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "ui": "turbo --filter @repo/ui ui"
+  "author": "Felipe Barcelos <felipe.barcelospro@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/felipebarcelospro/shadcn-theme-creator-for-chrome#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/felipebarcelospro/shadcn-theme-creator-for-chrome.git"
   },
-  "devDependencies": {
-    "dotenv-cli": "^7.4.2",
-    "prettier": "^3.2.5",
-    "turbo": "^2.2.0",
-    "typescript": "^5.4.5"
+  "bugs": {
+    "url": "https://github.com/felipebarcelospro/shadcn-theme-creator-for-chrome/issues"
   },
   "engines": {
     "node": ">=18"
@@ -21,5 +20,25 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "scripts": {
+    "build": "dotenv -e .env -- turbo build --env-mode=loose",
+    "dev": "dotenv -e .env -- turbo dev --env-mode=loose",
+    "lint": "turbo lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "ui": "turbo --filter @repo/ui ui",
+    "test": "turbo test",
+    "release": "standard-version",
+    "package": "node scripts/package-extension.js",
+    "publish": "node scripts/publish-extension.js"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^7.4.2",
+    "husky": "^9.1.6",
+    "lefthook": "^1.7.22",
+    "prettier": "^3.2.5",
+    "standard-version": "^9.3.2",
+    "turbo": "^2.2.0",
+    "typescript": "^5.4.5"
+  }
 }
