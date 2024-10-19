@@ -102,11 +102,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fetch develop branch
+        run: git fetch origin develop
+
       - name: Check for Commits
         id: check_commits
         run: |
-          git fetch origin develop
-          commits=$(git log --oneline origin/develop..${{ matrix.branch }})
+          commits=$(git log --oneline origin/develop..${{ matrix.branch }} 2>/dev/null || echo "")
           if [ -z "$commits" ]; then
             echo "NO_COMMITS=true" >> $GITHUB_ENV
             echo "Branch ${{ matrix.branch }} is synchronized with develop"
