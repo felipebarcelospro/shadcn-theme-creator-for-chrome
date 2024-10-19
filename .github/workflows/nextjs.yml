@@ -31,14 +31,6 @@ jobs:
       - name: Install Dependencies
         run: yarn install
 
-      - name: Cache Turbo Build Setup
-        uses: actions/cache@v4
-        with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-
       - name: List directory contents
         run: ls -R apps/web
 
@@ -46,9 +38,9 @@ jobs:
         run: yarn turbo run build --filter=web... --env-mode=loose
 
       - name: Upload Web Artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
-          path: ./apps/web/.next/out
+          path: ./apps/web/out
 
   # Job de Deploy para GitHub Pages
   deploy_pages:
@@ -115,7 +107,7 @@ jobs:
           zip -r ../../releases/STC_Beta_${{ env.version }}.zip .
 
       - name: Upload Chrome Extension Zip
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: chrome-extension
           path: releases/STC_Beta_${{ env.version }}.zip
@@ -157,7 +149,7 @@ jobs:
           node-version: 'lts/*'
 
       - name: Download Chrome Extension Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: chrome-extension
           path: releases
@@ -210,7 +202,7 @@ jobs:
           echo "release_notes=$(echo $changelog_response | jq -r '.choices[0].message.content')" >> $GITHUB_ENV
 
       - name: Download Chrome Extension Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: chrome-extension
           path: releases
