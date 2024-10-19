@@ -96,17 +96,7 @@ jobs:
             echo "$commits"
           fi
 
-      - name: Archive Branch
-        if: env.NO_COMMITS == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "Archiving branch ${{ matrix.branch }} as it's synchronized with develop"
-          git push origin --delete ${{ matrix.branch }}
-          echo "Branch ${{ matrix.branch }} has been deleted"
-
       - name: Generate PR Content
-        if: env.NO_COMMITS == 'false'
         id: pr_content
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -132,7 +122,6 @@ jobs:
           echo "PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body')" >> $GITHUB_ENV
 
       - name: Create or Update Pull Request
-        if: env.NO_COMMITS == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
