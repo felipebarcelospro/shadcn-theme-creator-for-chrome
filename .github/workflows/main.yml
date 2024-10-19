@@ -15,6 +15,23 @@ permissions:
   issues: write
 
 jobs:
+  name: CI/CD Pipeline for Shadcn Theme Creator
+
+on:
+  push:
+    branches: ["main", "develop", "feature/*", "release/*", "hotfix/*", "ci/*", "chore/*"]
+  pull_request:
+    branches: ["main", "develop"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  pull-requests: write
+  issues: write
+
+jobs:
   check_open_branches:
     runs-on: ubuntu-latest
     outputs:
@@ -29,7 +46,10 @@ jobs:
         run: sudo apt-get install -y gh
 
       - name: Authenticate GitHub CLI
-        run: echo "${{ secrets.GH_TOKEN }}" | gh auth login --with-token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh auth login --with-token <<< "$GH_TOKEN"
 
       - name: Check for Open Branches without PRs
         id: check_branches
@@ -50,11 +70,14 @@ jobs:
           done
           
           if [ ${#branches_without_pr[@]} -gt 0 ]; then
-            branches_string=$(IFS=,; echo "${branches_without_pr[*]}")
+            branches_string=$(IFS=","; echo "${branches_without_pr[*]}")
             echo "branches_without_pr=${branches_string}" >> $GITHUB_OUTPUT
           else
-            echo "branches_without_pr=" >> $GITHUB_OUTPUT
+            echo "branches_without_pr=[]" >> $GITHUB_OUTPUT
           fi
+
+      - name: Debug Branches Without PR
+        run: echo "Branches without PR: ${{ steps.check_branches.outputs.branches_without_pr }}"
 
   set_matrix:
     needs: check_open_branches
@@ -62,19 +85,24 @@ jobs:
     outputs:
       branches_matrix: ${{ steps.set_matrix.outputs.branches_matrix }}
     steps:
+      - name: Debug Branches Without PR
+        run: echo "Branches without PR: ${{ needs.check_open_branches.outputs.branches_without_pr }}"
+
       - name: Set Matrix for Branches
         id: set_matrix
         run: |
           if [ -n "${{ needs.check_open_branches.outputs.branches_without_pr }}" ]; then
-            branches_matrix=$(echo "${{ needs.check_open_branches.outputs.branches_without_pr }}" | jq -R 'split(",")')
+            branches_matrix=$(echo "${{ needs.check_open_branches.outputs.branches_without_pr }}" | jq -R -s -c 'split(",")')
             echo "branches_matrix=${branches_matrix}" >> $GITHUB_OUTPUT
           else
             echo "branches_matrix=[]" >> $GITHUB_OUTPUT
-          fi
+
+      - name: Debug Branches Matrix
+        run: echo "Branches matrix: ${{ steps.set_matrix.outputs.branches_matrix }}"
 
   create_pr:
     needs: [check_open_branches, set_matrix]
-    if: ${{ needs.check_open_branches.outputs.branches_without_pr != '' }}
+    if: ${{ needs.check_open_branches.outputs.branches_without_pr != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -123,6 +151,11 @@ jobs:
           
           echo "PR_TITLE=$(echo $pr_data | jq -r '.choices[0].message.content.title')" >> $GITHUB_ENV
           echo "PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body')" >> $GITHUB_ENV
+
+      - name: Debug PR Data
+        run: |
+          echo "PR Title: $PR_TITLE"
+          echo "PR Body: $PR_BODY"
 
       - name: Create or Update Pull Request
         env:
