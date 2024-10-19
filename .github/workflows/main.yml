@@ -102,14 +102,37 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check for Commits
+        id: check_commits
+        run: |
+          git fetch origin develop
+          commits=$(git log --oneline origin/develop..${{ matrix.branch }})
+          if [ -z "$commits" ]; then
+            echo "NO_COMMITS=true" >> $GITHUB_ENV
+            echo "Branch ${{ matrix.branch }} is synchronized with develop"
+          else
+            echo "NO_COMMITS=false" >> $GITHUB_ENV
+            echo "Found commits in ${{ matrix.branch }}:"
+            echo "$commits"
+          fi
+
+      - name: Archive Branch
+        if: env.NO_COMMITS == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Archiving branch ${{ matrix.branch }} as it's synchronized with develop"
+          git push origin --delete ${{ matrix.branch }}
+          echo "Branch ${{ matrix.branch }} has been deleted"
+
       - name: Generate PR Content
+        if: env.NO_COMMITS == 'false'
         id: pr_content
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           set -e
           echo "Generating PR content for branch: ${{ matrix.branch }}"
-          git checkout ${{ matrix.branch }}
           commits=$(git log --format=%B origin/develop..${{ matrix.branch }})
           
           pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
@@ -129,22 +152,27 @@ jobs:
           echo "PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body')" >> $GITHUB_ENV
 
       - name: Debug PR Data
+        if: env.NO_COMMITS == 'false'
         run: |
           echo "PR Title: $PR_TITLE"
           echo "PR Body: $PR_BODY"
 
       - name: Create or Update Pull Request
+        if: env.NO_COMMITS == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
           echo "Processing PR for branch: ${{ matrix.branch }}"
           
-          existing_pr=$(gh pr list --head "$branch" --base develop --json number --jq '.[0].number')
+          existing_pr=$(gh pr list --head "${{ matrix.branch }}" --base develop --json number --jq '.[0].number')
           
           if [ -z "$existing_pr" ]; then
             echo "Creating new PR for ${{ matrix.branch }}"
-            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "$branch"
+            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "${{ matrix.branch }}" || {
+              echo "Failed to create PR. This might be due to no new commits or other issues."
+              exit 0
+            }
           else
             echo "Updating existing PR #$existing_pr for ${{ matrix.branch }}"
             gh pr edit "$existing_pr" --title "$PR_TITLE" --body "$PR_BODY"
