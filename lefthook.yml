@@ -1,7 +1,7 @@
 pre-push:
   commands:
     custom-push:
-      run: node scripts/custom-push.js
+      run: node scripts/push.js
 
 commit-msg:
   commands:
