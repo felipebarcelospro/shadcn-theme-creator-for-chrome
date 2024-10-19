@@ -42,7 +42,7 @@ jobs:
           branches=$(git branch -r | grep -vE 'origin/(develop|main)' | grep -E 'origin/(feature|release|hotfix|chore|fix)/' | sed 's/origin\///')
           branches_without_pr=()
           for branch in $branches; do
-            pr_exists=$(gh pr list --head $branch --base develop --json number --jq 'length')
+            pr_exists=$(gh pr list --head "$branch" --base develop --json number --jq 'length')
             if [ "$pr_exists" -eq 0 ]; then
               echo "Branch $branch has no open PR to develop"
               branches_without_pr+=("$branch")
@@ -50,19 +50,34 @@ jobs:
           done
           
           if [ ${#branches_without_pr[@]} -gt 0 ]; then
-            branches_string=$(IFS=,; echo "${branches_without_pr[*]}")
+            branches_string=$(IFS=","; echo "${branches_without_pr[*]}")
             echo "branches_without_pr=${branches_string}" >> $GITHUB_OUTPUT
           else
             echo "branches_without_pr=" >> $GITHUB_OUTPUT
           fi
 
-  create_pr:
+  set_matrix:
     needs: check_open_branches
+    runs-on: ubuntu-latest
+    outputs:
+      branches_matrix: ${{ steps.set_matrix.outputs.branches_matrix }}
+    steps:
+      - name: Set Matrix for Branches
+        id: set_matrix
+        run: |
+          if [ -n "${{ needs.check_open_branches.outputs.branches_without_pr }}" ]; then
+            branches_matrix=$(echo "${{ needs.check_open_branches.outputs.branches_without_pr }}" | sed 's/,/\n/g')
+            echo "branches_matrix=${branches_matrix}" >> $GITHUB_OUTPUT
+          else
+            echo "branches_matrix=[]" >> $GITHUB_OUTPUT
+
+  create_pr:
+    needs: [check_open_branches, set_matrix]
     if: ${{ needs.check_open_branches.outputs.branches_without_pr != '' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        branch: [${{ needs.check_open_branches.outputs.branches_without_pr }}]
+        branch: ${{ fromJson('[' + needs.set_matrix.outputs.branches_matrix + ']') }}
     steps:
       - name: Debug Condition
         run: |
@@ -115,14 +130,14 @@ jobs:
           set -e
           echo "Processing PR for branch: ${{ matrix.branch }}"
           
-          existing_pr=$(gh pr list --head ${{ matrix.branch }} --base develop --json number --jq '.[0].number')
+          existing_pr=$(gh pr list --head "$branch" --base develop --json number --jq '.[0].number')
           
           if [ -z "$existing_pr" ]; then
             echo "Creating new PR for ${{ matrix.branch }}"
-            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head ${{ matrix.branch }}
+            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "$branch"
           else
             echo "Updating existing PR #$existing_pr for ${{ matrix.branch }}"
-            gh pr edit $existing_pr --title "$PR_TITLE" --body "$PR_BODY"
+            gh pr edit "$existing_pr" --title "$PR_TITLE" --body "$PR_BODY"
           fi
 
           issues=$(gh issue list --search "${{ matrix.branch }}" --json number,title)
