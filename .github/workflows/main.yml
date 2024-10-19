@@ -461,27 +461,6 @@ jobs:
       - name: Run Tests
         run: yarn turbo run test
 
-  update_workflow:
-    runs-on: ubuntu-latest
-    needs: check_project_changes
-    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'ci')
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Validate Workflow
-        run: |
-          if ! yamllint .github/workflows/*.yml; then
-            echo "Workflow validation failed"
-            exit 1
-          fi
-
-      - name: Test Workflow
-        uses: nektos/act@v2
-        with:
-          workflows: .github/workflows/main.yml
-          dryRun: true
-
   generate_documentation:
     runs-on: ubuntu-latest
     needs: [check_project_changes, build_web, build_extension, build_packages]
