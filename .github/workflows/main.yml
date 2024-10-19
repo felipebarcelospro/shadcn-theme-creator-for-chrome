@@ -28,7 +28,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          branches=$(git branch -r | grep -E 'origin/(feature|release|hotfix)/' | sed 's/origin\///')
+          branches=$(git branch -r | grep -vE 'origin/(develop|main)' | grep -E 'origin/(feature|release|hotfix|chore|fix)/' | sed 's/origin\///')
           for branch in $branches; do
             pr_exists=$(gh pr list --head $branch --base develop --json number --jq 'length')
             if [ "$pr_exists" -eq 0 ]; then
