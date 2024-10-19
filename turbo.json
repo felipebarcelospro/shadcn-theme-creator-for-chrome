@@ -1,23 +1,27 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalEnv": ["NEXT_PUBLIC_PLUNK_API_KEY", "NEXT_PUBLIC_GOOGLE_ANALYTICS_ID"],
   "tasks": {
-    "build": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
-    },
     "lint": {
       "dependsOn": ["^lint"]
     },
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**"],
+      "env": ["NEXT_PUBLIC_PLUNK_API_KEY", "NEXT_PUBLIC_GOOGLE_ANALYTICS_ID"]
+    },    
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "env": ["NEXT_PUBLIC_PLUNK_API_KEY", "NEXT_PUBLIC_GOOGLE_ANALYTICS_ID"]
     },
     "ui": {
       "dependsOn": ["^ui"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**"],
+      "env": ["NEXT_PUBLIC_PLUNK_API_KEY", "NEXT_PUBLIC_GOOGLE_ANALYTICS_ID"]
     }
   }
 }

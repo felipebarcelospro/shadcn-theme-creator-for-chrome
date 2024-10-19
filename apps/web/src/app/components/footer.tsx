@@ -1,4 +1,5 @@
 import { config } from "@repo/shared/config";
+import Link from "next/link";
 
 export function Footer() {
   return (
@@ -19,8 +20,8 @@ export function Footer() {
             </div>
           </div>
           <div className="flex space-x-4">
-            <a href={config.privacyPolicyUrl} className="text-muted-foreground hover:text-primary text-sm">Privacy Policy</a>
-            <a href={config.termsOfUseUrl} className="text-muted-foreground hover:text-primary text-sm">Terms of Use</a>
+            <Link href={config.privacyPolicyUrl} className="text-muted-foreground hover:text-primary text-sm">Privacy Policy</Link>
+            <Link href={config.termsOfUseUrl} className="text-muted-foreground hover:text-primary text-sm">Terms of Use</Link>
           </div>
         </div>
       </div>

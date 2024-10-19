@@ -96,6 +96,6 @@ export const config: Config = {
   ],
 
   // Legal
-  termsOfUseUrl: "/shadcn-theme-creator-for-chrome/terms-of-use",
-  privacyPolicyUrl: "/shadcn-theme-creator-for-chrome/privacy-policy",
+  termsOfUseUrl: "/terms-of-use",
+  privacyPolicyUrl: "/privacy-policy",
 };
