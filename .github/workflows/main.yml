@@ -2,7 +2,7 @@ name: CI/CD Pipeline for Shadcn Theme Creator
 
 on:
   push:
-    branches: ["main", "develop", "feature/*", "release/*", "hotfix/*", "ci/*", "chore/*"]
+    branches: ["main", "develop", "feature/*", "release/*", "hotfix/*", "fix/*", "ci/*", "chore/*"]
   pull_request:
     branches: ["main", "develop"]
   workflow_dispatch:
@@ -25,10 +25,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install GitHub CLI
+        run: sudo apt-get install -y gh
+
+      - name: Authenticate GitHub CLI
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
       - name: Check for Open Branches without PRs
         id: check_branches
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -e
           echo "Fetching all branches..."
@@ -48,18 +52,9 @@ jobs:
           if [ ${#branches_without_pr[@]} -gt 0 ]; then
             branches_string=$(IFS=,; echo "${branches_without_pr[*]}")
             echo "branches_without_pr=${branches_string}" >> $GITHUB_OUTPUT
-            echo "branches_without_pr=${branches_string}" >> $GITHUB_ENV
-            echo "Found branches without PRs: ${branches_string}"
           else
             echo "branches_without_pr=" >> $GITHUB_OUTPUT
-            echo "branches_without_pr=" >> $GITHUB_ENV
-            echo "No branches without PRs found"
           fi
-
-      - name: Debug Output
-        run: |
-          echo "Branches without PR (from output): ${{ steps.check_branches.outputs.branches_without_pr }}"
-          echo "Branches without PR (from env): ${{ env.branches_without_pr }}"
 
   create_pr:
     needs: check_open_branches
@@ -67,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        branch: ${{ fromJSON(format('["{}"]', replace(needs.check_open_branches.outputs.branches_without_pr, ',', '","'))) }}
+        branch: ${{ fromJson(format('[%s]', join(',', needs.check_open_branches.outputs.branches_without_pr))) }}
     steps:
       - name: Debug Condition
         run: |
@@ -103,8 +98,8 @@ jobs:
             -d '{
               "model": "llama-3.1-70b-versatile",
               "messages": [
-                {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
-                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '\''${{ matrix.branch }}'\'', Commits: '\''$commits'\''"}
+                {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
+                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '${{ matrix.branch }}', Commits: '$commits'"}
               ],
               "temperature": 0.7,
               "response_format": {"type": "json_object"}
