@@ -15,6 +15,123 @@ permissions:
   issues: write
 
 jobs:
+  check_open_branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Open Branches without PRs
+        id: check_branches
+        env:
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+        run: |
+          branches=$(git branch -r | grep -E 'origin/(feature|release|hotfix)/' | sed 's/origin\///')
+          for branch in $branches; do
+            pr_exists=$(gh pr list --head $branch --base develop --json number --jq 'length')
+            if [ "$pr_exists" -eq 0 ]; then
+              echo "Branch $branch has no open PR to develop"
+              echo "$branch" >> branches_without_pr.txt
+            fi
+          done
+          if [ -f branches_without_pr.txt ]; then
+            echo "branches_without_pr=$(cat branches_without_pr.txt | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
+          else
+            echo "branches_without_pr=" >> $GITHUB_OUTPUT
+          fi
+
+  create_pr:
+    runs-on: ubuntu-latest
+    needs: check_open_branches
+    if: >
+      github.event_name == 'push' && 
+      !startsWith(github.ref, 'refs/heads/main') && 
+      !startsWith(github.ref, 'refs/heads/develop') || 
+      needs.check_open_branches.outputs.branches_without_pr != ''
+    strategy:
+      matrix:
+        branch: ${{ fromJson(format('["{0}"]', needs.check_open_branches.outputs.branches_without_pr)) }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Generate PR Content
+        id: pr_content
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            branch_name=${GITHUB_REF#refs/heads/}
+          else
+            branch_name=${{ matrix.branch }}
+            git checkout $branch_name
+          fi
+          commits=$(git log --format=%B origin/develop..$branch_name)
+          
+          pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "mixtral-8x7b-32768",
+              "messages": [
+                {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
+                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '"$branch_name"', Commits: '"$commits"'"}
+              ],
+              "temperature": 0.7,
+              "response_format": {"type": "json_object"}
+            }' | jq -r '.choices[0].message.content')
+
+          echo "pr_title=$(echo $pr_data | jq -r '.title')" >> $GITHUB_OUTPUT
+          echo "pr_body=$(echo $pr_data | jq -r '.body')" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        env:
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+        run: |
+          pr_title="${{ steps.pr_content.outputs.pr_title }}"
+          pr_body="${{ steps.pr_content.outputs.pr_body }}"
+          if [ "${{ github.event_name }}" == "push" ]; then
+            branch_name=${GITHUB_REF#refs/heads/}
+          else
+            branch_name=${{ matrix.branch }}
+          fi
+          
+          # Check if PR already exists
+          existing_pr=$(gh pr list --head $branch_name --base develop --json number --jq '.[0].number')
+          
+          if [ -z "$existing_pr" ]; then
+            # Create new PR
+            gh pr create --title "$pr_title" --body "$pr_body" --base develop --head $branch_name
+          else
+            # Update existing PR
+            gh pr edit $existing_pr --title "$pr_title" --body "$pr_body"
+          fi
+
+          # Link related issues
+          issues=$(gh issue list --search "$branch_name" --json number,title)
+          if [ -n "$issues" ]; then
+            echo "Related issues found:"
+            echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"' >> $pr_body
+            gh pr edit --body "$pr_body"
+            
+            echo "$issues" | jq -r '.[]' | while read -r issue; do
+              number=$(echo $issue | jq -r '.number')
+              gh issue comment $number --body "This issue is addressed in PR #$(gh pr view --json number -q .number)"
+            done
+          fi
+
   check_project_changes:
     runs-on: ubuntu-latest
     outputs:
@@ -105,7 +222,7 @@ jobs:
 
       - name: Process Custom Push
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           payload=$(cat .github/workflow_payload.json)
@@ -389,7 +506,7 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: false
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GIT_TOKEN }}
 
       - name: Download Chrome Extension Artifact
         uses: actions/download-artifact@v4
@@ -402,7 +519,7 @@ jobs:
         with:
           files: releases/STC_Beta_${{ env.version }}.zip
           tag_name: v${{ steps.version.outputs.new_version }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GIT_TOKEN }}
 
   build_packages:
     runs-on: ubuntu-latest
@@ -545,7 +662,7 @@ jobs:
       - name: Deploy Documentation to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
           publish_dir: ./docs
           publish_branch: gh-pages
           destination_dir: docs
