@@ -80,8 +80,17 @@ jobs:
               "response_format": {"type": "json_object"}
             }')
           
-          echo "PR_TITLE=$(echo $pr_data | jq -r '.choices[0].message.content.title')" >> $GITHUB_ENV
-          echo "PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body')" >> $GITHUB_ENV
+          echo "PR Data: $pr_data"  # Log the raw response for debugging
+          
+          # Check if the response contains the expected keys
+          if echo "$pr_data" | jq -e '.choices[0].message.content.title' > /dev/null; then
+            echo "PR_TITLE=$(echo $pr_data | jq -r '.choices[0].message.content.title')" >> $GITHUB_ENV
+            echo "PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body')" >> $GITHUB_ENV
+          else
+            echo "Failed to generate PR content. Defaulting to placeholders."
+            echo "PR_TITLE='Default Title'" >> $GITHUB_ENV
+            echo "PR_BODY='Default Body'" >> $GITHUB_ENV
+          fi
 
       - name: Create or Update Pull Request
         if: env.NO_COMMITS == 'false'
