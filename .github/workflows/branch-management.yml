@@ -1,11 +1,9 @@
 name: Branch Management
 
 on:
-  push:
-    branches: ["main", "develop", "feature/*", "release/*", "hotfix/*", "ci/*", "chore/*"]
-  pull_request:
-    branches: ["main", "develop"]
-  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # Run daily at midnight UTC
+  workflow_dispatch:  # Allow manual triggering
 
 permissions:
   contents: write
