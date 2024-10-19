@@ -2,13 +2,14 @@
   "name": "shadcn-theme-creator-for-chrome",
   "private": true,
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
+    "build": "dotenv -e .env -- turbo build --env-mode=loose",
+    "dev": "dotenv -e .env -- turbo dev --env-mode=loose",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "ui": "turbo --filter @repo/ui ui"
   },
   "devDependencies": {
+    "dotenv-cli": "^7.4.2",
     "prettier": "^3.2.5",
     "turbo": "^2.2.0",
     "typescript": "^5.4.5"

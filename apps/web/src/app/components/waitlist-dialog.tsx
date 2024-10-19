@@ -152,14 +152,14 @@ export function WaitlistDialog({ children }: { children: React.ReactNode }) {
             <p className="text-sm font-medium text-foreground">
               Help spread the word:
             </p>
-            <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
-              <Button variant="outline" size="sm" className="flex items-center h-12 md:h-auto w-full md:w-auto justify-center" asChild>
+            <div className="flex flex-col space-y-4">
+              <Button variant="outline" size="lg" className="flex items-center h-12 w-full justify-center" asChild>
                 <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent("I just joined the waitlist for ShadCN Theme Creator for Chrome! Can't wait to try it out. #WebDev #UIDesign")}`} target="_blank" rel="noopener noreferrer">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M4 4l11.733 16h4.267l-11.733 -16z"></path><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"></path></svg>
                   Share on Twitter
                 </a>
               </Button>
-              <Button variant="outline" size="sm" className="flex items-center h-12 md:h-auto w-full md:w-auto justify-center" asChild>
+              <Button variant="outline" size="lg" className="flex items-center h-12 w-full justify-center" asChild>
                 <a href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}`} target="_blank" rel="noopener noreferrer">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
                   Share on LinkedIn

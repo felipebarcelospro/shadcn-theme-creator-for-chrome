@@ -65,11 +65,11 @@ jobs:
           NEXT_PUBLIC_PLUNK_API_KEY: ${{ secrets.NEXT_PUBLIC_PLUNK_API_KEY }}
           NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID }}
         run: |
-          echo "NEXT_PUBLIC_PLUNK_API_KEY=$NEXT_PUBLIC_PLUNK_API_KEY" >> ./apps/web/.env
-          echo "NEXT_PUBLIC_GOOGLE_ANALYTICS_ID=$NEXT_PUBLIC_GOOGLE_ANALYTICS_ID" >> ./apps/web/.env
+          echo "NEXT_PUBLIC_PLUNK_API_KEY=$NEXT_PUBLIC_PLUNK_API_KEY" >> .env
+          echo "NEXT_PUBLIC_GOOGLE_ANALYTICS_ID=$NEXT_PUBLIC_GOOGLE_ANALYTICS_ID" >> .env
 
-      - name: Build with Turbo
-        run: ${{ steps.detect-package-manager.outputs.runner }} turbo run build --filter=web...
+      - name: Build with Turbo and dotenv-cli
+        run: ${{ steps.detect-package-manager.outputs.runner }} dotenv -e .env -- turbo run build --filter=web... --env-mode=loose
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
