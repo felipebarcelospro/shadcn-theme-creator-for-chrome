@@ -1,0 +1,56 @@
+name: Security and Dependency Management
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Weekly on Sundays
+  workflow_dispatch:
+
+jobs:
+  security_checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Run Yarn Audit
+        run: yarn audit
+        continue-on-error: true
+
+  update_dependencies:
+    runs-on: ubuntu-latest
+    needs: [security_checks]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Cache Turbo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            .turbo
+            node_modules/.cache/turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Update Dependencies
+        run: |
+          yarn upgrade-interactive --latest
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add package.json yarn.lock
+          git commit -m "chore: update dependencies"
+          git push

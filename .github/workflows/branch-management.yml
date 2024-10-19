@@ -1,0 +1,167 @@
+name: Branch Management
+
+on:
+  push:
+    branches: ["main", "develop", "feature/*", "release/*", "hotfix/*", "ci/*", "chore/*"]
+  pull_request:
+    branches: ["main", "develop"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  check_open_branches:
+    runs-on: ubuntu-latest
+    outputs:
+      branches_without_pr: ${{ steps.check_branches.outputs.branches_without_pr }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Open Branches without PRs
+        id: check_branches
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          echo "Fetching all branches..."
+          git fetch --all
+          
+          echo "Checking for branches without PRs..."
+          branches=$(git branch -r | grep -vE 'origin/(develop|main)' | grep -E 'origin/(feature|release|hotfix|chore|fix)/' | sed 's/origin\///')
+          branches_without_pr=()
+          for branch in $branches; do
+            pr_exists=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:$branch&base=develop&state=open" | jq length)
+            if [ "$pr_exists" -eq 0 ]; then
+              echo "Branch $branch has no open PR to develop"
+              branches_without_pr+=("$branch")
+            fi
+          done
+          
+          if [ ${#branches_without_pr[@]} -gt 0 ]; then
+            branches_string=$(IFS=","; echo "${branches_without_pr[*]}")
+            echo "branches_without_pr=${branches_string}" >> $GITHUB_OUTPUT
+          else
+            echo "branches_without_pr=[]" >> $GITHUB_OUTPUT
+          fi
+
+  set_matrix:
+    needs: check_open_branches
+    runs-on: ubuntu-latest
+    outputs:
+      branches_matrix: ${{ steps.set_matrix.outputs.branches_matrix }}
+    steps:
+      - name: Set Matrix for Branches
+        id: set_matrix
+        run: |
+          if [ -n "${{ needs.check_open_branches.outputs.branches_without_pr }}" ]; then
+            branches_matrix=$(echo "${{ needs.check_open_branches.outputs.branches_without_pr }}" | jq -R -s -c 'split(",")')
+            echo "branches_matrix=${branches_matrix}" >> $GITHUB_OUTPUT
+          else
+            echo "branches_matrix=[]" >> $GITHUB_OUTPUT
+          fi
+
+  create_pr:
+    needs: [check_open_branches, set_matrix]
+    if: ${{ needs.check_open_branches.outputs.branches_without_pr != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch: ${{ fromJson(needs.set_matrix.outputs.branches_matrix) }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch develop branch
+        run: git fetch origin develop
+
+      - name: Check for Commits
+        id: check_commits
+        run: |
+          commits=$(git log --oneline origin/develop..${{ matrix.branch }} 2>/dev/null || echo "")
+          if [ -z "$commits" ]; then
+            echo "NO_COMMITS=true" >> $GITHUB_ENV
+            echo "Branch ${{ matrix.branch }} is synchronized with develop"
+          else
+            echo "NO_COMMITS=false" >> $GITHUB_ENV
+            echo "Found commits in ${{ matrix.branch }}:"
+            echo "$commits"
+          fi
+
+      - name: Archive Branch
+        if: env.NO_COMMITS == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Archiving branch ${{ matrix.branch }} as it's synchronized with develop"
+          git push origin --delete ${{ matrix.branch }}
+          echo "Branch ${{ matrix.branch }} has been deleted"
+
+      - name: Generate PR Content
+        if: env.NO_COMMITS == 'false'
+        id: pr_content
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          set -e
+          echo "Generating PR content for branch: ${{ matrix.branch }}"
+          commits=$(git log --format=%B origin/develop..${{ matrix.branch }})
+          
+          pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "llama-3.1-70b-versatile",
+              "messages": [
+                {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
+                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '${{ matrix.branch }}', Commits: '$commits'"}
+              ],
+              "temperature": 0.7,
+              "response_format": {"type": "json_object"}
+            }')
+          
+          echo "PR_TITLE=$(echo $pr_data | jq -r '.choices[0].message.content.title')" >> $GITHUB_ENV
+          echo "PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body')" >> $GITHUB_ENV
+
+      - name: Create or Update Pull Request
+        if: env.NO_COMMITS == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          echo "Processing PR for branch: ${{ matrix.branch }}"
+          
+          existing_pr=$(gh pr list --head "${{ matrix.branch }}" --base develop --json number --jq '.[0].number')
+          
+          if [ -z "$existing_pr" ]; then
+            echo "Creating new PR for ${{ matrix.branch }}"
+            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "${{ matrix.branch }}" || {
+              echo "Failed to create PR. This might be due to no new commits or other issues."
+              exit 0
+            }
+          else
+            echo "Updating existing PR #$existing_pr for ${{ matrix.branch }}"
+            gh pr edit "$existing_pr" --title "$PR_TITLE" --body "$PR_BODY"
+          fi
+
+          issues=$(gh issue list --search "${{ matrix.branch }}" --json number,title)
+          if [ -n "$issues" ]; then
+            echo "Linking related issues to PR"
+            echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"' >> $PR_BODY
+            gh pr edit --body "$PR_BODY"
+            
+            echo "$issues" | jq -r '.[]' | while read -r issue; do
+              number=$(echo $issue | jq -r '.number')
+              gh issue comment $number --body "This issue is addressed in PR #$(gh pr view --json number -q .number)"
+            done
+          fi
