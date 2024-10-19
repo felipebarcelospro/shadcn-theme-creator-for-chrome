@@ -216,87 +216,41 @@ jobs:
         run: yarn audit
         continue-on-error: true
 
-  process_custom_push:
+  build_packages:
     runs-on: ubuntu-latest
     needs: [check_project_changes, security_checks]
-    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'web') || contains(fromJson(needs.check_project_changes.outputs.changes), 'extension') || contains(fromJson(needs.check_project_changes.outputs.changes), 'packages') || contains(fromJson(needs.check_project_changes.outputs.changes), 'docs')
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'packages')
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
 
+      - name: Cache Turbo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            .turbo
+            node_modules/.cache/turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
       - name: Install Dependencies
         run: yarn install
 
-      - name: Process Custom Push
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: |
-          payload=$(cat .github/workflow_payload.json)
-          branch=$(echo $payload | jq -r '.branch')
-          changedFiles=$(echo $payload | jq -r '.changedFiles[]')
+      - name: Build Packages
+        run: yarn turbo run build --filter=./packages/*
 
-          commits=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
-            -H "Authorization: Bearer $GROQ_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "llama-3.1-70b-versatile",
-              "messages": [
-                {"role": "system", "content": "You are an AI assistant tasked with creating detailed Git commits based on file changes. Respond in JSON format."},
-                {"role": "user", "content": "Create Git commits for the following changed files, following GitFlow and Conventional Commits standards: '"$changedFiles"'"}
-              ],
-              "temperature": 0.7,
-              "max_tokens": 500,
-              "response_format": {"type": "json_object"}
-            }' | jq -r '.choices[0].message.content')
-
-          echo "$commits" | jq -r '.commits[]' | while read -r commit; do
-            git add .
-            git commit -m "$commit"
-          done
-
-          git push origin $branch
-
-          pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
-            -H "Authorization: Bearer $GROQ_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "llama-3.1-70b-versatile",
-              "messages": [
-                {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
-                {"role": "user", "content": "Create a pull request title and description for the following branch and changes: Branch: '"$branch"', Changes: '"$commits"'"}
-              ],
-              "temperature": 0.3,
-              "response_format": {"type": "json_object"}
-            }' | jq -r '.choices[0].message.content')
-
-          pr_title=$(echo $pr_data | jq -r '.title')
-          pr_body=$(echo $pr_data | jq -r '.body')
-
-          gh pr create --title "$pr_title" --body "$pr_body" --base develop
-
-          issues=$(gh issue list --search "$branch" --json number,title)
-          if [ -n "$issues" ]; then
-            echo "Related issues found:"
-            echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"' >> $pr_body
-            gh pr edit --body "$pr_body"
-            
-            echo "$issues" | jq -r '.[]' | while read -r issue; do
-              number=$(echo $issue | jq -r '.number')
-              gh issue comment $number --body "This issue is addressed in PR #$(gh pr view --json number -q .number)"
-            done
-          fi
+      - name: Run Tests
+        run: yarn turbo run test --filter=./packages/*
 
   build_web:
     runs-on: ubuntu-latest
-    needs: [check_project_changes, security_checks]
+    needs: [check_project_changes, security_checks, build_packages]
     if: contains(fromJson(needs.check_project_changes.outputs.changes), 'web')
     env:
       NEXT_PUBLIC_PLUNK_API_KEY: ${{ secrets.NEXT_PUBLIC_PLUNK_API_KEY }}
@@ -334,17 +288,9 @@ jobs:
         with:
           path: ./apps/web/out
 
-  deploy_pages:
-    runs-on: ubuntu-latest
-    needs: [check_project_changes, build_web]
-    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'web') || contains(fromJson(needs.check_project_changes.outputs.changes), 'docs')
-    steps:
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
-
   build_extension:
     runs-on: ubuntu-latest
-    needs: [check_project_changes, security_checks]
+    needs: [check_project_changes, security_checks, build_packages]
     if: contains(fromJson(needs.check_project_changes.outputs.changes), 'extension')
     env:
       NEXT_PUBLIC_PLUNK_API_KEY: ${{ secrets.NEXT_PUBLIC_PLUNK_API_KEY }}
@@ -413,6 +359,14 @@ jobs:
           name: chrome-extension
           path: releases/STC_Beta_${{ env.version }}.zip
 
+  deploy_pages:
+    runs-on: ubuntu-latest
+    needs: [check_project_changes, build_web]
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'web') || contains(fromJson(needs.check_project_changes.outputs.changes), 'docs')
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+
   publish_chrome_extension:
     runs-on: ubuntu-latest
     needs: [check_project_changes, build_extension]
@@ -441,130 +395,6 @@ jobs:
           client-secret: ${{ secrets.CLIENT_SECRET }}
           refresh-token: ${{ secrets.REFRESH_TOKEN }}
           publish: true
-
-  release:
-    runs-on: ubuntu-latest
-    needs: [check_project_changes, build_web, build_extension]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(fromJson(needs.check_project_changes.outputs.changes), 'web') || contains(fromJson(needs.check_project_changes.outputs.changes), 'extension'))
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-
-      - name: Cache Turbo dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            .turbo
-            node_modules/.cache/turbo
-          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-
-      - name: Install Dependencies
-        run: yarn install
-
-      - name: Determine Version
-        id: version
-        run: |
-          current_version=$(jq -r '.version' package.json)
-          new_version=$(echo $current_version | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
-          echo "new_version=$new_version" >> $GITHUB_OUTPUT
-
-      - name: Generate Release Notes with AI
-        id: changelog
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: |
-          commits=$(git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%s")
-          changelog_response=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
-            -H "Authorization: Bearer $GROQ_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "llama-3.1-70b-versatile",
-              "messages": [
-                {"role": "system", "content": "You are an AI assistant tasked with creating detailed and user-friendly changelogs. Respond in JSON format with a key 'changelog'."},
-                {"role": "user", "content": "Create a detailed and user-friendly changelog for the following commits: \"'"$commits"'\""}
-              ],
-              "temperature": 0.7,
-              "max_tokens": 500,
-              "response_format": {"type": "json_object"}
-            }')
-          echo "changelog=$(echo $changelog_response | jq -r '.choices[0].message.content' | jq -r '.changelog')" >> $GITHUB_OUTPUT
-
-      - name: Update package.json
-        run: |
-          jq '.version = "${{ steps.version.outputs.new_version }}"' package.json > package.json.tmp
-          mv package.json.tmp package.json
-
-      - name: Commit Version Update
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add package.json
-          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
-          git push
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ steps.version.outputs.new_version }}
-          name: Release v${{ steps.version.outputs.new_version }}
-          body: ${{ steps.changelog.outputs.changelog }}
-          draft: false
-          prerelease: false
-          token: ${{ github.token }}
-
-      - name: Download Chrome Extension Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: chrome-extension
-          path: releases
-
-      - name: Attach Chrome Extension to Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: releases/STC_Beta_${{ env.version }}.zip
-          tag_name: v${{ steps.version.outputs.new_version }}
-          token: ${{ github.token }}
-
-  build_packages:
-    runs-on: ubuntu-latest
-    needs: [check_project_changes, security_checks]
-    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'packages')
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-
-      - name: Cache Turbo dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            .turbo
-            node_modules/.cache/turbo
-          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-
-      - name: Install Dependencies
-        run: yarn install
-
-      - name: Build Packages
-        run: yarn turbo run build --filter=./packages/*
-
-      - name: Run Tests
-        run: yarn turbo run test --filter=./packages/*
 
   update_dependencies:
     runs-on: ubuntu-latest
@@ -675,7 +505,98 @@ jobs:
       - name: Deploy Documentation to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          GH_TOKEN: ${{ github.token }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./docs
           publish_branch: gh-pages
           destination_dir: docs
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [check_project_changes, build_web, build_extension, build_packages, generate_documentation]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(fromJson(needs.check_project_changes.outputs.changes), 'web') || contains(fromJson(needs.check_project_changes.outputs.changes), 'extension'))
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Cache Turbo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            .turbo
+            node_modules/.cache/turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Determine Version
+        id: version
+        run: |
+          current_version=$(jq -r '.version' package.json)
+          new_version=$(echo $current_version | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
+          echo "new_version=$new_version" >> $GITHUB_OUTPUT
+
+      - name: Generate Release Notes with AI
+        id: changelog
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          commits=$(git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%s")
+          changelog_response=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "llama-3.1-70b-versatile",
+              "messages": [
+                {"role": "system", "content": "You are an AI assistant tasked with creating detailed and user-friendly changelogs. Respond in JSON format with a key 'changelog'."},
+                {"role": "user", "content": "Create a detailed and user-friendly changelog for the following commits: \"'"$commits"'\""}
+              ],
+              "temperature": 0.3,
+              "response_format": {"type": "json_object"}
+            }')
+          echo "changelog=$(echo $changelog_response | jq -r '.choices[0].message.content' | jq -r '.changelog')" >> $GITHUB_OUTPUT
+
+      - name: Update package.json
+        run: |
+          jq '.version = "${{ steps.version.outputs.new_version }}"' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+      - name: Commit Version Update
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add package.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
+          git push
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.new_version }}
+          name: Release v${{ steps.version.outputs.new_version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Chrome Extension Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: chrome-extension
+          path: releases
+
+      - name: Attach Chrome Extension to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: releases/STC_Beta_${{ env.version }}.zip
+          tag_name: v${{ steps.version.outputs.new_version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
