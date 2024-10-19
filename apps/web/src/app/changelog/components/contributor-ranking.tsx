@@ -41,7 +41,7 @@ function ContributorItem({ rank, contributor }: { rank: number; contributor: Con
 
   return (
     <div 
-      className="flex items-center space-x-2 border-b border-gray-200 pb-4 cursor-pointer group relative"
+      className="flex items-center space-x-2 border-b last:border-b-0 border-gray-200 bo pb-4 cursor-pointer group relative"
       onClick={handleClick}
       title={`View ${contributor.login}'s contributions to this project`}
     >
