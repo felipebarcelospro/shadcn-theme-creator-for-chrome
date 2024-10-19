@@ -30,6 +30,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -e
           echo "Fetching all branches..."
           git fetch --all
           
@@ -45,21 +46,34 @@ jobs:
           done
           
           if [ ${#branches_without_pr[@]} -gt 0 ]; then
-            echo "branches_without_pr=$(IFS=,; echo "${branches_without_pr[*]}")" >> $GITHUB_OUTPUT
-            echo "Found branches without PRs: ${branches_without_pr[*]}"
+            branches_string=$(IFS=,; echo "${branches_without_pr[*]}")
+            echo "branches_without_pr=${branches_string}" >> $GITHUB_OUTPUT
+            echo "branches_without_pr=${branches_string}" >> $GITHUB_ENV
+            echo "Found branches without PRs: ${branches_string}"
           else
             echo "branches_without_pr=" >> $GITHUB_OUTPUT
+            echo "branches_without_pr=" >> $GITHUB_ENV
             echo "No branches without PRs found"
           fi
 
+      - name: Debug Output
+        run: |
+          echo "Branches without PR (from output): ${{ steps.check_branches.outputs.branches_without_pr }}"
+          echo "Branches without PR (from env): ${{ env.branches_without_pr }}"
+
   create_pr:
     needs: check_open_branches
-    if: needs.check_open_branches.outputs.branches_without_pr != ''
+    if: ${{ needs.check_open_branches.outputs.branches_without_pr != '' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
         branch: ${{ fromJson(format('[{0}]', needs.check_open_branches.outputs.branches_without_pr)) }}
     steps:
+      - name: Debug Condition
+        run: |
+          echo "Branches without PR: ${{ needs.check_open_branches.outputs.branches_without_pr }}"
+          echo "Current branch: ${{ matrix.branch }}"
+
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
@@ -78,6 +92,7 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
+          set -e
           echo "Generating PR content for branch: ${{ matrix.branch }}"
           git checkout ${{ matrix.branch }}
           commits=$(git log --format=%B origin/develop..${{ matrix.branch }})
@@ -102,9 +117,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -e
           echo "Processing PR for branch: ${{ matrix.branch }}"
           
-          # Check if PR already exists
           existing_pr=$(gh pr list --head ${{ matrix.branch }} --base develop --json number --jq '.[0].number')
           
           if [ -z "$existing_pr" ]; then
@@ -115,7 +130,6 @@ jobs:
             gh pr edit $existing_pr --title "$PR_TITLE" --body "$PR_BODY"
           fi
 
-          # Link related issues
           issues=$(gh issue list --search "${{ matrix.branch }}" --json number,title)
           if [ -n "$issues" ]; then
             echo "Linking related issues to PR"
