@@ -1,8 +1,3 @@
-pre-push:
-  commands:
-    custom-push:
-      run: node scripts/push.js
-
 commit-msg:
   commands:
     lint-commit-msg:

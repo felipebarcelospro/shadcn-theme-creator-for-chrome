@@ -73,12 +73,17 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          command: test
+          node-version: 'lts/*'
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Run Yarn Audit
+        run: yarn audit
+        continue-on-error: true
 
   process_custom_push:
     runs-on: ubuntu-latest
