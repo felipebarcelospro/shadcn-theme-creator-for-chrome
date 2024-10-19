@@ -1,3 +1,4 @@
+import { GoogleAnalytics } from '@next/third-parties/google';
 import "@repo/ui/globals.css";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
@@ -31,6 +32,8 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Header />
+        <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID} />
+        
         <div className="min-h-screen bg-gradient-to-b from-background to-secondary">
           {children}
         </div>
