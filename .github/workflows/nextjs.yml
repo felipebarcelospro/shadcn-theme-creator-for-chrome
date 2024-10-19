@@ -43,7 +43,7 @@ jobs:
         run: ls -R apps/web
 
       - name: Build Web App
-        run: yarn turbo run build --filter=web... --env-mode=loose --output-dir=./apps/web/out
+        run: yarn turbo run build --filter=web... --env-mode=loose
 
       - name: Upload Web Artifact
         uses: actions/upload-pages-artifact@v3
