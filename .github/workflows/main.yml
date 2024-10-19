@@ -30,6 +30,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          echo "Fetching all branches..."
+          git fetch --all
+          
+          echo "Checking for branches without PRs..."
           branches=$(git branch -r | grep -vE 'origin/(develop|main)' | grep -E 'origin/(feature|release|hotfix|chore|fix)/' | sed 's/origin\///')
           branches_without_pr=()
           for branch in $branches; do
@@ -39,10 +43,13 @@ jobs:
               branches_without_pr+=("$branch")
             fi
           done
+          
           if [ ${#branches_without_pr[@]} -gt 0 ]; then
             echo "branches_without_pr=$(IFS=,; echo "${branches_without_pr[*]}")" >> $GITHUB_OUTPUT
+            echo "Found branches without PRs: ${branches_without_pr[*]}"
           else
             echo "branches_without_pr=" >> $GITHUB_OUTPUT
+            echo "No branches without PRs found"
           fi
 
   create_pr:
@@ -71,6 +78,7 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
+          echo "Generating PR content for branch: ${{ matrix.branch }}"
           git checkout ${{ matrix.branch }}
           commits=$(git log --format=%B origin/develop..${{ matrix.branch }})
           
@@ -85,41 +93,42 @@ jobs:
               ],
               "temperature": 0.7,
               "response_format": {"type": "json_object"}
-            }' | jq -r '.choices[0].message.content')
+            }')
+          
+          echo "PR_TITLE=$(echo $pr_data | jq -r '.choices[0].message.content.title')" >> $GITHUB_ENV
+          echo "PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body')" >> $GITHUB_ENV
 
-          echo "pr_title=$(echo $pr_data | jq -r '.title')" >> $GITHUB_OUTPUT
-          echo "pr_body=$(echo $pr_data | jq -r '.body')" >> $GITHUB_OUTPUT
-
-      - name: Create Pull Request
+      - name: Create or Update Pull Request
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pr_title="${{ steps.pr_content.outputs.pr_title }}"
-          pr_body="${{ steps.pr_content.outputs.pr_body }}"
+          echo "Processing PR for branch: ${{ matrix.branch }}"
           
           # Check if PR already exists
           existing_pr=$(gh pr list --head ${{ matrix.branch }} --base develop --json number --jq '.[0].number')
           
           if [ -z "$existing_pr" ]; then
-            # Create new PR
-            gh pr create --title "$pr_title" --body "$pr_body" --base develop --head ${{ matrix.branch }}
+            echo "Creating new PR for ${{ matrix.branch }}"
+            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head ${{ matrix.branch }}
           else
-            # Update existing PR
-            gh pr edit $existing_pr --title "$pr_title" --body "$pr_body"
+            echo "Updating existing PR #$existing_pr for ${{ matrix.branch }}"
+            gh pr edit $existing_pr --title "$PR_TITLE" --body "$PR_BODY"
           fi
 
           # Link related issues
           issues=$(gh issue list --search "${{ matrix.branch }}" --json number,title)
           if [ -n "$issues" ]; then
-            echo "Related issues found:"
-            echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"' >> $pr_body
-            gh pr edit --body "$pr_body"
+            echo "Linking related issues to PR"
+            echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"' >> $PR_BODY
+            gh pr edit --body "$PR_BODY"
             
             echo "$issues" | jq -r '.[]' | while read -r issue; do
               number=$(echo $issue | jq -r '.number')
               gh issue comment $number --body "This issue is addressed in PR #$(gh pr view --json number -q .number)"
             done
           fi
+
+          echo "PR processing completed for ${{ matrix.branch }}"
 
   check_project_changes:
     runs-on: ubuntu-latest
