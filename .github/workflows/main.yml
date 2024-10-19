@@ -101,7 +101,9 @@ jobs:
             echo "branches_matrix=[]" >> $GITHUB_OUTPUT
 
       - name: Debug Branches Matrix
-        run: echo "Branches matrix: ${{ steps.set_matrix.outputs.branches_matrix }}"
+        run: |
+          echo "Branches matrix:"
+          echo "${{ steps.set_matrix.outputs.branches_matrix }}"
 
   create_pr:
     needs: [check_open_branches, set_matrix]
