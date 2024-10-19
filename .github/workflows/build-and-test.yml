@@ -8,8 +8,46 @@ on:
   workflow_dispatch:
 
 jobs:
+  check_project_changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changes: ${{ steps.check.outputs.changes }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for Changes
+        id: check
+        run: |
+          changes=()
+          if git diff --quiet HEAD^ HEAD -- apps/chrome-extension; then
+            echo "No changes in chrome-extension."
+          else
+            changes+=("extension")
+          fi
+          if git diff --quiet HEAD^ HEAD -- packages; then
+            echo "No changes in packages."
+          else
+            changes+=("packages")
+          fi
+          if git diff --quiet HEAD^ HEAD -- apps/web; then
+            echo "No changes in web app."
+          else
+            changes+=("web")
+          fi
+          if [ ${#changes[@]} -eq 0 ]; then
+            echo "changes=[]" >> $GITHUB_OUTPUT
+          else
+            echo "changes=[\"${changes[*]}\"]" >> $GITHUB_OUTPUT
+          fi
+          echo "Detected changes: ${changes[*]}"
+
   build_packages:
     runs-on: ubuntu-latest
+    needs: check_project_changes
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'packages')
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -19,20 +57,129 @@ jobs:
         with:
           node-version: 'lts/*'
 
-      - name: Cache dependencies
+      - name: Cache Turbo dependencies
         uses: actions/cache@v3
         with:
           path: |
-            ~/.cache/yarn
-            node_modules
             .turbo
             node_modules/.cache/turbo
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-turbo-
 
       - name: Install Dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install
 
       - name: Build Packages
         run: yarn turbo run build --filter=./packages/*
+
+      - name: Run Tests
+        run: yarn turbo run test --filter=./packages/*
+
+  build_web:
+    runs-on: ubuntu-latest
+    needs: [check_project_changes, build_packages]
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'web')
+    env:
+      NEXT_PUBLIC_PLUNK_API_KEY: ${{ secrets.NEXT_PUBLIC_PLUNK_API_KEY }}
+      NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Cache Turbo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            .turbo
+            node_modules/.cache/turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Build Web App
+        run: yarn turbo run build --filter=web... --env-mode=loose
+
+      - name: Upload Web Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./apps/web/out
+
+  build_extension:
+    runs-on: ubuntu-latest
+    needs: [check_project_changes, build_packages]
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'extension')
+    env:
+      NEXT_PUBLIC_PLUNK_API_KEY: ${{ secrets.NEXT_PUBLIC_PLUNK_API_KEY }}
+      NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Cache Turbo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            .turbo
+            node_modules/.cache/turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Build Chrome Extension
+        run: yarn turbo run build --filter=chrome-extension...
+
+      - name: Determine Version Bump (GitFlow)
+        id: determine_version
+        run: |
+          branch=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          if [[ "$branch" == release/* ]]; then
+            bump="minor"
+          elif [[ "$branch" == hotfix/* ]]; then
+            bump="patch"
+          else
+            bump="patch"
+          fi
+          version=$(jq -r '.version' apps/chrome-extension/package.json)
+          new_version=$(echo $version | awk -F. -v OFS=. -v bump="$bump" '{if (bump == "patch") {$NF += 1} else if (bump == "minor") {$2 += 1; $3=0} else if (bump == "major") {$1 += 1; $2=0; $3=0}; print}')
+          echo "New version: $new_version"
+          echo "version=$new_version" >> $GITHUB_ENV
+
+          jq --arg version "$new_version" '.version = $version' apps/chrome-extension/package.json > apps/chrome-extension/tmp.json && mv apps/chrome-extension/tmp.json apps/chrome-extension/package.json
+          jq --arg version "$new_version" '.version = $version' package.json > tmp.json && mv tmp.json package.json
+
+      - name: Commit Version Update
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "<>"
+          git add apps/chrome-extension/package.json package.json
+          git commit -m "chore: bump version to ${{ env.version }}"
+          git push
+
+      - name: Zip Chrome Extension
+        run: |
+          mkdir -p releases
+          cd apps/chrome-extension/dist
+          zip -r ../../releases/STC_Beta_${{ env.version }}.zip .
+
+      - name: Upload Chrome Extension Zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension
+          path: releases/STC_Beta_${{ env.version }}.zip
