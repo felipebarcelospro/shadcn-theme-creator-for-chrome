@@ -97,7 +97,6 @@ export function useThemeCustomizer(): ThemeCustomizerHook {
         if (response.error) {
           logger.error('Error updating theme', response.error);
         } else {
-          // After successful update, fetch the updated themes
           fetchThemes();
         }
       });
@@ -129,7 +128,6 @@ export function useThemeCustomizer(): ThemeCustomizerHook {
         if (response.error) {
           logger.error('Error switching mode', response.error);
         } else {
-          // After successful mode switch, fetch the updated themes
           fetchThemes();
         }
       });
@@ -159,12 +157,8 @@ export function useThemeCustomizer(): ThemeCustomizerHook {
   }, []);
 
   const exportThemeFile = useCallback(() => {
-    if (isCompatible) {
-      exportTheme(themes[currentMode], themes.original[currentMode], currentMode);
-    } else {
-      logger.warn('Theme export failed: Not compatible with ShadCN UI');
-    }
-  }, [isCompatible, themes, currentMode]);
+    exportTheme(themes[currentMode], themes.original[currentMode], currentMode);
+  }, [themes, currentMode]);
 
   return {
     isCompatible,

@@ -509,12 +509,12 @@ function handleGetSiteInfo(sendResponse: (response: any) => void): void {
 }
 
 /**
- * Initializes the ThemeManager if the document is compatible with ShadCN UI.
+ * Initializes the ThemeManager and captures site information.
  */
 const initializeThemeManager = async () => {
-  if (checkShadcnCompatibility()) {
-    await themeManager.initialize();
-  }
+  await themeManager.initialize();
+  const isCompatible = checkShadcnCompatibility();
+  logger.info('ThemeManager initialized', { isCompatible });
 };
 
 initializeThemeManager();

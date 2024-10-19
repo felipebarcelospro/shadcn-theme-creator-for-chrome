@@ -3,6 +3,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@r
 import { Button } from "@repo/ui/components/ui/button";
 import { Card } from "@repo/ui/components/ui/card";
 import { Metadata } from "next";
+import { WaitlistDialog } from "./components/waitlist-dialog";
 
 export const metadata: Metadata = {
   title: "ShadCN Theme Creator for Chrome",
@@ -60,18 +61,18 @@ export default function Home() {
         </p>
 
         <div className="flex justify-center space-x-6">
-          <Button size="lg" asChild className="inline-flex items-center">
-            <a href={config.purchaseUrl} target="_blank" rel="noopener noreferrer" className="flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <circle cx="12" cy="12" r="4" />
-                <line x1="21.17" y1="8" x2="12" y2="8" />
-                <line x1="3.95" y1="6.06" x2="8.54" y2="14" />
-                <line x1="10.88" y1="21.94" x2="15.46" y2="14" />
-              </svg>
-              Add to Chrome - It's Free!
-            </a>
+        <WaitlistDialog>
+          <Button size="lg" className="inline-flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="4" />
+              <line x1="21.17" y1="8" x2="12" y2="8" />
+              <line x1="3.95" y1="6.06" x2="8.54" y2="14" />
+              <line x1="10.88" y1="21.94" x2="15.46" y2="14" />
+            </svg>
+            Join Waitlist - <i>It's Free!</i>
           </Button>
+        </WaitlistDialog>
           <Button size="lg" variant="outline" asChild className="inline-flex items-center">
             <a href={config.githubUrl} target="_blank" rel="noopener noreferrer" className="flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

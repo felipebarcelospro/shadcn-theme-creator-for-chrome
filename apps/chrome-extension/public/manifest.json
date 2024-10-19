@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ShadCN Theme Creator for Chrome",
   "version": "1.0.2",
-  "description": "Boost productivity and create stunning ShadCN UI themes in real-time. Customize, preview, and export with ease using our Chrome extension.",
+  "description": "Create stunning ShadCN UI themes in real-time. Customize, preview, and export with ease using our Chrome extension.",
   "permissions": [
     "activeTab",
     "scripting",

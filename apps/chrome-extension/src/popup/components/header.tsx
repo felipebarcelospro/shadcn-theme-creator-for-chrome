@@ -49,13 +49,13 @@ export const Header: React.FC = () => {
           </button>
         </div>
       </div>
-      <div className="flex flex-col space-y-4 px-4">
-        {siteInfo && (
+      {siteInfo && (
+        <div className="flex flex-col space-y-4 px-4">        
           <div>
             <div className="flex items-center space-x-3 mb-2">
               <img src={siteInfo.favicon} alt="Site Favicon" className="w-10 h-10 rounded-md border border-gray-200 dark:border-zinc-700" />
               <div>
-                <h2 className="text-lg font-semibold line-clamp-1 text-gray-900 dark:text-zinc-100">{siteInfo.name}</h2>
+                <h2 className="text-md font-semibold line-clamp-1 text-gray-900 dark:text-zinc-100">{siteInfo.name}</h2>
                 <p className="text-md text-gray-500 dark:text-zinc-400">{siteInfo.domain}</p>
               </div>
             </div>
@@ -83,9 +83,9 @@ export const Header: React.FC = () => {
                 </span>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          </div>        
+        </div>
+      )}
     </header>
   );
 };
