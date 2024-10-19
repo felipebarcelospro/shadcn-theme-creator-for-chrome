@@ -15,7 +15,7 @@ export const ThemeCustomizer: React.FC = () => {
         <div className="flex flex-col space-y-4 p-4 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg">
           <div className="flex items-center space-x-2">
             <AlertCircle size={18} className="text-yellow-600 dark:text-yellow-400" />
-            <p className="text-sm text-gray-700 dark:text-zinc-300">This page is not compatible with ShadCN UI theme customization.</p>
+            <p className="text-sm text-gray-700 dark:text-zinc-300">This page is not compatible with Shadcn/UI UI theme customization.</p>
           </div>
         </div>
       </div>

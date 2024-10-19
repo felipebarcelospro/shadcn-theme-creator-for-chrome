@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎨 ShadCN Theme Creator for Chrome
+# 🎨 Shadcn/UI Theme Creator for Chrome
 
 [INSERT COVER IMAGE HERE]
 
@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 
-**Boost productivity and create stunning ShadCN UI themes in real-time. Customize, preview, and export with ease using our Chrome extension.**
+**Boost productivity and create stunning Shadcn/UI UI themes in real-time. Customize, preview, and export with ease using our Chrome extension.**
 
 [Report Bug](https://github.com/felipebarcelospro/shadcn-theme-creator-for-chrome/issues) | [Request Feature](https://github.com/felipebarcelospro/shadcn-theme-creator-for-chrome/issues)
 
@@ -41,9 +41,9 @@
 
 </div>
 
-ShadCN Theme Creator for Chrome is a powerful extension designed to enhance your web development experience with ShadCN UI. This tool allows you to customize themes on websites using ShadCN UI in real-time, providing instant visual feedback and the ability to export your customizations for future use.
+Shadcn/UI Theme Creator for Chrome is a powerful extension designed to enhance your web development experience with Shadcn/UI UI. This tool allows you to customize themes on websites using Shadcn/UI UI in real-time, providing instant visual feedback and the ability to export your customizations for future use.
 
-### Why ShadCN Theme Creator?
+### Why Shadcn/UI Theme Creator?
 
 - 🚀 **Boost Productivity**: Quickly iterate through different theme options without changing code.
 - 🎨 **Visual Customization**: Intuitive color pickers for easy theme adjustments.
@@ -54,7 +54,7 @@ ShadCN Theme Creator for Chrome is a powerful extension designed to enhance your
 
 ## ✨ Features
 
-- 🔍 Automatic Detection: Instantly recognizes ShadCN UI compatible websites, streamlining your workflow.
+- 🔍 Automatic Detection: Instantly recognizes Shadcn/UI UI compatible websites, streamlining your workflow.
 - 🎨 Intuitive Interface: Easy-to-use color pickers for seamless theme adjustments and customization.
 - 👁️ Real-time Preview: Witness changes instantly as you customize, enhancing your design process.
 - 💾 Export Themes: Save and reuse your custom themes across multiple projects effortlessly.
@@ -67,7 +67,7 @@ ShadCN Theme Creator for Chrome is a powerful extension designed to enhance your
 
 - [React](https://reactjs.org/)
 - [TypeScript](https://www.typescriptlang.org/)
-- [ShadCN UI](https://ui.shadcn.com/)
+- [Shadcn/UI UI](https://ui.shadcn.com/)
 - [Chrome Extension API](https://developer.chrome.com/docs/extensions/)
 - [Webpack](https://webpack.js.org/)
 
@@ -108,8 +108,8 @@ To get a local copy up and running, follow these simple steps.
 
 ## 💻 Usage
 
-1. Navigate to a website using ShadCN UI
-2. Click the ShadCN Theme Creator icon in your Chrome toolbar
+1. Navigate to a website using Shadcn/UI UI
+2. Click the Shadcn/UI Theme Creator icon in your Chrome toolbar
 3. Use the color controls to adjust the theme
 4. See changes in real-time on the website
 5. Click "Export Theme" to download your customizations
@@ -152,7 +152,7 @@ Project Link: [https://github.com/felipebarcelospro/shadcn-theme-creator-for-chr
 
 ## 🙏 Acknowledgements
 
-- [ShadCN UI](https://ui.shadcn.com/)
+- [Shadcn/UI UI](https://ui.shadcn.com/)
 - [React](https://reactjs.org/)
 - [TypeScript](https://www.typescriptlang.org/)
 - [Chrome Extension Documentation](https://developer.chrome.com/docs/extensions/)

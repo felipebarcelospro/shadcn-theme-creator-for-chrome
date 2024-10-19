@@ -6,8 +6,8 @@ import { Metadata } from "next";
 import { WaitlistDialog } from "./components/waitlist-dialog";
 
 export const metadata: Metadata = {
-  title: "ShadCN Theme Creator for Chrome",
-  description: "Boost productivity and create stunning ShadCN UI themes in real-time. Customize, preview, and export with ease using our Chrome extension.",
+  title: "Shadcn/UI Theme Creator for Chrome",
+  description: "Boost productivity and create stunning Shadcn/UI UI themes in real-time. Customize, preview, and export with ease using our Chrome extension.",
   openGraph: {
     images: [
       {

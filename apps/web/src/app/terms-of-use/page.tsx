@@ -29,10 +29,10 @@ export default function TermsOfUse() {
           </Button>
         </Link>
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6 md:mb-8 leading-tight md:max-w-4xl">
-          Terms of Use for ShadCN Theme Creator for Chrome
+          Terms of Use for Shadcn/UI Theme Creator for Chrome
         </h1>
         <p className="text-lg sm:text-xl mb-8 sm:mb-10 md:mb-12 text-muted-foreground">
-          By using the ShadCN Theme Creator for Chrome extension, you agree to comply with and be bound by the following terms and conditions.
+          By using the Shadcn/UI Theme Creator for Chrome extension, you agree to comply with and be bound by the following terms and conditions.
         </p>
       </section>
 
@@ -41,7 +41,7 @@ export default function TermsOfUse() {
           <div className="bg-secondary/10 p-6 sm:p-8 rounded-lg">
             <h2 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">1. Acceptance of Terms</h2>
             <p className="text-base sm:text-lg text-muted-foreground">
-              By using the ShadCN Theme Creator for Chrome extension ("the Extension"), you acknowledge that you have read, understood, and agree to be bound by these Terms of Use. If you do not agree to these terms, please refrain from using the Extension.
+              By using the Shadcn/UI Theme Creator for Chrome extension ("the Extension"), you acknowledge that you have read, understood, and agree to be bound by these Terms of Use. If you do not agree to these terms, please refrain from using the Extension.
             </p>
           </div>
 

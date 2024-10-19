@@ -1,6 +1,6 @@
 /**
- * Content script for ShadCN Theme Customizer extension.
- * Checks for ShadCN UI compatibility and manages theme changes.
+ * Content script for Shadcn/UI Theme Customizer extension.
+ * Checks for Shadcn/UI UI compatibility and manages theme changes.
  */
 
 import { shadcnVariables } from '../consts/shadcn-variables';
@@ -41,7 +41,7 @@ export interface SiteInfo {
 }
 
 /**
- * Manages theme-related operations for the ShadCN Theme Customizer.
+ * Manages theme-related operations for the Shadcn/UI Theme Customizer.
  */
 class ThemeManager {
   private static instance: ThemeManager;
@@ -369,11 +369,11 @@ class ThemeManager {
 const themeManager = ThemeManager.getInstance();
 
 /**
- * Checks if the current document is compatible with ShadCN UI.
+ * Checks if the current document is compatible with Shadcn/UI UI.
  * @returns {boolean} True if compatible, false otherwise.
  */
 export function checkShadcnCompatibility(): boolean {
-  logger.debug('Checking ShadCN compatibility');
+  logger.debug('Checking Shadcn/UI compatibility');
 
   const root = document.documentElement;
   const computedStyle = getComputedStyle(root);
@@ -384,7 +384,7 @@ export function checkShadcnCompatibility(): boolean {
 
   const isCompatible = compatibleVariables.length >= shadcnVariables.length * 0.7;
 
-  logger.info('ShadCN compatibility check result', { isCompatible, compatibleVariables });
+  logger.info('Shadcn/UI compatibility check result', { isCompatible, compatibleVariables });
 
   return isCompatible;
 }

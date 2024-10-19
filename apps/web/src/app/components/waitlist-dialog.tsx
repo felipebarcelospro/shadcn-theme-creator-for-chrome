@@ -154,7 +154,7 @@ export function WaitlistDialog({ children }: { children: React.ReactNode }) {
             </p>
             <div className="flex flex-col space-y-4">
               <Button variant="outline" size="lg" className="flex items-center h-12 w-full justify-center" asChild>
-                <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent("I just joined the waitlist for ShadCN Theme Creator for Chrome! Can't wait to try it out. #WebDev #UIDesign")}`} target="_blank" rel="noopener noreferrer">
+                <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent("I just joined the waitlist for Shadcn/UI Theme Creator for Chrome! Can't wait to try it out. #WebDev #UIDesign")}`} target="_blank" rel="noopener noreferrer">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M4 4l11.733 16h4.267l-11.733 -16z"></path><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"></path></svg>
                   Share on Twitter
                 </a>

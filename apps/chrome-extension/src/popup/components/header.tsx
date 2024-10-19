@@ -12,7 +12,7 @@ export const Header: React.FC = () => {
       <div className="flex items-center justify-between px-4 py-8 mb-4 border-b border-gray-200 dark:border-zinc-700">
         <div className="flex items-center space-x-2">
           <span className='bg-black dark:bg-white w-10 h-10 rounded-md flex items-center justify-center'>
-            <img src="https://mediaresource.sfo2.digitaloceanspaces.com/wp-content/uploads/2024/04/20161105/shadcn-ui-logo-EF735EC0E5-seeklogo.com.png" className='w-6 h-6 invert dark:invert-0' alt="ShadCN UI Logo" />
+            <img src="https://mediaresource.sfo2.digitaloceanspaces.com/wp-content/uploads/2024/04/20161105/shadcn-ui-logo-EF735EC0E5-seeklogo.com.png" className='w-6 h-6 invert dark:invert-0' alt="Shadcn/UI UI Logo" />
           </span>
           <div>
             <h1 className="text-lg font-semibold m-0 text-gray-900 dark:text-zinc-100">{config.projectName}</h1>

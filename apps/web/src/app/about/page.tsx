@@ -44,7 +44,7 @@ export default function About() {
             I'm a passionate software engineer and entrepreneur from 🇧🇷, dedicated to transforming ideas into scalable, profitable SaaS products. With extensive experience in developing innovative solutions, I've created tools like <a href="https://notifylog.com" target="_blank" rel="noopener noreferrer"><Button className="inline-flex items-center justify-center whitespace-nowrap text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 text-primary underline-offset-4 bg-zinc-100 hover:bg-zinc-200 transition-all hover:no-underline my-0.5 rounded-full px-2 sm:px-3 h-auto py-1 font-semibold tracking-tight">NotifyLog<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="ml-1 sm:ml-2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" x2="21" y1="14" y2="3"></line></svg></Button></a> for real-time event management and <a href="https://nextcron.co" target="_blank" rel="noopener noreferrer"><Button className="inline-flex items-center justify-center whitespace-nowrap text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 text-primary underline-offset-4 bg-zinc-100 hover:bg-zinc-200 transition-all hover:no-underline my-0.5 rounded-full px-2 sm:px-3 h-auto py-1 font-semibold tracking-tight">NextCron<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="ml-1 sm:ml-2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" x2="21" y1="14" y2="3"></line></svg></Button></a> for simplified task scheduling.
           </p>
           <p className="text-base sm:text-lg text-zinc-700 pt-4 sm:pt-8 text-pretty font-medium tracking-tight">
-            My journey in tech has led me to create the <a href="https://chrome.google.com/webstore" target="_blank" rel="noopener noreferrer"><Button className="inline-flex items-center justify-center whitespace-nowrap text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 text-primary underline-offset-4 bg-zinc-100 hover:bg-zinc-200 transition-all hover:no-underline my-0.5 rounded-full px-2 sm:px-3 h-auto py-1 font-semibold tracking-tight">ShadCN Theme Creator<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="ml-1 sm:ml-2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" x2="21" y1="14" y2="3"></line></svg></Button></a>, a Chrome extension designed to help developers customize ShadCN UI themes effortlessly. This tool is a testament to my belief in creating solutions that enhance productivity and creativity in the dev community.
+            My journey in tech has led me to create the <a href="https://chrome.google.com/webstore" target="_blank" rel="noopener noreferrer"><Button className="inline-flex items-center justify-center whitespace-nowrap text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 text-primary underline-offset-4 bg-zinc-100 hover:bg-zinc-200 transition-all hover:no-underline my-0.5 rounded-full px-2 sm:px-3 h-auto py-1 font-semibold tracking-tight">Shadcn/UI Theme Creator<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="ml-1 sm:ml-2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" x2="21" y1="14" y2="3"></line></svg></Button></a>, a Chrome extension designed to help developers customize Shadcn/UI UI themes effortlessly. This tool is a testament to my belief in creating solutions that enhance productivity and creativity in the dev community.
           </p>
           <p className="text-base sm:text-lg text-zinc-700 pt-4 sm:pt-8 text-pretty font-medium tracking-tight">
             I've built a thriving Brazilian indie-hacker community with over 10K members. In 2023, our SaaS ventures collectively generated more than $500K in revenue. I've personally helped launch over 30 successful projects, empowering fellow developers to turn their ideas into profitable businesses. My mission is to share knowledge and inspire others to build sustainable, scalable SaaS products that make a real impact in the tech world.
@@ -71,7 +71,7 @@ export default function About() {
               </div>
               <h3 className="text-lg sm:text-xl font-semibold">Live Preview</h3>
             </div>
-            <p className="text-base sm:text-lg text-muted-foreground">See your theme changes in real-time as you customize ShadCN UI components.</p>
+            <p className="text-base sm:text-lg text-muted-foreground">See your theme changes in real-time as you customize Shadcn/UI UI components.</p>
           </Card>
           <Card className="p-4 sm:p-6">
             <div className="flex items-center mb-2 sm:mb-4">
@@ -97,7 +97,7 @@ export default function About() {
               </div>
               <h3 className="text-lg sm:text-xl font-semibold">Component Library</h3>
             </div>
-            <p className="text-base sm:text-lg text-muted-foreground">Access a wide range of ShadCN UI components to customize and preview.</p>
+            <p className="text-base sm:text-lg text-muted-foreground">Access a wide range of Shadcn/UI UI components to customize and preview.</p>
           </Card>
           <Card className="p-4 sm:p-6">
             <div className="flex items-center mb-2 sm:mb-4">
@@ -114,9 +114,9 @@ export default function About() {
       </section>
 
       <section className="mb-12 sm:mb-16 md:mb-24">
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6 leading-tight">Get ShadCN Theme Creator for Chrome</h2>
+        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6 leading-tight">Get Shadcn/UI Theme Creator for Chrome</h2>
         <p className="text-base sm:text-lg text-muted-foreground mb-4 sm:mb-6">
-          Transform your ShadCN UI development workflow. Download our Chrome extension and start creating stunning, custom themes in minutes.
+          Transform your Shadcn/UI UI development workflow. Download our Chrome extension and start creating stunning, custom themes in minutes.
         </p>
         <Button asChild className="inline-flex items-center text-sm sm:text-base">
           <a href="https://chrome.google.com/webstore" target="_blank" rel="noopener noreferrer" className="flex items-center">

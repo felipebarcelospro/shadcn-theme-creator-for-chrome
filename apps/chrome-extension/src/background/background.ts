@@ -1,6 +1,6 @@
 /**
- * Background script for ShadCN Theme Customizer extension.
- * Handles tab activation, checks for ShadCN UI compatibility, and manages theme changes.
+ * Background script for Shadcn/UI Theme Customizer extension.
+ * Handles tab activation, checks for Shadcn/UI UI compatibility, and manages theme changes.
  */
 
 import { logger } from '../utils/logger';
@@ -85,7 +85,7 @@ class BackgroundScript {
 
   private init(): void {
     chrome.runtime.onInstalled.addListener(() => {
-      logger.info('ShadCN Theme Customizer installed');
+      logger.info('Shadcn/UI Theme Customizer installed');
     });
 
     chrome.tabs.onActivated.addListener(this.handleTabActivated.bind(this));
@@ -109,7 +109,7 @@ class BackgroundScript {
   }
 
   /**
-   * Checks if the current tab is compatible with ShadCN UI.
+   * Checks if the current tab is compatible with Shadcn/UI UI.
    * @param tab - The tab to check for compatibility.
    */
   private async checkCompatibility(tab: chrome.tabs.Tab): Promise<void> {
@@ -149,12 +149,12 @@ class BackgroundScript {
   private setupDebugMode(): void {
     (self as any).enableDebugMode = () => {
       logger.enableDebugMode();
-      console.log('Debug mode enabled for ShadCN Theme Customizer');
+      console.log('Debug mode enabled for Shadcn/UI Theme Customizer');
     };
 
     (self as any).disableDebugMode = () => {
       logger.disableDebugMode();
-      console.log('Debug mode disabled for ShadCN Theme Customizer');
+      console.log('Debug mode disabled for Shadcn/UI Theme Customizer');
     };
   }
 }

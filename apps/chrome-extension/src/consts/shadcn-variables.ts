@@ -1,5 +1,5 @@
 /**
- * An array of CSS variable names used in the ShadCN UI theme.
+ * An array of CSS variable names used in the Shadcn/UI UI theme.
  * These variables represent different aspects of the theme, including
  * background colors, foreground colors, component-specific colors,
  * and utility colors.

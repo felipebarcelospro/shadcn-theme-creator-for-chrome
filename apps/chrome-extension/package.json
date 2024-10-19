@@ -1,7 +1,7 @@
 {
   "name": "chrome-extension",
   "version": "1.0.0",
-  "description": "Chrome extension to customize ShadCN UI themes",
+  "description": "Chrome extension to customize Shadcn/UI UI themes",
   "main": "index.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",

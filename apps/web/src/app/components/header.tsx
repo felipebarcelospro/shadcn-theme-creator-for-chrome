@@ -27,7 +27,7 @@ export async function Header() {
       <nav className="flex justify-between items-center">
         <Link href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
           <span className='bg-black dark:bg-white w-8 h-8 sm:w-10 sm:h-10 rounded-md flex items-center justify-center'>
-            <img src="https://mediaresource.sfo2.digitaloceanspaces.com/wp-content/uploads/2024/04/20161105/shadcn-ui-logo-EF735EC0E5-seeklogo.com.png" className='w-5 h-5 sm:w-6 sm:h-6 invert dark:invert-0' alt="ShadCN UI Logo" />
+            <img src="https://mediaresource.sfo2.digitaloceanspaces.com/wp-content/uploads/2024/04/20161105/shadcn-ui-logo-EF735EC0E5-seeklogo.com.png" className='w-5 h-5 sm:w-6 sm:h-6 invert dark:invert-0' alt="Shadcn/UI UI Logo" />
           </span>
           <div>
             <h1 className="text-sm sm:text-md font-semibold m-0 text-gray-900 dark:text-zinc-100">{config.projectName}</h1>
