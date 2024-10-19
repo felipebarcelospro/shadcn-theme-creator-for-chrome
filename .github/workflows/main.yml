@@ -102,14 +102,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-
-      - name: Install Dependencies
-        run: yarn install
-
       - name: Generate PR Content
         id: pr_content
         env:
@@ -169,8 +161,6 @@ jobs:
               gh issue comment $number --body "This issue is addressed in PR #$(gh pr view --json number -q .number)"
             done
           fi
-
-          echo "PR processing completed for ${{ matrix.branch }}"
 
   check_project_changes:
     runs-on: ubuntu-latest
