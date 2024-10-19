@@ -1,7 +1,7 @@
 "use client"
 import React from 'react';
 
-import { useMediaQuery } from '@/src/hooks/use-media-query';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@repo/ui/components/ui/button";
 import { Dialog, DialogContent as DialogContentPrimitive, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@repo/ui/components/ui/dialog";
