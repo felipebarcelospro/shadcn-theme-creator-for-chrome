@@ -2,6 +2,21 @@ import { config } from "@repo/shared/config";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@repo/ui/components/ui/accordion";
 import { Button } from "@repo/ui/components/ui/button";
 import { Card } from "@repo/ui/components/ui/card";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "ShadCN Theme Creator for Chrome",
+  description: "Boost productivity and create stunning ShadCN UI themes in real-time. Customize, preview, and export with ease using our Chrome extension.",
+  openGraph: {
+    images: [
+      {
+        url: "https://lh3.googleusercontent.com/X18GADYANB-YmBJSFSTaaAvBDS78umAUl6QwmDxw3QgI3-uyLKuhwTI9Vd8BsnMWbLMitp2YQ1kPJc7c156SYN5Lzw=s1280-w1280-h800",
+        width: 1200,
+        height: 630,
+      },
+    ],
+  },
+};
 
 export default function Home() {
   return (    
