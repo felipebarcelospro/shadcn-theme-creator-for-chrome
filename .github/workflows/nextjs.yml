@@ -39,13 +39,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-turbo-
 
+      - name: List directory contents
+        run: ls -R apps/web
+
       - name: Build Web App
-        run: yarn turbo run build --filter=web... --env-mode=loose
+        run: yarn turbo run build --filter=web... --env-mode=loose --output-dir=./apps/web/out
 
       - name: Upload Web Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./apps/web/out
+          path: ./apps/web/.next/out
 
   # Job de Deploy para GitHub Pages
   deploy_pages:
