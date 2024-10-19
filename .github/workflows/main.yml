@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        branch: ${{ fromJson(format('[{0}]', needs.check_open_branches.outputs.branches_without_pr)) }}
+        branch: ${{ fromJson('["' + needs.check_open_branches.outputs.branches_without_pr.replace(',', '","') + '"]') }}
     steps:
       - name: Debug Condition
         run: |
