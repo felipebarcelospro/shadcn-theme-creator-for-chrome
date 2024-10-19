@@ -2,23 +2,6 @@ name: CI/CD Pipeline for Shadcn Theme Creator
 
 on:
   push:
-    branches: ["main", "develop", "feature/*", "release/*", "hotfix/*", "fix/*", "ci/*", "chore/*"]
-  pull_request:
-    branches: ["main", "develop"]
-  workflow_dispatch:
-
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-  pull-requests: write
-  issues: write
-
-jobs:
-  name: CI/CD Pipeline for Shadcn Theme Creator
-
-on:
-  push:
     branches: ["main", "develop", "feature/*", "release/*", "hotfix/*", "ci/*", "chore/*"]
   pull_request:
     branches: ["main", "develop"]
@@ -101,9 +84,7 @@ jobs:
             echo "branches_matrix=[]" >> $GITHUB_OUTPUT
 
       - name: Debug Branches Matrix
-        run: |
-          echo "Branches matrix:"
-          echo "${{ steps.set_matrix.outputs.branches_matrix }}"
+        run: echo "Branches matrix: ${{ steps.set_matrix.outputs.branches_matrix }}"
 
   create_pr:
     needs: [check_open_branches, set_matrix]
