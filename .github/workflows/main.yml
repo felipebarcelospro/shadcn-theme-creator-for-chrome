@@ -50,7 +50,7 @@ jobs:
           done
           
           if [ ${#branches_without_pr[@]} -gt 0 ]; then
-            branches_string=$(IFS=","; echo "${branches_without_pr[*]}")
+            branches_string=$(IFS=,; echo "${branches_without_pr[*]}")
             echo "branches_without_pr=${branches_string}" >> $GITHUB_OUTPUT
           else
             echo "branches_without_pr=" >> $GITHUB_OUTPUT
@@ -66,7 +66,7 @@ jobs:
         id: set_matrix
         run: |
           if [ -n "${{ needs.check_open_branches.outputs.branches_without_pr }}" ]; then
-            branches_matrix=$(echo "${{ needs.check_open_branches.outputs.branches_without_pr }}" | sed 's/,/\n/g')
+            branches_matrix=$(echo "${{ needs.check_open_branches.outputs.branches_without_pr }}" | jq -R 'split(",")')
             echo "branches_matrix=${branches_matrix}" >> $GITHUB_OUTPUT
           else
             echo "branches_matrix=[]" >> $GITHUB_OUTPUT
@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        branch: ${{ fromJson('[' + needs.set_matrix.outputs.branches_matrix + ']') }}
+        branch: ${{ fromJson(needs.set_matrix.outputs.branches_matrix) }}
     steps:
       - name: Debug Condition
         run: |
