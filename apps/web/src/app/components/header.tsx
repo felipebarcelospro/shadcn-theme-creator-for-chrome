@@ -5,6 +5,7 @@ import { Drawer, DrawerContent, DrawerFooter, DrawerTrigger } from "@repo/ui/com
 import { Separator } from "@repo/ui/components/ui/separator";
 import { Menu } from "lucide-react";
 import Link from "next/link";
+import { ThemeToggle } from "./theme-toggle";
 
 async function getLastUpdateDate() {
   try {
@@ -67,6 +68,7 @@ export async function Header() {
               <span className="sr-only">GitHub</span>
             </a>
           </Button>
+          <ThemeToggle />
         </div>
 
         {/* Mobile Navigation */}
