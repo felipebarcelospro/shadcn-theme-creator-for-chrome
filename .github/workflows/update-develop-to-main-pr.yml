@@ -38,31 +38,33 @@ jobs:
 
       - name: Generate PR Content
         id: pr_content
-        run: |
-          set -e
-          echo "Generating PR content for develop to main"
-          commits=$(git log --pretty=format:'%H' origin/main..origin/develop | jq -R -s -c 'split("\n")[:-1]')
-          pr_content=$(curl -s -X POST https://api.groq.com/openai/v1/chat/completions \
-            -H "Authorization: Bearer ${{ secrets.GROQ_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: 'https://api.groq.com/openai/v1/chat/completions'
+          method: 'POST'
+          customHeaders: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
+          data: |
+            {
               "model": "llama-3.1-70b-versatile",
               "messages": [
-                {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
-                {"role": "user", "content": "Create a pull request title and description for merging develop into main with the following commits: '"$commits"'"}
+                {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
+                {"role": "user", "content": "Create a pull request title and description for merging develop into main with the following commits: ${{ github.event.commits }}"}
               ],
               "temperature": 0.4,
               "response_format": {"type": "json_object"}
-            }')
-          
-          pr_title=$(echo "$pr_content" | jq -r '.choices[0].message.content | fromjson | .title // empty')
-          pr_body=$(echo "$pr_content" | jq -r '.choices[0].message.content | fromjson | .body // empty')
-          
+            }
+
+      - name: Parse PR Content
+        run: |
+          pr_data='${{ steps.pr_content.outputs.response }}'
+          pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+          pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
+
           if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
             echo "Error: Generated PR content is null or empty. Exiting."
             exit 1
           fi
-          
+
           echo "PR_TITLE=$(echo "$pr_title" | sed 's/"/\\"/g')" >> $GITHUB_ENV
           echo "PR_BODY<<EOF" >> $GITHUB_ENV
           echo "$pr_body" >> $GITHUB_ENV
