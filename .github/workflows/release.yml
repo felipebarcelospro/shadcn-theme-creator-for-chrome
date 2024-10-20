@@ -7,14 +7,25 @@ on:
       - completed
     branches: ["main"]
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  pull-requests: write
+  issues: write
+
 jobs:
   prepare_release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     outputs:
       should_release: ${{ steps.check_changes.outputs.should_release }}
       new_version: ${{ steps.version.outputs.new_version }}
       changelog: ${{ steps.changelog.outputs.changelog }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -39,31 +50,55 @@ jobs:
           new_version=$(echo $current_version | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
           echo "new_version=$new_version" >> $GITHUB_OUTPUT
 
+      - name: Validate GROQ API Key
+        run: |
+          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "Error: GROQ_API_KEY is not set or empty"
+            exit 1
+          fi
+          echo "GROQ_API_KEY is set and not empty"
+
       - name: Generate Release Notes with AI
         id: changelog
         if: steps.check_changes.outputs.should_release == 'true'
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: |
-          commits=$(git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%s")
-          changelog_response=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
-            -H "Authorization: Bearer $GROQ_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: 'https://api.groq.com/openai/v1/chat/completions'
+          method: 'POST'
+          customHeaders: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
+          data: |
+            {
               "model": "llama-3.1-70b-versatile",
               "messages": [
                 {"role": "system", "content": "You are an AI assistant tasked with creating detailed and user-friendly changelogs. Respond in JSON format with a key 'changelog'."},
-                {"role": "user", "content": "Create a detailed and user-friendly changelog for the following commits: \"'"$commits"'\""}
+                {"role": "user", "content": "Create a detailed and user-friendly changelog for the following commits: ${{ github.event.commits }}"}
               ],
               "temperature": 0.3,
               "response_format": {"type": "json_object"}
-            }')
-          echo "changelog=$(echo $changelog_response | jq -r '.choices[0].message.content' | jq -r '.changelog')" >> $GITHUB_OUTPUT
+            }
+
+      - name: Parse Changelog
+        if: steps.check_changes.outputs.should_release == 'true'
+        run: |
+          changelog_data='${{ steps.changelog.outputs.response }}'
+          changelog=$(echo "$changelog_data" | jq -r '.choices[0].message.content | fromjson | .changelog // empty')
+
+          if [ -z "$changelog" ]; then
+            echo "Error: Generated changelog is null or empty. Exiting."
+            exit 1
+          fi
+
+          echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+          echo "$changelog" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
   release:
     needs: prepare_release
     if: needs.prepare_release.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -91,7 +126,7 @@ jobs:
         with:
           tag_name: v${{ needs.prepare_release.outputs.new_version }}
           name: Release v${{ needs.prepare_release.outputs.new_version }}
-          body: ${{ needs.prepare_release.outputs.changelog }}
+          body: ${{ env.CHANGELOG }}
           draft: false
           prerelease: false
           token: ${{ github.token }}
