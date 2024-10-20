@@ -75,7 +75,7 @@ jobs:
                 {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
                 {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '\''$BRANCH_NAME'\'', Commits: '\''$commits'\''"}
               ],
-              "temperature": 0.7,
+              "temperature": 0.4,
               "response_format": {"type": "json_object"}
             }') || { echo "Error: Failed to generate PR content"; exit 1; }
           
@@ -93,15 +93,17 @@ jobs:
                   {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
                   {"role": "user", "content": "Create a detailed pull request title and description summarizing the changes for the branch '\''$BRANCH_NAME'\''. If no specific changes are provided, create a general description of potential updates."}
                 ],
-                "temperature": 0.7,
+                "temperature": 0.4,
                 "response_format": {"type": "json_object"}
               }')
             pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title // empty')
             pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body // empty')
           fi
 
-          echo "PR_TITLE=$pr_title" >> $GITHUB_ENV
-          echo "PR_BODY=$pr_body" >> $GITHUB_ENV
+          echo "PR_TITLE=$(echo $pr_title | sed 's/"/\\"/g')" >> $GITHUB_ENV
+          echo "PR_BODY<<EOF" >> $GITHUB_ENV
+          echo "$pr_body" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Validate PR Content
         run: |
@@ -113,8 +115,12 @@ jobs:
       - name: Get Branch Creator
         id: branch_creator
         run: |
-          creator=$(git log -1 --format='%an' origin/$BRANCH_NAME)
-          echo "BRANCH_CREATOR=$creator" >> $GITHUB_ENV
+          if [[ -n "$BRANCH_NAME" ]]; then
+            creator=$(git log -1 --format='%an' origin/$BRANCH_NAME)
+            echo "BRANCH_CREATOR=$creator" >> $GITHUB_ENV
+          else
+            echo "BRANCH_CREATOR=Unknown" >> $GITHUB_ENV
+          fi
 
       - name: Create or Update Pull Request
         if: env.NO_COMMITS == 'false'
@@ -190,7 +196,39 @@ jobs:
               echo "Processing branch without PR: $branch"
               git checkout $branch
               creator=$(git log -1 --format='%an' origin/$branch)
-              ./.github/workflows/branch-management.yml
+              commits=$(git log --format=%B origin/develop..$branch)
+              pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
+                -H "Authorization: Bearer $GROQ_API_KEY" \
+                -H "Content-Type: application/json" \
+                -d '{
+                  "model": "llama-3.1-70b-versatile",
+                  "messages": [
+                    {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
+                    {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '\''$branch'\'', Commits: '\''$commits'\''"}
+                  ],
+                  "temperature": 0.4,
+                  "response_format": {"type": "json_object"}
+                }') || { echo "Error: Failed to generate PR content"; exit 1; }
+              pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title // empty')
+              pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body // empty')
+              if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
+                echo "Error: Generated PR content is null or empty. Retrying with a different prompt."
+                pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
+                  -H "Authorization: Bearer $GROQ_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  -d '{
+                    "model": "llama-3.1-70b-versatile",
+                    "messages": [
+                      {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
+                      {"role": "user", "content": "Create a detailed pull request title and description summarizing the changes for the branch '\''$branch'\''. If no specific changes are provided, create a general description of potential updates."}
+                    ],
+                    "temperature": 0.4,
+                    "response_format": {"type": "json_object"}
+                  }')
+                pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title // empty')
+                pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body // empty')
+              fi
+              gh pr create --title "$pr_title" --body "$pr_body" --base develop --head "$branch" --author "$creator"
             else
               pr_number=$(gh pr list --head "$branch" --base develop --json number --jq '.[0].number')
               echo "PR #$pr_number exists for branch $branch. Checking for updates."
@@ -208,11 +246,11 @@ jobs:
                       {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
                       {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '\''$branch'\'', Commits: '\''$commits'\''"}
                     ],
-                    "temperature": 0.7,
+                    "temperature": 0.4,
                     "response_format": {"type": "json_object"}
                   }') || { echo "Error: Failed to generate PR content"; exit 1; }
-                pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title')
-                pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body')
+                pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title // empty')
+                pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body // empty')
                 if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
                   echo "Error: Generated PR content is null or empty. Retrying with a different prompt."
                   pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
@@ -224,11 +262,11 @@ jobs:
                         {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
                         {"role": "user", "content": "Create a detailed pull request title and description summarizing the changes for the branch '\''$branch'\''. If no specific changes are provided, create a general description of potential updates."}
                       ],
-                      "temperature": 0.7,
+                      "temperature": 0.4,
                       "response_format": {"type": "json_object"}
                     }')
-                  pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title')
-                  pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body')
+                  pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title // empty')
+                  pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body // empty')
                 fi
                 gh pr edit $pr_number --title "$pr_title" --body "$pr_body"
               fi
