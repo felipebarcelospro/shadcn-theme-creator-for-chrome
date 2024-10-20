@@ -21,49 +21,6 @@ outputs:
 runs:
   using: "composite"
   steps:
-  - name: Detect package manager
-    id: detect-package-manager
-    shell: bash
-    run: |
-      if [ -f "package-lock.json" ]; then
-        echo "package-manager=npm" >> $GITHUB_OUTPUT
-      elif [ -f "yarn.lock" ]; then
-        echo "package-manager=yarn" >> $GITHUB_OUTPUT
-      elif [ -f "pnpm-lock.yaml" ]; then
-        echo "package-manager=pnpm" >> $GITHUB_OUTPUT
-      else
-        echo "::error::No package manager lock file found"
-        exit 1
-      fi
-
-  - name: Check package manager
-    shell: bash
-    run: |
-      if [ "yarn" = "npm" ]; then
-        echo "installation-status=success" >> $GITHUB_OUTPUT
-      fi
-
-  - name: Install dependencies
-    uses: ./.github/actions/install-dependencies
-    with:
-      package-manager: ${{ steps.detect-package-manager.outputs.package-manager }}
-      cache-key: ${{ runner.OS }}-${{ steps.detect-package-manager.outputs.package-manager }}-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml') }}
-      github-token: ${{ inputs.github-token }}
-
-  - name: Fetch repository metadata
-    id: repo-metadata
-    uses: actions/github-script@v7
-    with:
-      github-token: ${{ inputs.github-token }}
-      script: |
-        const { owner, repo } = context.repo;
-        try {
-          const repoData = await github.rest.repos.get({ owner, repo });
-          return repoData.data;
-        } catch (error) {
-          core.setFailed(`Failed to fetch repository metadata: ${error.message}`);
-        }
-
   - name: Load and parse config.yml
     id: config
     uses: actions/github-script@v7
@@ -89,19 +46,55 @@ runs:
           core.setFailed(`Error loading or parsing config.yml: ${error.message}`);
         }
 
+  - name: Detect package manager
+    id: detect-package-manager
+    shell: bash
+    run: |
+      CONFIG_DATA='${{ steps.config.outputs.config-data }}'
+      PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.tools[] | select(. == "npm" or . == "yarn" or . == "pnpm")')
+
+      if [ -z "$PACKAGE_MANAGER" ]; then
+        echo "::error::No supported package manager found in config.yml"
+        exit 1
+      fi
+
+      echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
+
+  - name: Install dependencies
+    uses: ./.github/actions/install-dependencies
+    with:
+      package-manager: ${{ steps.detect-package-manager.outputs.package-manager }}
+      cache-key: ${{ runner.OS }}-${{ steps.detect-package-manager.outputs.package-manager }}-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml') }}
+      github-token: ${{ inputs.github-token }}
+
+  - name: Fetch repository metadata
+    id: repo-metadata
+    uses: actions/github-script@v7
+    with:
+      github-token: ${{ inputs.github-token }}
+      script: |
+        const { owner, repo } = context.repo;
+        try {
+          const repoData = await github.rest.repos.get({ owner, repo });
+          return repoData.data;
+        } catch (error) {
+          core.setFailed(`Failed to fetch repository metadata: ${error.message}`);
+        }
+
   - name: Set up environment variables
     id: set-env-vars
     shell: bash
     run: |
+      CONFIG_DATA='${{ steps.config.outputs.config-data }}'
+
       echo "REPO_NAME=${{ github.repository }}" >> $GITHUB_ENV
       echo "REPO_OWNER=${{ github.repository_owner }}" >> $GITHUB_ENV
       echo "GITHUB_SHA=${{ github.sha }}" >> $GITHUB_ENV
       echo "GITHUB_REF=${{ github.ref }}" >> $GITHUB_ENV
       echo "PACKAGE_MANAGER=${{ steps.detect-package-manager.outputs.package-manager }}" >> $GITHUB_ENV
 
-      CONFIG_DATA='${{ steps.config.outputs.config-data }}'
       REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')
-      MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.version_control.main_branches')
+      MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches | @json')
 
       echo "REPO_TYPE=$REPO_TYPE" >> $GITHUB_ENV
       echo "MAIN_BRANCHES=$MAIN_BRANCHES" >> $GITHUB_ENV
@@ -116,7 +109,7 @@ runs:
 
       HAS_ISSUES=$(echo "$REPO_METADATA" | jq -r '.has_issues')
       HAS_PROJECTS=$(echo "$REPO_METADATA" | jq -r '.has_projects')
-      AUTO_LABELING=$(echo "$CONFIG_DATA" | jq -r '.issue_management.auto_labeling.enabled')
+      AUTO_LABELING=$(echo "$CONFIG_DATA" | jq -r '.issue_management.auto_label.enabled')
       REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')
 
       if [ "$HAS_ISSUES" = "false" ] && [ "$AUTO_LABELING" = "true" ]; then
@@ -135,7 +128,7 @@ runs:
       echo "CURRENT_BRANCH=$CURRENT_BRANCH" >> $GITHUB_ENV
       echo "CURRENT_COMMIT=$CURRENT_COMMIT" >> $GITHUB_ENV
 
-  - name: Create repository context
+  - name: Set repository context
     id: repo-context
     shell: bash
     run: |
@@ -157,9 +150,10 @@ runs:
           repoType: $repoType,
           mainBranches: $mainBranches,
           packageManager: $packageManager
-        }'
-      )
-      echo "repository-context=$CONTEXT" >> $GITHUB_OUTPUT
+        }')
+      echo "repository-context<<EOF" >> $GITHUB_OUTPUT
+      echo "$CONTEXT" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
   - name: Output results
     shell: bash
