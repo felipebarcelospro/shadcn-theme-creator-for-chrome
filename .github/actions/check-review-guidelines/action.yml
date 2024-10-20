@@ -33,11 +33,11 @@ runs:
       node-version: '20'
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: npm install @actions/github @actions/core
 
   - name: Debug - Input values
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "PR description: ${{ inputs.pr-description }}"
       echo "Review comments: ${{ inputs.review-comments }}"
@@ -45,7 +45,7 @@ runs:
 
   - name: Load guideline rules
     id: load-rules
-    shell: bash
+    shell: bash -l {0}
     run: |
       rules=$(cat ${{ inputs.guideline-rules }})
       echo "rules=$rules" >> $GITHUB_OUTPUT
@@ -92,7 +92,7 @@ runs:
       checkCompliance();
 
   - name: Debug - Compliance result
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Compliance status: ${{ steps.check-compliance.outputs.compliance-status }}"
       echo "Violations: ${{ steps.check-compliance.outputs.violations-list }}"

@@ -25,7 +25,7 @@ runs:
     uses: actions/checkout@v3
 
   - name: Setup security tools
-    shell: bash
+    shell: bash -l {0}
     run: |
       sudo apt-get update
       sudo apt-get install -y npm python3-pip
@@ -33,14 +33,14 @@ runs:
       pip3 install bandit safety
 
   - name: Run dependency vulnerability check
-    shell: bash
+    shell: bash -l {0}
     run: |
       cd ${{ inputs.working-directory }}
       npm audit --json > npm-audit.json
       npm-audit-html -o npm-audit-report.html
 
   - name: Perform SAST
-    shell: bash
+    shell: bash -l {0}
     run: |
       cd ${{ inputs.working-directory }}
       bandit -r . -f custom > bandit-report.txt
@@ -53,26 +53,26 @@ runs:
 
   - name: Analyze Docker containers
     if: hashFiles('**/Dockerfile') != ''
-    shell: bash
+    shell: bash -l {0}
     run: |
       docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
         aquasec/trivy image $(docker images -q) > docker-security-report.txt
 
   - name: Generate comprehensive security report
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Generating comprehensive security report..."
       jq '.' npm-audit.json > vulnerability-report.json
       echo "vulnerability-report=$(cat vulnerability-report.json)" >> $GITHUB_OUTPUT
 
   - name: Create SARIF output
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo '{"$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json", "version": "2.1.0", "runs": []}' > sarif-output.json
       echo "sarif-output=$(pwd)/sarif-output.json" >> $GITHUB_OUTPUT
 
   - name: Set security status
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ -s vulnerability-report.json ]; then
         echo "security-status=fail" >> $GITHUB_OUTPUT
@@ -82,7 +82,7 @@ runs:
 
   - name: Handle errors
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Some security checks failed. Please review the logs for more information."
       echo "security-status=fail" >> $GITHUB_OUTPUT

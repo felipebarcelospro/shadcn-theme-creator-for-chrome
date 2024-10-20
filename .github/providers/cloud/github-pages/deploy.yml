@@ -25,7 +25,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug - Environment Info
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Current working directory: $(pwd)"
       echo "Debug: GitHub workspace: $GITHUB_WORKSPACE"
@@ -39,7 +39,7 @@ runs:
       cache-key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
   - name: Debug - List Artifacts
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Listing contents of artifacts directory:"
       ls -R ${{ inputs.artifacts-path }}
@@ -54,21 +54,21 @@ runs:
       commit_message: ${{ inputs.commit-message }}
 
   - name: Debug - Deployment Output
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Deployment step outputs:"
       echo "page_url: ${{ steps.deployment.outputs.page_url }}"
 
   - name: Set outputs
     id: set-outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "page_url=${{ steps.deployment.outputs.page_url }}" >> $GITHUB_OUTPUT
       echo "Debug: Set page_url output to: ${{ steps.deployment.outputs.page_url }}"
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Deployment to GitHub Pages failed. Check logs for details."
       echo "page_url=" >> $GITHUB_OUTPUT

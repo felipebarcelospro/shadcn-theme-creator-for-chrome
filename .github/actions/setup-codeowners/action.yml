@@ -17,7 +17,7 @@ runs:
 
   - name: Configure CODEOWNERS
     id: configure-codeowners
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       REPOSITORY_ADMINS: ${{ inputs.repository-admins }}

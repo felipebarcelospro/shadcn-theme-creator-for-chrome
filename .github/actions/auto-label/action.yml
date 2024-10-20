@@ -22,7 +22,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "item-type: ${{ inputs.item-type }}"
@@ -103,7 +103,7 @@ runs:
     run: |
       echo "applied-labels=${{ toJson(steps.apply-labels.outputs.result) }}" >> $GITHUB_OUTPUT
       echo "labeling-summary=Applied labels: ${{ toJson(steps.apply-labels.outputs.result) }}" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}
 
   - name: Error handling
     if: failure()
@@ -111,4 +111,4 @@ runs:
       echo "An error occurred during the auto-labeling process"
       echo "applied-labels=[]" >> $GITHUB_OUTPUT
       echo "labeling-summary=Auto-labeling failed due to an error" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}

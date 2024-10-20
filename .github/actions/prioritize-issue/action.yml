@@ -30,7 +30,7 @@ runs:
       python-version: '3.x'
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: pip install PyGithub
 
   - name: Prioritize Issue
@@ -75,7 +75,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during the prioritization process"
       echo "assigned-priority=undefined" >> $GITHUB_OUTPUT

@@ -31,7 +31,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "time-range: ${{ inputs.time-range }}"
@@ -88,7 +88,7 @@ runs:
 
   - name: Run static code analysis
     id: code-analysis
-    shell: bash
+    shell: bash -l {0}
     run: |
       # Placeholder for static code analysis
       echo "Running static code analysis..."
@@ -144,7 +144,7 @@ runs:
       echo 'quality-report=${{ toJson(fromJson(steps.compile-report.outputs.result).qualityReport) }}' >> $GITHUB_OUTPUT
       echo 'issues=${{ toJson(fromJson(steps.compile-report.outputs.result).issues) }}' >> $GITHUB_OUTPUT
       echo 'visualizations=${{ toJson(fromJson(steps.compile-report.outputs.result).visualizations) }}' >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}
 
   - name: Error handling
     if: failure()
@@ -156,4 +156,4 @@ runs:
       echo "quality-report={}" >> $GITHUB_OUTPUT
       echo "issues=[]" >> $GITHUB_OUTPUT
       echo "visualizations={}" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}

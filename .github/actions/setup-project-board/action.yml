@@ -14,7 +14,7 @@ runs:
   steps:
   - name: Create or update project board
     id: create-update-project
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       COLUMNS: ${{ inputs.columns }}

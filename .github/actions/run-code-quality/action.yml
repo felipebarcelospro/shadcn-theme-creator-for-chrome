@@ -38,14 +38,14 @@ runs:
 
   - name: Get package configuration
     id: get-package-config
-    shell: bash
+    shell: bash -l {0}
     run: |
       package_config=$(cat .github/config.json | jq -r '.packages[] | select(.name == "${{ inputs.package-name }}")')
       echo "package-path=$(echo $package_config | jq -r '.path')" >> $GITHUB_OUTPUT
       echo "lint-command=$(echo $package_config | jq -r '.commands.lint')" >> $GITHUB_OUTPUT
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ steps.get-package-config.outputs.package-path }}
     run: |
       if [ -f "package-lock.json" ]; then
@@ -58,7 +58,7 @@ runs:
 
   - name: Run linting
     id: run-lint
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ steps.get-package-config.outputs.package-path }}
     run: |
       lint_output=$(${{ steps.get-package-config.outputs.lint-command }} || true)
@@ -74,7 +74,7 @@ runs:
 
   - name: Run Prettier
     id: run-prettier
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ steps.get-package-config.outputs.package-path }}
     run: |
       prettier_output=$(npx prettier --check . || true)
@@ -84,7 +84,7 @@ runs:
 
   - name: Generate quality report
     id: generate-report
-    shell: bash
+    shell: bash -l {0}
     run: |
       lint_issues=$(echo "${{ steps.run-lint.outputs.lint-output }}" | grep -c "error" || echo "0")
       prettier_issues=$(echo "${{ steps.run-prettier.outputs.prettier-output }}" | grep -c "Code style issues found" || echo "0")
@@ -105,7 +105,7 @@ runs:
       echo "issues-found=$total_issues" >> $GITHUB_OUTPUT
 
   - name: Set outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "quality-report=${{ steps.generate-report.outputs.quality-report }}" >> $GITHUB_OUTPUT
       echo "issues-found=${{ steps.generate-report.outputs.issues-found }}" >> $GITHUB_OUTPUT

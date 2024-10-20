@@ -24,7 +24,7 @@ runs:
       python-version: '3.x'
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: |
       pip install PyYAML
 

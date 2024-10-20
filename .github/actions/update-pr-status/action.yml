@@ -28,7 +28,7 @@ runs:
     uses: actions/checkout@v3
 
   - name: Debug - Input values
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "PR number: ${{ inputs.pr-number }}"
       echo "Review status: ${{ inputs.review-status }}"
@@ -36,7 +36,7 @@ runs:
 
   - name: Update PR status
     id: update-status
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       PR_NUMBER: ${{ inputs.pr-number }}
@@ -55,7 +55,7 @@ runs:
       echo "operation-result=$operation_result" >> $GITHUB_OUTPUT
 
   - name: Debug - Update result
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Updated status: ${{ steps.update-status.outputs.updated-status }}"
       echo "Operation result: ${{ steps.update-status.outputs.operation-result }}"

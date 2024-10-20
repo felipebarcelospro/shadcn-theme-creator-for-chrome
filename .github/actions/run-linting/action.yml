@@ -31,7 +31,7 @@ runs:
 
   - name: Detect package manager and install dependencies
     id: detect-pm
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ inputs.working-directory }}
     run: |
       if [ -f "yarn.lock" ]; then
@@ -48,7 +48,7 @@ runs:
 
   - name: Detect and run linter
     id: run-lint
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ inputs.working-directory }}
     run: |
       if [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ] || [ -f ".eslintrc.yaml" ] || [ -f ".eslintrc.yml" ]; then
@@ -67,7 +67,7 @@ runs:
 
   - name: Parse linting results
     id: parse-results
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ ${{ steps.run-lint.outcome }} == 'success' ]; then
         echo "linting-status=pass" >> $GITHUB_OUTPUT
@@ -80,7 +80,7 @@ runs:
       fi
 
   - name: Output results
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Linting Status: ${{ steps.parse-results.outputs.linting-status }}"
       echo "Linting Report: ${{ steps.parse-results.outputs.linting-report }}"

@@ -23,7 +23,7 @@ runs:
   steps:
   - name: Post comment
     id: post-comment
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       PR_NUMBER: ${{ inputs.pr-number }}
@@ -46,7 +46,7 @@ runs:
       fi
 
   - name: Debug - Comment posting result
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Comment status: ${{ steps.post-comment.outputs.comment-status }}"
       echo "Comment URL: ${{ steps.post-comment.outputs.comment-url }}"

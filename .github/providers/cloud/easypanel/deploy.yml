@@ -31,7 +31,7 @@ runs:
       cache-key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
   - name: Debug - Environment Info
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Node version: $(node -v)"
       echo "NPM version: $(npm -v)"
@@ -41,7 +41,7 @@ runs:
 
   - name: Deploy to Easypanel
     id: deploy
-    shell: bash
+    shell: bash -l {0}
     run: |
       # Install Easypanel CLI tool (assuming it exists, adjust as needed)
       npm install -g easypanel-cli
@@ -75,7 +75,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Deployment to Easypanel failed. Check logs for details."
       echo "deployment-status=failure" >> $GITHUB_OUTPUT
@@ -96,7 +96,7 @@ runs:
 
   - name: Debug - Final Status
     if: always()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Deployment status: ${{ steps.deploy.outputs.deployment-status }}"
       echo "Deployed URL: ${{ steps.deploy.outputs.deployed-url }}"

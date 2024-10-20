@@ -1,0 +1,90 @@
+name: 'Build App'
+description: 'Builds the application for production'
+
+inputs:
+  working-directory:
+    description: 'Directory to run build in (for monorepos)'
+    required: false
+    default: '.'
+  build-command:
+    description: 'Custom build command (overrides default)'
+    required: false
+  environment:
+    description: 'Build environment (e.g., production, staging)'
+    required: false
+    default: 'production'
+
+outputs:
+  build-status:
+    description: 'Overall build status (success/failure)'
+  build-artifacts:
+    description: 'Path to build artifacts'
+  build-logs:
+    description: 'Path to build logs'
+  performance-metrics:
+    description: 'Build performance metrics (JSON object)'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '16'
+
+  - name: Detect package manager and install dependencies
+    shell: bash -l {0}
+    run: |
+      if [ -f "${{ inputs.working-directory }}/yarn.lock" ]; then
+        yarn --cwd ${{ inputs.working-directory }} install --frozen-lockfile
+      elif [ -f "${{ inputs.working-directory }}/package-lock.json" ]; then
+        npm ci --prefix ${{ inputs.working-directory }}
+      else
+        npm install --prefix ${{ inputs.working-directory }}
+      fi
+
+  - name: Load build configuration
+    shell: bash -l {0}
+    run: |
+      echo "Loading build configuration for ${{ inputs.environment }} environment"
+
+  - name: Execute build command
+    shell: bash -l {0}
+    run: |
+      if [ -n "${{ inputs.build-command }}" ]; then
+        ${{ inputs.build-command }}
+      else
+        npm run build --prefix ${{ inputs.working-directory }}
+      fi
+
+  - name: Collect and compress build artifacts
+    shell: bash -l {0}
+    run: |
+      mkdir -p artifacts
+      tar -czf artifacts/build.tar.gz -C ${{ inputs.working-directory }}/build .
+      echo "::set-output name=build-artifacts::$(pwd)/artifacts/build.tar.gz"
+
+  - name: Generate build report and performance metrics
+    shell: bash -l {0}
+    run: |
+      echo '{"buildTime": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"}' > metrics.json
+      echo "::set-output name=performance-metrics::$(cat metrics.json)"
+
+  - name: Cache build artifacts
+    uses: actions/cache@v3
+    with:
+      path: artifacts
+      key: ${{ runner.os }}-build-${{ github.sha }}
+
+  - name: Set outputs
+    shell: bash -l {0}
+    run: |
+      echo "::set-output name=build-status::success"
+      echo "::set-output name=build-logs::$(pwd)/build.log"
+
+  - name: Error handling
+    if: failure()
+    shell: bash -l {0}
+    run: |
+      echo "::set-output name=build-status::failure"
+      echo "Build failed. Check logs for details."

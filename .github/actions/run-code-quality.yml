@@ -1,0 +1,107 @@
+name: 'Run Code Quality'
+description: 'Runs code quality checks and linting for the project'
+
+inputs:
+  package-name:
+    description: 'Name of the package to run code quality checks on (e.g., web, chrome-extension)'
+    required: true
+  config-file:
+    description: 'Path to the configuration file for linters'
+    required: false
+    default: '.eslintrc.json'
+  source-dir:
+    description: 'Directory containing source code to analyze'
+    required: false
+    default: '.'
+
+outputs:
+  quality-report:
+    description: 'JSON object containing the code quality report'
+  issues-found:
+    description: 'Number of issues found during the quality checks'
+  lint-result:
+    description: 'Result of the linting process (success/failure)'
+
+runs:
+  using: "composite"
+  steps:
+  - name: Load project configuration
+    id: load-config
+    uses: ./.github/actions/setup-context-and-prerequisites
+    with:
+      github-token: ${{ github.token }}
+
+  - name: Get package configuration
+    id: get-package-config
+    shell: bash -l {0}
+    run: |
+      package_config=$(echo '${{ steps.load-config.outputs.config-data }}' | jq -r '.packages[] | select(.name == "${{ inputs.package-name }}")')
+      echo "package-path=$(echo $package_config | jq -r '.path')" >> $GITHUB_OUTPUT
+      echo "lint-command=$(echo $package_config | jq -r '.commands.lint')" >> $GITHUB_OUTPUT
+
+  - name: Install dependencies
+    shell: bash -l {0}
+    working-directory: ${{ steps.get-package-config.outputs.package-path }}
+    run: |
+      if [ -f "package-lock.json" ]; then
+        npm ci
+      elif [ -f "yarn.lock" ]; then
+        yarn install --frozen-lockfile
+      else
+        npm install
+      fi
+
+  - name: Run linting
+    id: run-lint
+    shell: bash -l {0}
+    working-directory: ${{ steps.get-package-config.outputs.package-path }}
+    run: |
+      lint_output=$(${{ steps.get-package-config.outputs.lint-command }} || true)
+      echo "lint-output<<EOF" >> $GITHUB_OUTPUT
+      echo "$lint_output" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
+
+      if echo "$lint_output" | grep -q "error"; then
+        echo "lint-result=failure" >> $GITHUB_OUTPUT
+      else
+        echo "lint-result=success" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Run Prettier
+    id: run-prettier
+    shell: bash -l {0}
+    working-directory: ${{ steps.get-package-config.outputs.package-path }}
+    run: |
+      prettier_output=$(npx prettier --check . || true)
+      echo "prettier-output<<EOF" >> $GITHUB_OUTPUT
+      echo "$prettier_output" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
+
+  - name: Generate quality report
+    id: generate-report
+    shell: bash -l {0}
+    run: |
+      lint_issues=$(echo "${{ steps.run-lint.outputs.lint-output }}" | grep -c "error" || echo "0")
+      prettier_issues=$(echo "${{ steps.run-prettier.outputs.prettier-output }}" | grep -c "Code style issues found" || echo "0")
+      total_issues=$((lint_issues + prettier_issues))
+
+      quality_report=$(cat << EOF
+      {
+        "package": "${{ inputs.package-name }}",
+        "lintIssues": $lint_issues,
+        "prettierIssues": $prettier_issues,
+        "totalIssues": $total_issues,
+        "lintResult": "${{ steps.run-lint.outputs.lint-result }}"
+      }
+      EOF
+      )
+
+      echo "quality-report=$quality_report" >> $GITHUB_OUTPUT
+      echo "issues-found=$total_issues" >> $GITHUB_OUTPUT
+
+  - name: Set outputs
+    shell: bash -l {0}
+    run: |
+      echo "quality-report=${{ steps.generate-report.outputs.quality-report }}" >> $GITHUB_OUTPUT
+      echo "issues-found=${{ steps.generate-report.outputs.issues-found }}" >> $GITHUB_OUTPUT
+      echo "lint-result=${{ steps.run-lint.outputs.lint-result }}" >> $GITHUB_OUTPUT

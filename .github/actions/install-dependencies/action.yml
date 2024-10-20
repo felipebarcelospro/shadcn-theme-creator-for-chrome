@@ -44,7 +44,7 @@ runs:
       key: ${{ inputs.cache-key }}
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ inputs.working-directory }}
     run: |
       if [ "${{ inputs.package-manager }}" = "npm" ]; then
@@ -60,7 +60,7 @@ runs:
 
   - name: Get installed packages
     id: get-packages
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ inputs.working-directory }}
     run: |
       if [ "${{ inputs.package-manager }}" = "npm" ]; then
@@ -73,7 +73,7 @@ runs:
 
   - name: Set outputs
     id: set-outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "installation-status=success" >> $GITHUB_OUTPUT
       echo "installed-packages=${{ steps.get-packages.outputs.installed-packages }}" >> $GITHUB_OUTPUT

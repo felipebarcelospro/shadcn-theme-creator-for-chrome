@@ -17,14 +17,14 @@ runs:
   using: 'composite'
   steps:
   - name: Debug Input
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input issues-data"
       echo "${{ inputs.issues-data }}"
 
   - name: Create Issues
     id: create-issues
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       ISSUES_DATA: ${{ inputs.issues-data }}
@@ -63,14 +63,14 @@ runs:
       echo "Debug: All issues created. Created issues: $created_issues_json"
 
   - name: Debug Output
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Output created-issues"
       echo "${{ steps.create-issues.outputs.created-issues }}"
 
   - name: Error Handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: An error occurred during the issue creation process"
       echo "created-issues=[]" >> $GITHUB_OUTPUT

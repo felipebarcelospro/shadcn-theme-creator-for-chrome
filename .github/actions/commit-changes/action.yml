@@ -16,7 +16,7 @@ runs:
   using: 'composite'
   steps:
   - name: Setup Git
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Setting up Git configuration..."
       git config user.name github-actions
@@ -25,7 +25,7 @@ runs:
 
   - name: Commit changes
     id: commit
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       COMMIT_MESSAGE: ${{ inputs.commit-message }}

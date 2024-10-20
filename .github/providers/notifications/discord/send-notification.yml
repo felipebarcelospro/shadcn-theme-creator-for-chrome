@@ -21,7 +21,7 @@ runs:
   using: 'composite'
   steps:
   - name: Send Discord Message
-    shell: bash
+    shell: bash -l {0}
     env:
       WEBHOOK_URL: ${{ inputs.webhook-url }}
       MESSAGE: ${{ inputs.message }}
@@ -34,7 +34,7 @@ runs:
            $WEBHOOK_URL
 
   - name: Check Notification Status
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ $? -eq 0 ]; then
         echo "Discord notification sent successfully."
@@ -45,7 +45,7 @@ runs:
 
   - name: Error Handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Error occurred while sending Discord notification."
       echo "Please check your webhook URL and message content."

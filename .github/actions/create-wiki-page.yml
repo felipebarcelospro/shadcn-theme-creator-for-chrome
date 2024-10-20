@@ -1,0 +1,64 @@
+name: Create Wiki Page
+
+description: Creates a new wiki page in the repository
+
+inputs:
+  github-token:
+    description: 'GitHub token for authentication'
+    required: true
+  page-name:
+    description: 'Name of the wiki page to create'
+    required: true
+  page-content:
+    description: 'Content of the wiki page'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug Inputs
+    shell: bash -l {0}
+    run: |
+      echo "Debug: Creating wiki page with name '${{ inputs.page-name }}'"
+      echo "Debug: Content length: ${#inputs.page-content}"
+
+  - name: Checkout wiki
+    uses: actions/checkout@v3
+    with:
+      repository: ${{ github.repository }}.wiki
+      token: ${{ inputs.github-token }}
+
+  - name: Create wiki page
+    shell: bash -l {0}
+    run: |
+      echo "Debug: Writing content to ${{ inputs.page-name }}.md"
+      echo "${{ inputs.page-content }}" > "${{ inputs.page-name }}.md"
+      echo "Debug: File created successfully"
+
+  - name: Commit and push changes
+    shell: bash -l {0}
+    run: |
+      echo "Debug: Configuring git"
+      git config user.name "GitHub Action"
+      git config user.email "action@github.com"
+      echo "Debug: Adding file to git"
+      git add "${{ inputs.page-name }}.md"
+      echo "Debug: Committing changes"
+      git commit -m "Add ${{ inputs.page-name }} wiki page"
+      echo "Debug: Pushing changes"
+      git push
+      echo "Debug: Changes pushed successfully"
+
+  - name: Error handling
+    if: failure()
+    shell: bash -l {0}
+    run: |
+      echo "Error: Failed to create wiki page ${{ inputs.page-name }}"
+      echo "Please check the action logs for more details"
+      echo "Debug: Last few lines of the log:"
+      tail -n 10 $GITHUB_STEP_SUMMARY
+
+outputs:
+  page-url:
+    description: 'URL of the created wiki page'
+    value: ${{ github.server_url }}/${{ github.repository }}/wiki/${{ inputs.page-name }}

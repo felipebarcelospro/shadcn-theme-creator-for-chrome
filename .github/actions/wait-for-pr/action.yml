@@ -26,14 +26,14 @@ runs:
     uses: actions/checkout@v3
 
   - name: Debug - Input values
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Branch name: ${{ inputs.branch-name }}"
       echo "Wait time: ${{ inputs.wait-time }} minutes"
 
   - name: Wait for PR
     id: wait
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
@@ -60,7 +60,7 @@ runs:
       echo "wait-duration=$wait_duration" >> $GITHUB_OUTPUT
 
   - name: Debug - Wait result
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "PR status: ${{ steps.wait.outputs.pr-status }}"
       echo "Wait duration: ${{ steps.wait.outputs.wait-duration }} minutes"

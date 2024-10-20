@@ -16,7 +16,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug Inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Creating wiki page with name '${{ inputs.page-name }}'"
       echo "Debug: Content length: ${#PAGE_CONTENT}"
@@ -30,7 +30,7 @@ runs:
       token: ${{ inputs.github-token }}
 
   - name: Create wiki page
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Writing content to ${{ inputs.page-name }}.md"
       echo "$PAGE_CONTENT" > "${{ inputs.page-name }}.md"
@@ -39,7 +39,7 @@ runs:
       PAGE_CONTENT: ${{ inputs.page-content }}
 
   - name: Commit and push changes
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Configuring git"
       git config user.name "GitHub Action"
@@ -54,7 +54,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Error: Failed to create wiki page ${{ inputs.page-name }}"
       echo "Please check the action logs for more details"

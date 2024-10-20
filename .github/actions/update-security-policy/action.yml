@@ -26,14 +26,14 @@ runs:
 
   - name: Parse security report and AI analysis
     id: parse-inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "${{ inputs.security-report }}" > security_report.json
       echo "${{ inputs.ai-analysis }}" > ai_analysis.txt
 
   - name: Update security policy
     id: update-policy
-    shell: bash
+    shell: bash -l {0}
     run: |
       POLICY_PATH='.github/SECURITY.md'
       POLICY_UPDATED=false
@@ -60,7 +60,7 @@ runs:
 
   - name: Commit changes
     if: steps.update-policy.outputs.policy-updated == 'true'
-    shell: bash
+    shell: bash -l {0}
     run: |
       git config --local user.email "action@github.com"
       git config --local user.name "GitHub Action"
@@ -72,7 +72,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred while updating the security policy."
       echo "policy-updated=false" >> $GITHUB_OUTPUT

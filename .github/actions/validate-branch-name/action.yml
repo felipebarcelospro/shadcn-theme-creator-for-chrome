@@ -39,7 +39,7 @@ runs:
     uses: actions/checkout@v3
 
   - name: Debug - Input values
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Branch name: ${{ inputs.branch-name }}"
       echo "Feature prefix: ${{ inputs.feature-prefix }}"
@@ -50,7 +50,7 @@ runs:
 
   - name: Load branch naming configuration
     id: load-config
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ -f "${{ inputs.config-path }}" ]; then
         echo "config=$(cat ${{ inputs.config-path }})" >> $GITHUB_OUTPUT
@@ -60,7 +60,7 @@ runs:
 
   - name: Validate branch name
     id: validate
-    shell: bash
+    shell: bash -l {0}
     run: |
       branch_name="${{ inputs.branch-name }}"
       config='${{ steps.load-config.outputs.config }}'
@@ -86,7 +86,7 @@ runs:
       echo "validation-message=$message" >> $GITHUB_OUTPUT
 
   - name: Debug - Validation result
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Is valid: ${{ steps.validate.outputs.is-valid }}"
       echo "Validation message: ${{ steps.validate.outputs.validation-message }}"

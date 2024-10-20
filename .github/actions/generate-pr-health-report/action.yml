@@ -13,7 +13,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug Inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Repository Context - ${{ inputs.repository-context }}"
 
@@ -76,7 +76,7 @@ runs:
 
   - name: Error Handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: An error occurred during the PR health report generation"
       echo "Please check the workflow logs for more details"

@@ -1,0 +1,92 @@
+name: Setup Project Board
+
+description: Creates or updates a project board in the repository
+
+inputs:
+  github-token:
+    description: 'GitHub token for authentication'
+    required: true
+  columns:
+    description: 'JSON array of column names for the project board'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '20'
+
+  - name: Install dependencies
+    shell: bash -l {0}
+    run: |
+      npm install @octokit/rest
+
+  - name: Create or update project board
+    shell: bash -l {0}
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      COLUMNS: ${{ inputs.columns }}
+    run: |
+      node -e '
+      const { Octokit } = require("@octokit/rest");
+      const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+      const columns = JSON.parse(process.env.COLUMNS);
+
+      async function setupProjectBoard() {
+        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
+
+        try {
+          // Check if project board exists
+          const projects = await octokit.projects.listForRepo({
+            owner,
+            repo
+          });
+
+          let project = projects.data.find(p => p.name === "Main Project Board");
+
+          if (!project) {
+            // Create new project board
+            const newProject = await octokit.projects.createForRepo({
+              owner,
+              repo,
+              name: "Main Project Board",
+              body: "Main project board for tracking tasks"
+            });
+            project = newProject.data;
+            console.log("Created new project board");
+          } else {
+            console.log("Project board already exists");
+          }
+
+          // Create or update columns
+          for (const columnName of columns) {
+            const existingColumns = await octokit.projects.listColumns({
+              project_id: project.id
+            });
+
+            const existingColumn = existingColumns.data.find(c => c.name === columnName);
+
+            if (!existingColumn) {
+              await octokit.projects.createColumn({
+                project_id: project.id,
+                name: columnName
+              });
+              console.log(`Created column: ${columnName}`);
+            } else {
+              console.log(`Column already exists: ${columnName}`);
+            }
+          }
+        } catch (error) {
+          console.error("Error setting up project board:", error);
+        }
+      }
+
+      setupProjectBoard().catch(console.error);
+      '
+
+outputs:
+  project-url:
+    description: 'URL of the created or updated project board'
+    value: ${{ steps.create-update-project.outputs.project-url }}

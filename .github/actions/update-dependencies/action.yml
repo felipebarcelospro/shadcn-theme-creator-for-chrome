@@ -23,14 +23,14 @@ runs:
 
   - name: Update dependencies
     id: update-deps
-    shell: bash
+    shell: bash -l {0}
     run: |
       npm update
       UPDATES=$(npm outdated --json | jq -r 'to_entries | map("\(.key): \(.value.current) -> \(.value.latest)") | join(", ")')
       echo "updates-list=$UPDATES" >> $GITHUB_OUTPUT
 
   - name: Commit changes
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |

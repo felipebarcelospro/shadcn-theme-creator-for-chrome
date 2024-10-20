@@ -119,7 +119,7 @@ runs:
     run: |
       echo "linked-items=${{ steps.create-links.outputs.result }}" >> $GITHUB_OUTPUT
       echo "linking-summary=Linked items: ${{ steps.create-links.outputs.result }}" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}
 
   - name: Error handling
     if: failure()
@@ -127,4 +127,4 @@ runs:
       echo "An error occurred during the linking process"
       echo "linked-items=[]" >> $GITHUB_OUTPUT
       echo "linking-summary=Linking failed due to an error" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}

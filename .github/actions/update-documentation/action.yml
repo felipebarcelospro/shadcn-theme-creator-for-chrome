@@ -29,7 +29,7 @@ runs:
     uses: actions/checkout@v3
 
   - name: Debug - Input values
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Docs directory: ${{ inputs.docs-directory }}"
       echo "API changes file: ${{ inputs.api-changes }}"
@@ -37,51 +37,51 @@ runs:
 
   - name: Analyze code changes
     id: analyze-changes
-    shell: bash
+    shell: bash -l {0}
     run: |
       git diff --name-only ${{ github.event.before }} ${{ github.sha }} > changed_files.txt
       echo "changed_files=$(cat changed_files.txt)" >> $GITHUB_OUTPUT
 
   - name: Debug - Changed files
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Changed files: ${{ steps.analyze-changes.outputs.changed_files }}"
 
   - name: Update API documentation
     if: inputs.api-changes
-    shell: bash
+    shell: bash -l {0}
     run: |
       # Implement API documentation update logic here
       echo "Updating API documentation based on ${{ inputs.api-changes }}"
 
   - name: Update feature documentation
-    shell: bash
+    shell: bash -l {0}
     run: |
       # Implement feature documentation update logic here
       echo "Updating feature documentation"
 
   - name: Update changelog
     id: update-changelog
-    shell: bash
+    shell: bash -l {0}
     run: |
       # Implement changelog update logic here
       echo "Updating changelog"
       echo "changelog_path=CHANGELOG.md" >> $GITHUB_OUTPUT
 
   - name: Verify documentation links
-    shell: bash
+    shell: bash -l {0}
     run: |
       # Implement link verification logic here
       echo "Verifying documentation links"
 
   - name: Generate documentation artifacts
-    shell: bash
+    shell: bash -l {0}
     run: |
       # Implement artifact generation logic here
       echo "Generating documentation artifacts"
 
   - name: Commit documentation changes
-    shell: bash
+    shell: bash -l {0}
     run: |
       git config --local user.email "action@github.com"
       git config --local user.name "GitHub Action"
@@ -91,7 +91,7 @@ runs:
 
   - name: Set outputs
     id: set-outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [[ $(git diff --name-only HEAD~1 HEAD) ]]; then
         echo "update-status=updated" >> $GITHUB_OUTPUT
@@ -101,7 +101,7 @@ runs:
       echo "changelog=${{ steps.update-changelog.outputs.changelog_path }}" >> $GITHUB_OUTPUT
 
   - name: Debug - Final outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Update status: ${{ steps.set-outputs.outputs.update-status }}"
       echo "Changelog path: ${{ steps.set-outputs.outputs.changelog }}"

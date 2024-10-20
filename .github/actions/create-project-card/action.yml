@@ -28,7 +28,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "item-type: ${{ inputs.item-type }}"
@@ -89,14 +89,14 @@ runs:
 
   - name: Set outputs
     id: set-outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "card-url=${{ fromJson(steps.create-card.outputs.result).url }}" >> $GITHUB_OUTPUT
       echo "creation-status=${{ fromJson(steps.create-card.outputs.result).status }}" >> $GITHUB_OUTPUT
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during the project card creation process"
       echo "card-url=" >> $GITHUB_OUTPUT

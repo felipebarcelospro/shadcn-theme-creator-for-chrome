@@ -36,7 +36,7 @@ runs:
       cache-key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
   - name: Debug - Check inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debugging inputs:"
       echo "artifacts-path: ${{ inputs.artifacts-path }}"
@@ -47,7 +47,7 @@ runs:
 
   - name: Get access token
     id: get-token
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Requesting access token..."
       ACCESS_TOKEN=$(curl -s -X POST "https://oauth2.googleapis.com/token" \
@@ -60,7 +60,7 @@ runs:
       echo "Access token obtained: ${#ACCESS_TOKEN} characters"
 
   - name: Debug - Check access token
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ -n "${{ steps.get-token.outputs.access_token }}" ]; then
         echo "Access token successfully obtained"
@@ -71,7 +71,7 @@ runs:
 
   - name: Upload to Chrome Web Store
     id: upload
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Uploading extension to Chrome Web Store..."
       UPLOAD_RESPONSE=$(curl -s -H "Authorization: Bearer ${{ steps.get-token.outputs.access_token }}" \
@@ -90,14 +90,14 @@ runs:
       fi
 
   - name: Debug - Check upload status
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Upload status: ${{ steps.upload.outputs.upload_status }}"
 
   - name: Publish to Chrome Web Store
     id: publish
     if: steps.upload.outputs.upload_status == 'success'
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Publishing extension to Chrome Web Store..."
       PUBLISH_RESPONSE=$(curl -s -H "Authorization: Bearer ${{ steps.get-token.outputs.access_token }}" \
@@ -119,7 +119,7 @@ runs:
       fi
 
   - name: Debug - Final status
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Deployment status: ${{ steps.publish.outputs.deployment-status }}"
       echo "Published version: ${{ steps.publish.outputs.published-version }}"
@@ -127,7 +127,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Deployment to Chrome Web Store failed. Check logs for details."
       echo "deployment-status=failure" >> $GITHUB_OUTPUT

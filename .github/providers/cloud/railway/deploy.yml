@@ -28,7 +28,7 @@ runs:
       cache-key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
   - name: Debug - Environment Setup
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Current working directory: $(pwd)"
       echo "Debug: Listing contents of current directory:"
@@ -38,7 +38,7 @@ runs:
 
   - name: Deploy to Railway
     id: deploy
-    shell: bash
+    shell: bash -l {0}
     env:
       RAILWAY_TOKEN: ${{ inputs.railway-token }}
     run: |
@@ -83,7 +83,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Entering error handling step"
       echo "Deployment to Railway failed. Check logs for details."
@@ -102,7 +102,7 @@ runs:
 
   - name: Debug - Final Status
     if: always()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Deployment process completed"
       echo "Debug: Final status: ${{ job.status }}"

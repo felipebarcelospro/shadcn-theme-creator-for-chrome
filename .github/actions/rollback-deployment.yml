@@ -1,0 +1,88 @@
+name: 'Rollback Deployment'
+description: 'Rolls back a deployment if verification fails or critical issues are detected'
+
+inputs:
+  app-name:
+    description: 'Name of the application to rollback'
+    required: true
+  environment:
+    description: 'Target environment for rollback'
+    required: true
+  current-deployment:
+    description: 'Details of the current deployment'
+    required: true
+  last-stable-commit:
+    description: 'Commit SHA of the last known good state'
+    required: true
+  deployment-type:
+    description: 'Type of deployment (e.g., vercel, railway, npm)'
+    required: true
+  deployment-config:
+    description: 'JSON string containing deployment configuration'
+    required: true
+
+outputs:
+  rollback-status:
+    description: 'Status of the rollback operation (success/failure)'
+  new-deployment-details:
+    description: 'Details of the rolled back deployment'
+  rollback-logs:
+    description: 'Path to rollback logs'
+
+runs:
+  using: "composite"
+  steps:
+  - name: Install dependencies
+    shell: bash -l {0}
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y jq curl
+
+  - name: Parse deployment configuration
+    id: parse-config
+    uses: actions/github-script@v6
+    with:
+      script: |
+        const config = JSON.parse('${{ inputs.deployment-config }}');
+        return config;
+
+  - name: Rollback deployment
+    id: rollback
+    uses: ./.github/actions/deploy-app
+    with:
+      package-name: ${{ inputs.app-name }}
+      artifacts-path: ${{ fromJson(steps.parse-config.outputs.result).artifacts_path }}
+      deployment-type: ${{ inputs.deployment-type }}
+      deployment-config: ${{ inputs.deployment-config }}
+
+  - name: Verify rollback
+    id: verify-rollback
+    uses: ./.github/actions/verify-deployment
+    with:
+      app-name: ${{ inputs.app-name }}
+      environment: ${{ inputs.environment }}
+      verification-url: ${{ steps.rollback.outputs.deployed-url }}
+
+  - name: Monitor site health after rollback
+    uses: ./.github/actions/monitor-site-health
+    with:
+      urls: ${{ steps.rollback.outputs.deployed-url }}
+
+  - name: Set outputs
+    id: set-outputs
+    shell: bash -l {0}
+    run: |
+      if [[ "${{ steps.verify-rollback.outputs.verification-status }}" == "success" ]]; then
+        echo "rollback-status=success" >> $GITHUB_OUTPUT
+      else
+        echo "rollback-status=failure" >> $GITHUB_OUTPUT
+      fi
+      echo "new-deployment-details=${{ steps.rollback.outputs.deployed-url }}" >> $GITHUB_OUTPUT
+      echo "rollback-logs=${{ steps.rollback.outputs.deployment-logs }}" >> $GITHUB_OUTPUT
+
+  - name: Notify on rollback status
+    uses: 8398a7/action-slack@v3
+    with:
+      status: ${{ job.status }}
+      text: "Rollback ${{ steps.set-outputs.outputs.rollback-status }} for ${{ inputs.app-name }} in ${{ inputs.environment }}"
+      webhook_url: ${{ secrets.SLACK_WEBHOOK }}

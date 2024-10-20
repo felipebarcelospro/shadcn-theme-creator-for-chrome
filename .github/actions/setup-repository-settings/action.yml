@@ -38,7 +38,7 @@ runs:
   using: "composite"
   steps:
   - name: Configure repository settings
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       HAS_WIKI: ${{ inputs.has-wiki }}

@@ -30,7 +30,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug Inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debugging Inputs:"
       echo "issue-type: ${{ inputs.issue-type }}"
@@ -53,7 +53,7 @@ runs:
       template-path: ${{ inputs.issue-template }}
 
   - name: Debug Generated Content
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Generated Content:"
       echo "${{ steps.generate-content.outputs.generated-content }}"
@@ -85,7 +85,7 @@ runs:
         }
 
   - name: Set Output
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Setting output:"
       echo "issue_url=${{ steps.create-issue.outputs.result }}"

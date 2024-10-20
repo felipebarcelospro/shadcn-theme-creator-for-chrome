@@ -1,0 +1,88 @@
+name: 'Create Issue'
+description: 'Creates a GitHub issue based on provided data'
+
+inputs:
+  issue-type:
+    description: 'Type of issue to create'
+    required: true
+  issue-details:
+    description: 'Details for the issue content'
+    required: true
+  issue-template:
+    description: 'Path to the issue template file'
+    required: true
+  issue-title:
+    description: 'Title of the issue'
+    required: false
+  labels:
+    description: 'Labels to apply to the issue'
+    required: false
+    default: '[]'
+
+outputs:
+  issue_url:
+    description: 'URL of the created issue'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug Inputs
+    shell: bash -l {0}
+    run: |
+      echo "Debugging Inputs:"
+      echo "issue-type: ${{ inputs.issue-type }}"
+      echo "issue-details: ${{ inputs.issue-details }}"
+      echo "issue-template: ${{ inputs.issue-template }}"
+      echo "issue-title: ${{ inputs.issue-title }}"
+      echo "labels: ${{ inputs.labels }}"
+
+  - name: Generate Issue Content
+    id: generate-content
+    uses: ./.github/actions/ai-generate-content
+    with:
+      content-type: "issue_content"
+      context-data: |
+        {
+          "issue-type": "${{ inputs.issue-type }}",
+          "issue-details": ${{ inputs.issue-details }}
+        }
+      template-path: ${{ inputs.issue-template }}
+
+  - name: Debug Generated Content
+    shell: bash -l {0}
+    run: |
+      echo "Generated Content:"
+      echo "${{ steps.generate-content.outputs.generated-content }}"
+
+  - name: Create Issue
+    id: create-issue
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        console.log('Debug: Starting issue creation');
+        const title = '${{ inputs.issue-title }}' || `${{ inputs.issue-type }} Issue`;
+        console.log(`Debug: Issue title - ${title}`);
+        const labels = JSON.parse('${{ inputs.labels }}');
+        console.log(`Debug: Labels - ${JSON.stringify(labels)}`);
+        try {
+          const { data: issue } = await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: `${{ steps.generate-content.outputs.generated-content }}`,
+            labels: labels
+          });
+          console.log(`Created issue #${issue.number}: ${issue.html_url}`);
+          return issue.html_url;
+        } catch (error) {
+          console.error('Error creating issue:', error);
+          throw error;
+        }
+
+  - name: Set Output
+    shell: bash -l {0}
+    run: |
+      echo "Setting output:"
+      echo "issue_url=${{ steps.create-issue.outputs.result }}"
+      echo "issue_url=${{ steps.create-issue.outputs.result }}" >> $GITHUB_OUTPUT

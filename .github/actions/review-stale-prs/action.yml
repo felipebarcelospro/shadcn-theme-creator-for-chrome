@@ -19,13 +19,13 @@ runs:
   using: "composite"
   steps:
   - name: Debug Inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Stale Threshold - ${{ inputs.stale-threshold }}"
 
   - name: Fetch and Process Stale PRs
     id: fetch-process-prs
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       STALE_THRESHOLD: ${{ inputs.stale-threshold }}
@@ -64,7 +64,7 @@ runs:
 
   - name: Create Stale PR Report Issue
     if: steps.fetch-process-prs.outputs.stale-prs-count != '0'
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
@@ -74,7 +74,7 @@ runs:
 
   - name: Error Handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: An error occurred during the stale PR review process"
       echo "Please check the workflow logs for more details"

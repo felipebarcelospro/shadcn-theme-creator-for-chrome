@@ -23,7 +23,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "branch-name: ${{ inputs.branch-name }}"
@@ -31,7 +31,7 @@ runs:
 
   - name: Check branch status
     id: check-branch
-    shell: bash
+    shell: bash -l {0}
     run: |
       git fetch origin
       if git rev-parse --verify origin/${{ inputs.branch-name }} >/dev/null 2>&1; then
@@ -60,7 +60,7 @@ runs:
   - name: Check if branch is merged
     if: steps.check-branch.outputs.branch-exists == 'true' && steps.check-prs.outputs.result == 'true'
     id: check-merged
-    shell: bash
+    shell: bash -l {0}
     run: |
       if git branch -r --merged origin/main | grep -q "origin/${{ inputs.branch-name }}"; then
         echo "is-merged=true" >> $GITHUB_OUTPUT
@@ -74,7 +74,7 @@ runs:
       steps.check-prs.outputs.result == 'true' &&
       (steps.check-merged.outputs.is-merged == 'true' || inputs.force-delete == 'true')
     id: delete-branch
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [[ "${{ inputs.force-delete }}" == "true" ]]; then
         git push origin --delete ${{ inputs.branch-name }} --force
@@ -90,19 +90,19 @@ runs:
 
   - name: Log deletion action
     if: steps.delete-branch.outputs.cleanup-status == 'success'
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Branch ${{ inputs.branch-name }} has been deleted successfully" >> cleanup_log.txt
 
   - name: Set outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "cleanup-status=${{ steps.delete-branch.outputs.cleanup-status || 'skipped' }}" >> $GITHUB_OUTPUT
       echo "deleted-branch=${{ steps.delete-branch.outputs.deleted-branch || 'none' }}" >> $GITHUB_OUTPUT
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during the branch cleanup process"
       echo "cleanup-status=failed" >> $GITHUB_OUTPUT

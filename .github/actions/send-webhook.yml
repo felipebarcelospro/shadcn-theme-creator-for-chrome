@@ -1,0 +1,36 @@
+name: 'Send Webhook'
+description: 'Sends a webhook to a specified URL with custom payload'
+
+inputs:
+  webhook-url:
+    description: 'URL to send the webhook to'
+    required: true
+  payload:
+    description: 'JSON string of the payload to send'
+    required: true
+  custom-headers:
+    description: 'JSON string of custom headers to include'
+    required: false
+    default: '{}'
+
+outputs:
+  status-code:
+    description: 'HTTP status code of the webhook response'
+  response-body:
+    description: 'Body of the webhook response'
+
+runs:
+  using: "composite"
+  steps:
+  - name: Send webhook
+    shell: bash -l {0}
+    run: |
+      response=$(curl -X POST -H "Content-Type: application/json" -H "$CUSTOM_HEADERS" -d "$PAYLOAD" -w "\n%{http_code}" "$WEBHOOK_URL")
+      status_code=$(echo "$response" | tail -n1)
+      response_body=$(echo "$response" | sed '$d')
+      echo "status-code=$status_code" >> $GITHUB_OUTPUT
+      echo "response-body=$response_body" >> $GITHUB_OUTPUT
+    env:
+      WEBHOOK_URL: ${{ inputs.webhook-url }}
+      PAYLOAD: ${{ inputs.payload }}
+      CUSTOM_HEADERS: ${{ inputs.custom-headers }}

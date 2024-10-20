@@ -36,7 +36,7 @@ runs:
       python-version: '3.x'
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: |
       python -m pip install --upgrade pip
       pip install PyGithub
@@ -112,7 +112,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during SLA tracking"
       echo "sla-status=error" >> $GITHUB_OUTPUT

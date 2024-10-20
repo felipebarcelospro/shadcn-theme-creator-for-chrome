@@ -22,7 +22,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "item-type: ${{ inputs.item-type }}"
@@ -151,7 +151,7 @@ runs:
     run: |
       echo "assigned-members=${{ steps.assign-members.outputs.result }}" >> $GITHUB_OUTPUT
       echo "assignment-summary=Assigned members: ${{ steps.assign-members.outputs.result }}" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}
 
   - name: Error handling
     if: failure()
@@ -159,4 +159,4 @@ runs:
       echo "An error occurred during the auto-assignment process"
       echo "assigned-members=[]" >> $GITHUB_OUTPUT
       echo "assignment-summary=Auto-assignment failed due to an error" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}

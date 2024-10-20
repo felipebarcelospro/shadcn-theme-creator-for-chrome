@@ -1,0 +1,89 @@
+name: Setup Dependabot
+
+description: Configures Dependabot for the repository
+
+inputs:
+  github-token:
+    description: 'GitHub token for authentication'
+    required: true
+  ecosystems:
+    description: 'JSON array of ecosystems to enable Dependabot for'
+    required: true
+  config:
+    description: 'JSON object containing Dependabot configuration'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '20'
+
+  - name: Install dependencies
+    shell: bash -l {0}
+    run: |
+      npm install @octokit/rest js-yaml
+
+  - name: Configure Dependabot
+    shell: bash -l {0}
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      ECOSYSTEMS: ${{ inputs.ecosystems }}
+      CONFIG: ${{ inputs.config }}
+    run: |
+      node -e '
+      const { Octokit } = require("@octokit/rest");
+      const yaml = require("js-yaml");
+      const fs = require("fs");
+      const path = require("path");
+
+      const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+      const ecosystems = JSON.parse(process.env.ECOSYSTEMS);
+      const config = JSON.parse(process.env.CONFIG);
+
+      async function setupDependabot() {
+        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
+        const dependabotConfig = {
+          version: 2,
+          updates: ecosystems.map(ecosystem => ({
+            package-ecosystem: ecosystem,
+            directory: "/",
+            schedule: {
+              interval: "weekly"
+            },
+            ...config
+          }))
+        };
+
+        const yamlConfig = yaml.dump(dependabotConfig);
+        const configPath = path.join(process.env.GITHUB_WORKSPACE, ".github", "dependabot.yml");
+
+        fs.writeFileSync(configPath, yamlConfig, "utf8");
+
+        console.log("Dependabot configuration file created successfully");
+
+        try {
+          await octokit.repos.createOrUpdateFileContents({
+            owner,
+            repo,
+            path: ".github/dependabot.yml",
+            message: "Add Dependabot configuration",
+            content: Buffer.from(yamlConfig).toString("base64"),
+            branch: "main"
+          });
+          console.log("Dependabot configuration committed to repository");
+        } catch (error) {
+          console.error("Error committing Dependabot configuration:", error);
+          process.exit(1);
+        }
+      }
+
+      setupDependabot().catch(console.error);
+      '
+
+outputs:
+  config-created:
+    description: 'Indicates whether the Dependabot configuration was successfully created'
+    value: ${{ steps.configure-dependabot.outputs.config-created }}

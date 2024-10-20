@@ -31,7 +31,7 @@ runs:
     uses: actions/checkout@v3
 
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "item-type: ${{ inputs.item-type }}"
@@ -41,7 +41,7 @@ runs:
 
   - name: Fetch item details and assign milestone
     id: assign-milestone
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       ITEM_TYPE: ${{ inputs.item-type }}
@@ -93,7 +93,7 @@ runs:
 
   - name: Update milestone progress
     if: steps.assign-milestone.outputs.assignment-status == 'assigned'
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       MILESTONE_TITLE: ${{ inputs.milestone-title }}
@@ -113,7 +113,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during milestone assignment"
       echo "assigned-milestone=None" >> $GITHUB_OUTPUT

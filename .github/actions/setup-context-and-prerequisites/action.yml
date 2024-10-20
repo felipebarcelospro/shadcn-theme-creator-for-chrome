@@ -26,7 +26,7 @@ runs:
       node-version: '20'
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: |
       npm install @actions/github @actions/core @octokit/rest js-yaml
 
@@ -150,7 +150,7 @@ runs:
       CONFIG_DATA: ${{ steps.config.outputs.config-data }}
 
   - name: Output results
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Repository context: ${{ steps.repo-context.outputs.repository-context }}"
       echo "Configuration data: ${{ steps.config.outputs.config-data }}"

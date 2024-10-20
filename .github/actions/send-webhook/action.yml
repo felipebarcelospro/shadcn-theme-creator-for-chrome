@@ -30,7 +30,7 @@ runs:
 
   - name: Send webhook
     id: send-webhook
-    shell: bash
+    shell: bash -l {0}
     run: |
       response=$(curl -X POST -H "Content-Type: application/json" -H "Authorization: token ${{ inputs.github-token }}" -H "${{ inputs.custom-headers }}" -d '${{ inputs.payload }}' -w "\n%{http_code}" "${{ inputs.webhook-url }}")
       status_code=$(echo "$response" | tail -n1)
@@ -40,7 +40,7 @@ runs:
 
   - name: Set outputs
     id: set-outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "status-code=${{ steps.send-webhook.outputs.status-code }}" >> $GITHUB_OUTPUT
       echo "response-body=${{ steps.send-webhook.outputs.response-body }}" >> $GITHUB_OUTPUT

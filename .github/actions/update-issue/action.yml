@@ -27,7 +27,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "issue-number: ${{ inputs.issue-number }}"
@@ -37,7 +37,7 @@ runs:
 
   - name: Update issue
     id: update-issue
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       ISSUE_NUMBER: ${{ inputs.issue-number }}
@@ -63,7 +63,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during the issue update process"
       echo "update-status=failure" >> $GITHUB_OUTPUT

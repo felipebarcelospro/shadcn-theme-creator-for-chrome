@@ -1,0 +1,75 @@
+name: 'Check Existing PR'
+description: 'Checks for existing pull requests to avoid duplicate work'
+
+inputs:
+  branch-name:
+    description: 'Name of the branch to check for existing PRs'
+    required: true
+
+outputs:
+  pr-exists:
+    description: 'Boolean indicating if a matching PR exists'
+  existing-pr-url:
+    description: 'URL of the existing PR if found'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash -l {0}
+    run: |
+      echo "Debug: Input values"
+      echo "branch-name: ${{ inputs.branch-name }}"
+
+  - name: Check for existing PR
+    id: check-pr
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const branch = '${{ inputs.branch-name }}';
+
+        console.log(`Debug: Checking for existing PR from ${branch}`);
+
+        try {
+          const { data: prs } = await github.rest.pulls.list({
+            owner,
+            repo,
+            head: `${owner}:${branch}`,
+            state: 'open'
+          });
+
+          if (prs.length > 0) {
+            console.log(`Debug: Existing PR found: #${prs[0].number}`);
+            return { exists: true, url: prs[0].html_url };
+          } else {
+            console.log('Debug: No existing PR found');
+            return { exists: false, url: null };
+          }
+        } catch (error) {
+          console.error(`Debug: Error checking for existing PR: ${error.message}`);
+          return { exists: false, url: null };
+        }
+
+  - name: Set outputs
+    id: set-outputs
+    shell: bash -l {0}
+    run: |
+      result=${{ steps.check-pr.outputs.result }}
+      echo "pr-exists=$(echo $result | jq -r .exists)" >> $GITHUB_OUTPUT
+      echo "existing-pr-url=$(echo $result | jq -r .url)" >> $GITHUB_OUTPUT
+
+  - name: Error handling
+    if: failure()
+    shell: bash -l {0}
+    run: |
+      echo "An error occurred during PR check"
+      echo "pr-exists=false" >> $GITHUB_OUTPUT
+      echo "existing-pr-url=" >> $GITHUB_OUTPUT
+
+  - name: Final debug output
+    shell: bash -l {0}
+    run: |
+      echo "Debug: PR Exists: ${{ steps.set-outputs.outputs.pr-exists }}"
+      echo "Debug: Existing PR URL: ${{ steps.set-outputs.outputs.existing-pr-url }}"

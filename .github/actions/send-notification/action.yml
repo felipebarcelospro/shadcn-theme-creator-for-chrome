@@ -32,7 +32,7 @@ runs:
       node-version: '20'
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: npm install @actions/github @actions/core js-yaml
 
   - name: Load configuration and generate content
@@ -99,13 +99,13 @@ runs:
 
   - name: Set output
     id: set-output
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "notification-sent=true" >> $GITHUB_OUTPUT
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Failed to send one or more notifications."
       echo "notification-sent=false" >> $GITHUB_OUTPUT

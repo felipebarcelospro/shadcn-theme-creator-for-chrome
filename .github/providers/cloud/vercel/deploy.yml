@@ -27,14 +27,14 @@ runs:
   using: 'composite'
   steps:
   - name: Install Vercel CLI
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Installing Vercel CLI..."
       npm install -g vercel
       echo "Vercel CLI version: $(vercel --version)"
 
   - name: Debug Environment
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debugging environment variables:"
       echo "VERCEL_TOKEN: ${VERCEL_TOKEN:0:5}... (truncated)"
@@ -45,7 +45,7 @@ runs:
 
   - name: Deploy to Vercel
     id: deploy
-    shell: bash
+    shell: bash -l {0}
     env:
       VERCEL_TOKEN: ${{ inputs.vercel-token }}
       VERCEL_ORG_ID: ${{ inputs.vercel-org-id }}
@@ -81,7 +81,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Deployment to Vercel failed. Check logs for details."
       echo "deployment-status=failure" >> $GITHUB_OUTPUT

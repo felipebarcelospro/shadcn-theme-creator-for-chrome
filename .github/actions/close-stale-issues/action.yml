@@ -40,7 +40,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "days-before-stale: ${{ inputs.days-before-stale }}"
@@ -143,7 +143,7 @@ runs:
     run: |
       echo 'closed-items=${{ toJson(fromJson(steps.generate-report.outputs.result).closedItems) }}' >> $GITHUB_OUTPUT
       echo 'closure-summary=${{ fromJson(steps.generate-report.outputs.result).summary }}' >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}
 
   - name: Error handling
     if: failure()
@@ -151,4 +151,4 @@ runs:
       echo "An error occurred during the stale issue closure process"
       echo "closed-items=[]" >> $GITHUB_OUTPUT
       echo "closure-summary=Stale issue closure failed due to an error" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}

@@ -26,7 +26,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "source-branch: ${{ inputs.source-branch }}"
@@ -45,7 +45,7 @@ runs:
       max-length: '100'
 
   - name: Fetch latest changes
-    shell: bash
+    shell: bash -l {0}
     run: |
       git fetch origin
       git checkout ${{ inputs.target-branch }}
@@ -55,7 +55,7 @@ runs:
 
   - name: Apply merge strategy
     id: merge
-    shell: bash
+    shell: bash -l {0}
     run: |
       git checkout ${{ inputs.target-branch }}
       if [[ "${{ inputs.merge-strategy }}" == "squash" ]]; then
@@ -76,7 +76,7 @@ runs:
 
   - name: Handle merge conflicts
     if: steps.merge.outputs.merge-status == 'conflict'
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Merge conflict detected. Please resolve conflicts manually."
       git merge --abort
@@ -84,13 +84,13 @@ runs:
 
   - name: Push merged changes
     if: steps.merge.outputs.merge-status == 'success'
-    shell: bash
+    shell: bash -l {0}
     run: |
       git push origin ${{ inputs.target-branch }}
 
   - name: Verify merge success
     if: steps.merge.outputs.merge-status == 'success'
-    shell: bash
+    shell: bash -l {0}
     run: |
       if git branch --contains $(git rev-parse HEAD) | grep -q "${{ inputs.target-branch }}"; then
         echo "Merge verification successful"
@@ -100,7 +100,7 @@ runs:
       fi
 
   - name: Generate merge report
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Merge Report" > merge_report.txt
       echo "Source Branch: ${{ inputs.source-branch }}" >> merge_report.txt
@@ -128,14 +128,14 @@ runs:
       allow-deletions: false
 
   - name: Set outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "merge-status=${{ steps.merge.outputs.merge-status }}" >> $GITHUB_OUTPUT
       echo "merge-commit-sha=${{ steps.merge.outputs.merge-commit-sha }}" >> $GITHUB_OUTPUT
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during the merge process"
       echo "merge-status=failed" >> $GITHUB_OUTPUT

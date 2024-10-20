@@ -32,7 +32,7 @@ runs:
     uses: actions/checkout@v3
 
   - name: Setup test environment
-    shell: bash
+    shell: bash -l {0}
     run: |
       sudo apt-get update
       sudo apt-get install -y chromium-browser
@@ -40,15 +40,15 @@ runs:
       npm install -g lighthouse
 
   - name: Run smoke tests
-    shell: bash
+    shell: bash -l {0}
     run: npx playwright test ${{ inputs.test-suite }}/smoke
 
   - name: Execute integration tests
-    shell: bash
+    shell: bash -l {0}
     run: npx playwright test ${{ inputs.test-suite }}/integration
 
   - name: Perform performance and load testing
-    shell: bash
+    shell: bash -l {0}
     run: |
       lighthouse ${{ inputs.app-url }} --output=json --output-path=./lighthouse-report.json
       PERFORMANCE_SCORE=$(jq '.categories.performance.score' ./lighthouse-report.json)
@@ -58,27 +58,27 @@ runs:
       fi
 
   - name: Check for regression issues
-    shell: bash
+    shell: bash -l {0}
     run: npx playwright test ${{ inputs.test-suite }}/regression
 
   - name: Validate third-party integrations
-    shell: bash
+    shell: bash -l {0}
     run: npx playwright test ${{ inputs.test-suite }}/integrations
 
   - name: Collect user experience metrics
-    shell: bash
+    shell: bash -l {0}
     run: npx playwright test ${{ inputs.test-suite }}/ux
 
   - name: Generate comprehensive test report
     id: generate-report
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Generating test report..."
       echo '{"status": "pass", "details": {}}' > test-report.json
 
   - name: Set outputs
     id: set-outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "test-status=$(jq -r '.status' test-report.json)" >> $GITHUB_OUTPUT
       echo "test-report=$(cat test-report.json | jq -c .)" >> $GITHUB_OUTPUT
@@ -86,7 +86,7 @@ runs:
 
   - name: Handle test failures
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "::error::Post-deployment tests failed. Check the test report for details."
       exit 1

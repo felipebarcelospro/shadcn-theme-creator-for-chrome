@@ -42,7 +42,7 @@ runs:
       node-version: '20'
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ inputs.working-directory }}
     run: |
       if [ -f "package-lock.json" ]; then
@@ -55,7 +55,7 @@ runs:
 
   - name: Detect test framework
     id: detect-framework
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ inputs.working-directory }}
     run: |
       if grep -q "jest" package.json; then
@@ -68,20 +68,20 @@ runs:
 
   - name: Run tests
     id: run-tests
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ inputs.working-directory }}
     run: ${{ inputs.test-command }}
 
   - name: Run coverage
     id: run-coverage
     if: inputs.coverage-command
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ inputs.working-directory }}
     run: ${{ inputs.coverage-command }}
 
   - name: Check coverage threshold
     if: inputs.coverage-command && inputs.coverage-threshold
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ inputs.working-directory }}
     run: |
       coverage_file=""
@@ -103,7 +103,7 @@ runs:
 
   - name: Parse test results
     id: parse-results
-    shell: bash
+    shell: bash -l {0}
     working-directory: ${{ inputs.working-directory }}
     run: |
       if [ ${{ steps.run-tests.outcome }} == 'success' ]; then
@@ -133,7 +133,7 @@ runs:
       fi
 
   - name: Output results
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Test Framework: ${{ steps.detect-framework.outputs.framework }}"
       echo "Test Status: ${{ steps.parse-results.outputs.test-status }}"
@@ -149,7 +149,7 @@ runs:
 
   - name: Check for test failures
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Error: Tests failed. Please check the logs for detailed information."
       exit 1

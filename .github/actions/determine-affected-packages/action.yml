@@ -28,7 +28,7 @@ runs:
       node-version: '20'
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: npm install @actions/github @actions/core
 
   - name: Determine affected packages
@@ -69,7 +69,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred while determining affected packages."
       echo "affected_apps=[]" >> $GITHUB_OUTPUT

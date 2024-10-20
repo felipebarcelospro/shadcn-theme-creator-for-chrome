@@ -1,0 +1,78 @@
+name: 'Generate PR Health Report'
+description: 'Generates a health report for pull requests in the repository'
+
+inputs:
+  repository-context:
+    description: 'Context information about the repository'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug Inputs
+    shell: bash -l {0}
+    run: |
+      echo "Debug: Repository Context - ${{ inputs.repository-context }}"
+
+  - name: Fetch PR Data
+    id: fetch-pr-data
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        console.log('Debug: Starting to fetch PR data');
+        const { data: pullRequests } = await github.rest.pulls.list({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          state: 'open',
+          sort: 'updated',
+          direction: 'desc'
+        });
+        console.log(`Debug: Fetched ${pullRequests.length} open PRs`);
+        return JSON.stringify(pullRequests);
+
+  - name: Analyze PR Health
+    id: analyze-pr-health
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        console.log('Debug: Starting PR health analysis');
+        const pullRequests = JSON.parse('${{ steps.fetch-pr-data.outputs.result }}');
+        const healthReport = pullRequests.map(pr => {
+          const age = Math.floor((new Date() - new Date(pr.created_at)) / (1000 * 60 * 60 * 24));
+          const reviewStatus = pr.requested_reviewers.length > 0 ? 'Pending Review' : 'No Reviews';
+          return {
+            number: pr.number,
+            title: pr.title,
+            url: pr.html_url,
+            age: age,
+            status: pr.mergeable_state,
+            reviewStatus: reviewStatus,
+            author: pr.user.login
+          };
+        });
+        console.log(`Debug: Analyzed health for ${healthReport.length} PRs`);
+        return JSON.stringify(healthReport);
+
+  - name: Generate Health Report
+    id: generate-report
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: "console.log('Debug: Generating PR health report');\nconst healthData = JSON.parse('${{ steps.analyze-pr-health.outputs.result }}');\nconst report = healthData.map(pr => \n  `- [#${pr.number}](${pr.url}): ${pr.title}\\n  Age: ${pr.age} days | Status: ${pr.status} | Reviews: ${pr.reviewStatus} | Author: ${pr.author}`\n).join('\\n');\nconsole.log(`Debug: Generated report with ${healthData.length} PRs`);\nreturn report;\n    #magic___^_^___line\n"
+  - name: Create PR Health Report Issue
+    uses: ./.github/actions/create-issue
+    with:
+      issue-type: 'PR Health Report'
+      issue-title: 'Weekly PR Health Report'
+      issue-details: ${{ steps.generate-report.outputs.result }}
+      issue-template: .github/templates/pr_health_report_template.md
+      labels: '["report", "maintenance"]'
+
+  - name: Error Handling
+    if: failure()
+    shell: bash -l {0}
+    run: |
+      echo "Debug: An error occurred during the PR health report generation"
+      echo "Please check the workflow logs for more details"

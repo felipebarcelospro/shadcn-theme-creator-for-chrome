@@ -28,7 +28,7 @@ runs:
   using: 'composite'
   steps:
   - name: Update Pull Request
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       PR_NUMBER: ${{ inputs.pr-number }}

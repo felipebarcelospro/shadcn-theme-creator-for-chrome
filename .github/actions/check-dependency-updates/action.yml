@@ -30,13 +30,13 @@ runs:
       node-version: '20'
 
   - name: Debug - Input values
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Package manager type: ${{ inputs.package-manager-type }}"
       echo "Current dependencies: ${{ inputs.current-dependencies }}"
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ "${{ inputs.package-manager-type }}" == "npm" ]; then
         npm install
@@ -51,7 +51,7 @@ runs:
 
   - name: Check for updates
     id: check-updates
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ "${{ inputs.package-manager-type }}" == "npm" ]; then
         npm outdated --json > updates.json
@@ -62,7 +62,7 @@ runs:
       fi
 
   - name: Debug - Update check results
-    shell: bash
+    shell: bash -l {0}
     run: cat updates.json
 
   - name: Parse updates
@@ -90,7 +90,7 @@ runs:
           print(f"update-report={json.dumps(update_report)}", file=fh)
 
   - name: Debug - Parsed updates
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Available updates: ${{ steps.parse-updates.outputs.available-updates }}"
       echo "Update report: ${{ steps.parse-updates.outputs.update-report }}"

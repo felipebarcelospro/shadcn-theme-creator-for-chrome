@@ -16,7 +16,7 @@ runs:
     uses: actions/checkout@v3
 
   - name: Create or update labels
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       LABELS: ${{ inputs.labels }}

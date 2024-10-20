@@ -1,0 +1,82 @@
+name: 'Verify Deployment'
+description: 'Verifies the health and functionality of deployed components'
+
+inputs:
+  app-name:
+    description: 'Name of the application to verify'
+    required: true
+  environment:
+    description: 'Target environment for verification'
+    required: true
+  verification-url:
+    description: 'URL of the deployed application to verify'
+    required: true
+  timeout:
+    description: 'Timeout for each verification request in seconds'
+    required: false
+    default: '30'
+  max-retries:
+    description: 'Maximum number of retries for each verification'
+    required: false
+    default: '3'
+
+outputs:
+  verification-status:
+    description: 'Overall status of verification (success/failure)'
+  verification-result:
+    description: 'Detailed results of verification process'
+
+runs:
+  using: "composite"
+  steps:
+  - name: Install dependencies
+    shell: bash -l {0}
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y jq curl
+
+  - name: Verify deployment
+    id: verify
+    shell: bash -l {0}
+    run: |
+      verification_status="success"
+      verification_result="{}"
+
+      # Perform basic health check
+      health_check_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time ${{ inputs.timeout }} "${{ inputs.verification-url }}")
+      if [ "$health_check_status" = "200" ]; then
+        verification_result=$(echo $verification_result | jq '. + {"healthCheck": "passed"}')
+      else
+        verification_status="failure"
+        verification_result=$(echo $verification_result | jq '. + {"healthCheck": "failed"}')
+      fi
+
+      # Perform additional checks (e.g., API endpoints, content verification)
+      # Add more checks here as needed
+
+      # Example: Check a specific API endpoint
+      api_check_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time ${{ inputs.timeout }} "${{ inputs.verification-url }}/api/status")
+      if [ "$api_check_status" = "200" ]; then
+        verification_result=$(echo $verification_result | jq '. + {"apiCheck": "passed"}')
+      else
+        verification_status="failure"
+        verification_result=$(echo $verification_result | jq '. + {"apiCheck": "failed"}')
+      fi
+
+      echo "verification-status=$verification_status" >> $GITHUB_OUTPUT
+      echo "verification-result=$verification_result" >> $GITHUB_OUTPUT
+
+  - name: Log verification results
+    shell: bash -l {0}
+    run: |
+      echo "Verification Status: ${{ steps.verify.outputs.verification-status }}"
+      echo "Verification Results:"
+      echo "${{ steps.verify.outputs.verification-result }}" | jq '.'
+
+  - name: Notify on failure
+    if: steps.verify.outputs.verification-status == 'failure'
+    uses: 8398a7/action-slack@v3
+    with:
+      status: ${{ job.status }}
+      text: "Deployment verification failed for ${{ inputs.app-name }} in ${{ inputs.environment }}"
+      webhook_url: ${{ secrets.SLACK_WEBHOOK }}

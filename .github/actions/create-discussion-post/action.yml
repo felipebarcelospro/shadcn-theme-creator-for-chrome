@@ -25,7 +25,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "discussion-title: ${{ inputs.discussion-title }}"
@@ -78,18 +78,18 @@ runs:
       result='${{ steps.create-discussion.outputs.result }}'
       echo "created-discussion-url=$(echo $result | jq -r .url)" >> $GITHUB_OUTPUT
       echo "creation-status=$(echo $result | jq -r .status)" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during discussion creation"
       echo "created-discussion-url=" >> $GITHUB_OUTPUT
       echo "creation-status=failed" >> $GITHUB_OUTPUT
 
   - name: Final debug output
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Created Discussion URL: ${{ steps.set-outputs.outputs.created-discussion-url }}"
       echo "Debug: Creation Status: ${{ steps.set-outputs.outputs.creation-status }}"

@@ -30,7 +30,7 @@ runs:
   steps:
   - name: Parse deployment information
     id: parse-info
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo '${{ inputs.deployment-info }}' | jq -r 'to_entries | .[] | "echo \(.key)=\(.value) >> $GITHUB_OUTPUT"' | sh
 
@@ -66,7 +66,7 @@ runs:
 
   - name: Set outputs
     id: set-outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [[ "${{ inputs.operation }}" == "deploy" ]]; then
         echo "operation-status=${{ steps.deploy-application.outputs.deployment-status }}" >> $GITHUB_OUTPUT

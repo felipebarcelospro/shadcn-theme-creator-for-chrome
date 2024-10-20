@@ -75,7 +75,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "branch-name: ${{ inputs.branch-name }}"
@@ -232,18 +232,18 @@ runs:
       echo "- Allow force pushes: ${{ inputs.allow-force-pushes }}" >> rules_summary.txt
       echo "- Allow deletions: ${{ inputs.allow-deletions }}" >> rules_summary.txt
       cat rules_summary.txt
-    shell: bash
+    shell: bash -l {0}
 
   - name: Set outputs
     run: |
       echo "Debug: Setting action outputs"
       echo "protection-status=${{ steps.apply-rules.outputs.result }}" >> $GITHUB_OUTPUT
       echo "applied-rules=$(cat rules_summary.txt)" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}
 
   - name: Error handling
     if: failure()
     run: |
       echo "Debug: Error occurred during branch protection application"
       echo "protection-status=failed" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}

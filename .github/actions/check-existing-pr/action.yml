@@ -19,7 +19,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "branch-name: ${{ inputs.branch-name }}"
@@ -57,7 +57,7 @@ runs:
 
   - name: Set outputs
     id: set-outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       result='${{ steps.check-pr.outputs.result }}'
       echo "pr-exists=$(echo $result | jq -r .exists)" >> $GITHUB_OUTPUT
@@ -65,14 +65,14 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during PR check"
       echo "pr-exists=false" >> $GITHUB_OUTPUT
       echo "existing-pr-url=" >> $GITHUB_OUTPUT
 
   - name: Final debug output
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: PR Exists: ${{ steps.set-outputs.outputs.pr-exists }}"
       echo "Debug: Existing PR URL: ${{ steps.set-outputs.outputs.existing-pr-url }}"

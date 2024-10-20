@@ -106,4 +106,4 @@ runs:
       echo "deployment-status=${{ steps.deploy.outputs.deployment-status }}" >> $GITHUB_OUTPUT
       echo "deployed-url=${{ steps.deploy.outputs.deployed-url }}" >> $GITHUB_OUTPUT
       echo "deployment-logs=${{ steps.deploy.outputs.deployment-logs }}" >> $GITHUB_OUTPUT
-    shell: bash
+    shell: bash -l {0}

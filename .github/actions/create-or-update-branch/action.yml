@@ -29,7 +29,7 @@ runs:
 
   - name: Create or update branch
     id: branch-operation
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       BRANCH_NAME: ${{ inputs.branch-name }}
@@ -74,7 +74,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during branch creation/update"
       echo "operation-status=failed" >> $GITHUB_OUTPUT

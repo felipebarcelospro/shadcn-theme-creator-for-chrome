@@ -36,7 +36,7 @@ runs:
       node-version: '20'
 
   - name: Detect package manager and install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ -f "${{ inputs.working-directory }}/yarn.lock" ]; then
         yarn --cwd ${{ inputs.working-directory }} install --frozen-lockfile
@@ -47,12 +47,12 @@ runs:
       fi
 
   - name: Load build configuration
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Loading build configuration for ${{ inputs.environment }} environment"
 
   - name: Execute build command
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ -n "${{ inputs.build-command }}" ]; then
         ${{ inputs.build-command }}
@@ -61,14 +61,14 @@ runs:
       fi
 
   - name: Collect and compress build artifacts
-    shell: bash
+    shell: bash -l {0}
     run: |
       mkdir -p artifacts
       tar -czf artifacts/build.tar.gz -C ${{ inputs.working-directory }}/build .
       echo "build-artifacts=$(pwd)/artifacts/build.tar.gz" >> $GITHUB_OUTPUT
 
   - name: Generate build report and performance metrics
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo '{"buildTime": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"}' > metrics.json
       echo "performance-metrics=$(cat metrics.json)" >> $GITHUB_OUTPUT
@@ -80,14 +80,14 @@ runs:
       key: ${{ runner.os }}-build-${{ github.sha }}
 
   - name: Set outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "build-status=success" >> $GITHUB_OUTPUT
       echo "build-logs=$(pwd)/build.log" >> $GITHUB_OUTPUT
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "build-status=failure" >> $GITHUB_OUTPUT
       echo "Build failed. Check logs for details."

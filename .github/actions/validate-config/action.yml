@@ -14,7 +14,7 @@ runs:
   using: 'composite'
   steps:
   - name: Check config.yml existence
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ ! -f ".github/config.yml" ]; then
         echo "config-validation-status=false" >> $GITHUB_OUTPUT
@@ -23,7 +23,7 @@ runs:
       fi
 
   - name: Validate YAML structure
-    shell: bash
+    shell: bash -l {0}
     run: |
       if ! yq eval '.github/config.yml' > /dev/null 2>&1; then
         echo "config-validation-status=false" >> $GITHUB_OUTPUT
@@ -34,6 +34,6 @@ runs:
       fi
 
   - name: Install yq
-    shell: bash
+    shell: bash -l {0}
     run: |
       sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq

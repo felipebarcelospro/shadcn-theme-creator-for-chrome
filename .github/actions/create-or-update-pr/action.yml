@@ -34,7 +34,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values:"
       echo "branch-name: ${{ inputs.branch-name }}"
@@ -199,13 +199,13 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: An error occurred during PR creation/update"
       echo "pr-status=failed" >> $GITHUB_OUTPUT
 
   - name: Final debug output
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Final PR URL: ${{ steps.create-update-pr.outputs.pr-url }}"
       echo "Debug: Final PR Status: ${{ steps.create-update-pr.outputs.pr-status }}"

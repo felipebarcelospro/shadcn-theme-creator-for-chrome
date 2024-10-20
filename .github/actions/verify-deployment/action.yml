@@ -19,6 +19,9 @@ inputs:
     description: 'Maximum number of retries for each verification'
     required: false
     default: '3'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   verification-status:
@@ -30,14 +33,14 @@ runs:
   using: "composite"
   steps:
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: |
       sudo apt-get update
       sudo apt-get install -y jq curl
 
   - name: Verify deployment
     id: verify
-    shell: bash
+    shell: bash -l {0}
     run: |
       verification_status="success"
       verification_result="{}"
@@ -67,7 +70,7 @@ runs:
       echo "verification-result=$verification_result" >> $GITHUB_OUTPUT
 
   - name: Log verification results
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Verification Status: ${{ steps.verify.outputs.verification-status }}"
       echo "Verification Results:"

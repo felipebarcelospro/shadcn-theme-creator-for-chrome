@@ -16,7 +16,7 @@ runs:
   using: 'composite'
   steps:
   - name: Send Telegram Message
-    shell: bash
+    shell: bash -l {0}
     env:
       BOT_TOKEN: ${{ inputs.bot-token }}
       CHAT_ID: ${{ inputs.chat-id }}
@@ -29,7 +29,7 @@ runs:
         -d parse_mode=HTML
 
   - name: Check Notification Status
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [ $? -eq 0 ]; then
         echo "Telegram notification sent successfully."
@@ -40,7 +40,7 @@ runs:
 
   - name: Error Handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Error occurred while sending Telegram notification."
       echo "Please check your bot token and chat ID."

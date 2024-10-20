@@ -33,7 +33,7 @@ runs:
       node-version: '20'
 
   - name: Install dependencies
-    shell: bash
+    shell: bash -l {0}
     run: npm ci
 
   - name: Generate report content
@@ -57,7 +57,7 @@ runs:
 
   - name: Process generated report
     id: process-report
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "${{ steps.generate-report.outputs.generated-content }}" > full_report.md
       summary=$(echo "${{ steps.generate-report.outputs.generated-content }}" | sed -n '1,10p')
@@ -66,13 +66,13 @@ runs:
       echo "EOF" >> $GITHUB_ENV
 
   - name: Set outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "test-report=$(cat full_report.md)" >> $GITHUB_OUTPUT
       echo "report-summary=$REPORT_SUMMARY" >> $GITHUB_OUTPUT
 
   - name: Debug - Report generation
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Test report generated for package: ${{ inputs.package-name }}"
       echo "Report summary:"

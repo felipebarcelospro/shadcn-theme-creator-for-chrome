@@ -27,7 +27,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Debug: Input values"
       echo "stale-threshold: ${{ inputs.stale-threshold }}"
@@ -35,13 +35,13 @@ runs:
       echo "dry-run: ${{ inputs.dry-run }}"
 
   - name: Fetch all remote branches
-    shell: bash
+    shell: bash -l {0}
     run: |
       git fetch --all
 
   - name: Identify stale branches
     id: identify-stale
-    shell: bash
+    shell: bash -l {0}
     run: |
       threshold_date=$(date -d "${{ inputs.stale-threshold }} days ago" +%s)
       exclude_branches="${{ inputs.exclude-branches }}"
@@ -91,7 +91,7 @@ runs:
   - name: Delete stale branches
     id: delete-branches
     if: inputs.dry-run != 'true'
-    shell: bash
+    shell: bash -l {0}
     run: |
       branches_to_delete="${{ steps.check-prs.outputs.result }}"
       deleted_branches=()
@@ -107,7 +107,7 @@ runs:
       echo "cleaned-branches=${deleted_branches[*]}" >> $GITHUB_OUTPUT
 
   - name: Generate cleanup report
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Cleanup Report" > cleanup_report.txt
       echo "Stale Threshold: ${{ inputs.stale-threshold }} days" >> cleanup_report.txt
@@ -121,7 +121,7 @@ runs:
       cat cleanup_report.txt
 
   - name: Set outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       if [[ "${{ inputs.dry-run }}" == "true" ]]; then
         echo "cleaned-branches=${{ steps.check-prs.outputs.result }}" >> $GITHUB_OUTPUT
@@ -132,7 +132,7 @@ runs:
 
   - name: Error handling
     if: failure()
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "An error occurred during the stale branch cleanup process"
       echo "cleanup-summary=Cleanup failed due to an error" >> $GITHUB_OUTPUT

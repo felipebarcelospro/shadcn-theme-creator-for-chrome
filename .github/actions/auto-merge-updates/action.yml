@@ -22,26 +22,26 @@ runs:
   using: 'composite'
   steps:
   - name: Debug - Input values
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "PR details: ${{ inputs.pr-details }}"
       echo "Auto-merge settings: ${{ inputs.auto-merge-settings }}"
 
   - name: Load auto-merge configuration
     id: load-config
-    shell: bash
+    shell: bash -l {0}
     run: |
       config=$(cat ${{ inputs.auto-merge-settings }})
       echo "config=$config" >> $GITHUB_OUTPUT
 
   - name: Debug - Loaded configuration
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Loaded configuration: ${{ steps.load-config.outputs.config }}"
 
   - name: Validate PR against auto-merge criteria
     id: validate-pr
-    shell: bash
+    shell: bash -l {0}
     run: |
       pr_details='${{ inputs.pr-details }}'
       config='${{ steps.load-config.outputs.config }}'
@@ -55,14 +55,14 @@ runs:
       fi
 
   - name: Debug - Validation result
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Can merge: ${{ steps.validate-pr.outputs.can-merge }}"
 
   - name: Merge PR
     if: steps.validate-pr.outputs.can-merge == 'true'
     id: merge-pr
-    shell: bash
+    shell: bash -l {0}
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
@@ -73,20 +73,20 @@ runs:
 
   - name: Debug - Merge result
     if: steps.validate-pr.outputs.can-merge == 'true'
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Merge status: ${{ steps.merge-pr.outputs.merge-status }}"
       echo "Merged PR details: ${{ steps.merge-pr.outputs.merged-pr-details }}"
 
   - name: Set merge status for non-mergeable PR
     if: steps.validate-pr.outputs.can-merge != 'true'
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "merge-status=skipped" >> $GITHUB_OUTPUT
       echo "merged-pr-details=null" >> $GITHUB_OUTPUT
 
   - name: Debug - Final outputs
-    shell: bash
+    shell: bash -l {0}
     run: |
       echo "Final merge status: ${{ steps.merge-pr.outputs.merge-status || 'skipped' }}"
       echo "Final merged PR details: ${{ steps.merge-pr.outputs.merged-pr-details || 'null' }}"
