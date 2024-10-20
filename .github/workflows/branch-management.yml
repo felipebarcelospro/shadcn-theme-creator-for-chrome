@@ -78,13 +78,23 @@ jobs:
               "temperature": 0.7,
               "response_format": {"type": "json_object"}
             }') || { echo "Error: Failed to generate PR content"; exit 1; }
-          echo "PR_TITLE=$(echo $pr_data | jq -r '.choices[0].message.content.title')" >> $GITHUB_ENV
-          echo "PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body')" >> $GITHUB_ENV
+          
+          pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title // empty')
+          pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body // empty')
+
+          if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
+            echo "Error: Generated PR content is null or empty. Using default values."
+            pr_title="WIP: Changes for $BRANCH_NAME"
+            pr_body="This is a placeholder body for the pull request."
+          fi
+
+          echo "PR_TITLE=$pr_title" >> $GITHUB_ENV
+          echo "PR_BODY=$pr_body" >> $GITHUB_ENV
 
       - name: Validate PR Content
         run: |
           if [ -z "$PR_TITLE" ] || [ -z "$PR_BODY" ]; then
-            echo "Error: Generated PR content is null. Please check API response."
+            echo "Error: PR content is invalid. Please check API response."
             exit 1
           fi
 
@@ -96,19 +106,50 @@ jobs:
           set -e
           echo "Processing PR for branch: $BRANCH_NAME"
           existing_pr=$(gh pr list --head "$BRANCH_NAME" --base develop --json number --jq '.[0].number')
-          if [ -z "$PR_TITLE" ] || [ -z "$PR_BODY" ]; then
-            PR_TITLE="WIP: Changes for $BRANCH_NAME"
-            PR_BODY="This is a placeholder body for the pull request."
-          fi
-          if [ -z "$existing_pr" ]; then
+
+          if [ -n "$existing_pr" ]; then
+            echo "Checking existing PR #$existing_pr"
+            pr_info=$(gh pr view $existing_pr --json title,body)
+            pr_title=$(echo $pr_info | jq -r '.title')
+            pr_body=$(echo $pr_info | jq -r '.body')
+
+            if [ "$pr_title" = "null" ] || [ "$pr_body" = "null" ]; then
+              echo "Regenerating PR content for existing PR #$existing_pr"
+              commits=$(git log --format=%B origin/develop..$BRANCH_NAME)
+              pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
+                -H "Authorization: Bearer $GROQ_API_KEY" \
+                -H "Content-Type: application/json" \
+                -d '{
+                  "model": "llama-3.1-70b-versatile",
+                  "messages": [
+                    {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
+                    {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '\''$BRANCH_NAME'\'', Commits: '\''$commits'\''"}
+                  ],
+                  "temperature": 0.7,
+                  "response_format": {"type": "json_object"}
+                }') || { echo "Error: Failed to generate PR content"; exit 1; }
+              
+              PR_TITLE=$(echo $pr_data | jq -r '.choices[0].message.content.title // empty')
+              PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body // empty')
+
+              if [ -z "$PR_TITLE" ] || [ -z "$PR_BODY" ]; then
+                echo "Error: Generated PR content is null or empty. Using default values."
+                PR_TITLE="WIP: Changes for $BRANCH_NAME"
+                PR_BODY="This is a placeholder body for the pull request."
+              fi
+            else
+              PR_TITLE="$pr_title"
+              PR_BODY="$pr_body"
+            fi
+
+            echo "Updating existing PR #$existing_pr for $BRANCH_NAME"
+            gh pr edit $existing_pr --title "$PR_TITLE" --body "$PR_BODY"
+          else
             echo "Creating new PR for $BRANCH_NAME"
             gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "$BRANCH_NAME" || {
               echo "Failed to create PR. This might be due to no new commits or other issues."
               exit 0
             }
-          else
-            echo "Updating existing PR #$existing_pr for $BRANCH_NAME"
-            gh pr edit "$existing_pr" --title "$PR_TITLE" --body "$PR_BODY"
           fi
 
       - name: Link Related Issues
