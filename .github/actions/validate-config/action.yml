@@ -9,19 +9,10 @@ inputs:
 outputs:
   config-validation-status:
     description: 'Boolean indicating if the configuration is valid'
-  installation-status:
-    description: 'Status of the installation process'
 
 runs:
   using: 'composite'
   steps:
-  - name: Check package manager
-    shell: bash
-    run: |
-      if [ "yarn" = "npm" ]; then
-        echo "installation-status=success" >> $GITHUB_OUTPUT
-      fi
-
   - name: Validate config
     shell: bash
     run: |
@@ -33,7 +24,7 @@ runs:
         exit 1
       fi
 
-      REQUIRED_KEYS=("repository" "issue_management" "pr_management" "release_management" "security_dependency_management" "metrics_generation" "packages" "plugins")
+      REQUIRED_KEYS=("repository" "issue_management" "pr_management" "release_management" "security_dependency_management" "metrics_generation" "packages")
 
       for key in "${REQUIRED_KEYS[@]}"; do
         if ! grep -q "^$key:" "$CONFIG_PATH"; then

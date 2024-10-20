@@ -40,9 +40,14 @@ runs:
   - name: Detect package manager
     shell: bash
     run: |
-      PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.tools[] | select(. == "npm" or . == "yarn" or . == "pnpm")')
-      if [ -z "$PACKAGE_MANAGER" ]; then
-        echo "::error::No supported package manager found in config.yml"
+      if [ -f "package-lock.json" ]; then
+        PACKAGE_MANAGER="npm"
+      elif [ -f "yarn.lock" ]; then
+        PACKAGE_MANAGER="yarn"
+      elif [ -f "pnpm-lock.yaml" ]; then
+        PACKAGE_MANAGER="pnpm"
+      else
+        echo "::error::No supported package manager lock file found in the repository root"
         exit 1
       fi
       echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
