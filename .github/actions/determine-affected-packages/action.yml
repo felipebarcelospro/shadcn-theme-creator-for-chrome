@@ -2,6 +2,9 @@ name: 'Determine Affected Packages'
 description: 'Identifies packages affected by changes in the repository'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   changed_files:
     description: 'JSON array of changed files'
     required: true
@@ -12,56 +15,57 @@ inputs:
 outputs:
   affected_apps:
     description: 'JSON array of affected app names'
-    value: ${{ steps.determine-affected.outputs.affected_apps }}
 
 runs:
   using: 'composite'
   steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
   - name: Setup Node.js
     uses: actions/setup-node@v3
     with:
-      node-version: '16'
+      node-version: '20'
 
   - name: Install dependencies
     shell: bash
-    run: |
-      npm install --global jq
+    run: npm install @actions/github @actions/core
 
   - name: Determine affected packages
     id: determine-affected
-    shell: bash
+    shell: node
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      CHANGED_FILES: ${{ inputs.changed_files }}
+      APPS_CONFIG: ${{ inputs.apps_configuration }}
     run: |
-      # Parse inputs
-      changed_files=$(echo '${{ inputs.changed_files }}' | jq -r '.[]')
-      apps_config='${{ inputs.apps_configuration }}'
+      const github = require('@actions/github');
+      const core = require('@actions/core');
 
-      # Initialize an empty array for affected apps
-      affected_apps=()
+      async function determineAffectedPackages() {
+        try {
+          const changedFiles = JSON.parse(process.env.CHANGED_FILES);
+          const appsConfig = JSON.parse(process.env.APPS_CONFIG);
 
-      # Loop through each changed file
-      while IFS= read -r file; do
-        # Check each app's directory
-        echo "$apps_config" | jq -c '.[]' | while read -r app; do
-          app_name=$(echo "$app" | jq -r '.name')
-          app_dir=$(echo "$app" | jq -r '.directory')
+          const affectedApps = new Set();
 
-          # If the changed file is in the app's directory, add the app to affected_apps
-          if [[ "$file" == "$app_dir"* ]]; then
-            if [[ ! " ${affected_apps[@]} " =~ " ${app_name} " ]]; then
-              affected_apps+=("$app_name")
-            fi
-          fi
-        done
-      done <<< "$changed_files"
+          changedFiles.forEach(file => {
+            appsConfig.forEach(app => {
+              if (file.startsWith(app.directory)) {
+                affectedApps.add(app.name);
+              }
+            });
+          });
 
-      # Convert affected_apps array to JSON
-      affected_apps_json=$(printf '%s\n' "${affected_apps[@]}" | jq -R . | jq -s .)
+          const affectedAppsArray = Array.from(affectedApps);
+          core.setOutput('affected_apps', JSON.stringify(affectedAppsArray));
+          console.log('Affected apps:', affectedAppsArray);
+        } catch (error) {
+          core.setFailed(`Error determining affected packages: ${error.message}`);
+        }
+      }
 
-      # Set output
-      echo "affected_apps=$affected_apps_json" >> $GITHUB_OUTPUT
-
-      # Debug output
-      echo "Affected apps: $affected_apps_json"
+      determineAffectedPackages();
 
   - name: Error handling
     if: failure()

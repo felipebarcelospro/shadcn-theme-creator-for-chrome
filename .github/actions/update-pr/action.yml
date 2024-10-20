@@ -2,6 +2,9 @@ name: 'Update Pull Request'
 description: 'Updates a GitHub pull request with new information, including security checks and code analysis results'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   pr-number:
     description: 'Pull request number to update'
     required: true
@@ -22,60 +25,51 @@ inputs:
     required: false
 
 runs:
-  using: 'node20'
-  main: 'index.js'
+  using: 'composite'
+  steps:
+  - name: Update Pull Request
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      PR_NUMBER: ${{ inputs.pr-number }}
+      PR_BODY: ${{ inputs.pr-body }}
+      LABELS: ${{ inputs.labels }}
+      REVIEWERS: ${{ inputs.reviewers }}
+      SECURITY_REPORT: ${{ inputs.security-report }}
+      CODE_ANALYSIS: ${{ inputs.code-analysis }}
+    run: |
+      # Prepare the updated PR body
+      UPDATED_BODY="$PR_BODY"
 
-jobs:
-  update-pr:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Update Pull Request
-      uses: actions/github-script@v6
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        script: |
-          const { owner, repo } = context.repo;
-          const prNumber = parseInt('${{ inputs.pr-number }}');
-          let prBody = `${{ inputs.pr-body }}`;
-          const labels = '${{ inputs.labels }}'.split(',').filter(Boolean);
-          const reviewers = '${{ inputs.reviewers }}'.split(',').filter(Boolean);
-          const securityReport = '${{ inputs.security-report }}';
-          const codeAnalysis = '${{ inputs.code-analysis }}';
+      if [ -n "$SECURITY_REPORT" ]; then
+        UPDATED_BODY="$UPDATED_BODY
 
-          // Append security report and code analysis to PR body if provided
-          if (securityReport) {
-            prBody += '\n\n## Security Report\n' + securityReport;
-          }
-          if (codeAnalysis) {
-            prBody += '\n\n## Code Analysis\n' + codeAnalysis;
-          }
+      ## Security Report
+      $SECURITY_REPORT"
+      fi
 
-          // Update PR
-          await github.rest.pulls.update({
-            owner,
-            repo,
-            pull_number: prNumber,
-            body: prBody
-          });
+      if [ -n "$CODE_ANALYSIS" ]; then
+        UPDATED_BODY="$UPDATED_BODY
 
-          // Add labels if provided
-          if (labels.length > 0) {
-            await github.rest.issues.addLabels({
-              owner,
-              repo,
-              issue_number: prNumber,
-              labels: labels
-            });
-          }
+      ## Code Analysis
+      $CODE_ANALYSIS"
+      fi
 
-          // Request reviewers if provided
-          if (reviewers.length > 0) {
-            await github.rest.pulls.requestReviewers({
-              owner,
-              repo,
-              pull_number: prNumber,
-              reviewers: reviewers
-            });
-          }
+      # Update PR body
+      gh pr edit $PR_NUMBER --body "$UPDATED_BODY"
 
-          console.log(`Pull request #${prNumber} updated successfully.`);
+      # Add labels if provided
+      if [ -n "$LABELS" ]; then
+        IFS=',' read -ra LABEL_ARRAY <<< "$LABELS"
+        for label in "${LABEL_ARRAY[@]}"; do
+          gh pr edit $PR_NUMBER --add-label "$label"
+        done
+      fi
+
+      # Request reviewers if provided
+      if [ -n "$REVIEWERS" ]; then
+        IFS=',' read -ra REVIEWER_ARRAY <<< "$REVIEWERS"
+        gh pr edit $PR_NUMBER --add-reviewer "${REVIEWER_ARRAY[@]}"
+      fi
+
+      echo "Pull request #$PR_NUMBER updated successfully."

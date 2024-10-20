@@ -2,6 +2,9 @@ name: 'Create Discussion Post'
 description: 'Automatically creates discussion posts for important announcements or to gather feedback'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   discussion-title:
     description: 'Title of the discussion'
     required: true
@@ -32,7 +35,7 @@ runs:
     id: validate-inputs
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { discussionTitle, discussionContent, category } = {
           discussionTitle: '${{ inputs.discussion-title }}',
@@ -51,7 +54,7 @@ runs:
     if: steps.validate-inputs.outputs.result == 'true'
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         try {
@@ -72,7 +75,7 @@ runs:
   - name: Set outputs
     id: set-outputs
     run: |
-      result=${{ steps.create-discussion.outputs.result }}
+      result='${{ steps.create-discussion.outputs.result }}'
       echo "created-discussion-url=$(echo $result | jq -r .url)" >> $GITHUB_OUTPUT
       echo "creation-status=$(echo $result | jq -r .status)" >> $GITHUB_OUTPUT
     shell: bash

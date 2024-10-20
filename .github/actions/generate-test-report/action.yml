@@ -2,6 +2,9 @@ name: 'Generate Test Report'
 description: 'Generates a comprehensive test report from unit, integration, and E2E test results'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   unit-test-results:
     description: 'Results from unit tests'
     required: true
@@ -30,13 +33,14 @@ runs:
       node-version: '20'
 
   - name: Install dependencies
-    run: npm ci
     shell: bash
+    run: npm ci
 
   - name: Generate report content
     id: generate-report
     uses: ./.github/actions/ai-generate-content
     with:
+      github-token: ${{ inputs.github-token }}
       content-type: 'test report'
       context-data: |
         {
@@ -53,24 +57,23 @@ runs:
 
   - name: Process generated report
     id: process-report
+    shell: bash
     run: |
       echo "${{ steps.generate-report.outputs.generated-content }}" > full_report.md
       summary=$(echo "${{ steps.generate-report.outputs.generated-content }}" | sed -n '1,10p')
       echo "REPORT_SUMMARY<<EOF" >> $GITHUB_ENV
       echo "$summary" >> $GITHUB_ENV
       echo "EOF" >> $GITHUB_ENV
-    shell: bash
 
   - name: Set outputs
+    shell: bash
     run: |
       echo "test-report=$(cat full_report.md)" >> $GITHUB_OUTPUT
       echo "report-summary=$REPORT_SUMMARY" >> $GITHUB_OUTPUT
-    shell: bash
 
   - name: Debug - Report generation
+    shell: bash
     run: |
       echo "Test report generated for package: ${{ inputs.package-name }}"
       echo "Report summary:"
       echo "$REPORT_SUMMARY"
-    shell: bash
-

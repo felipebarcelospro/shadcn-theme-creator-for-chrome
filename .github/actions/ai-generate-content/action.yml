@@ -22,6 +22,9 @@ inputs:
     description: 'Maximum length of the generated content in characters'
     required: false
     default: '2000'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   generated-content:
@@ -48,13 +51,13 @@ runs:
     id: prepare-prompt
     run: |
       prompt=$(cat << EOF
-      Generate ${INPUT_CONTENT_TYPE} content with the following context:
-      ${INPUT_CONTEXT_DATA}
+      Generate ${{ inputs.content-type }} content with the following context:
+      ${{ inputs.context-data }}
 
       Additional instructions:
-      ${INPUT_ADDITIONAL_CONTEXT}
+      ${{ inputs.additional-context }}
 
-      Please use a ${INPUT_TONE} tone and limit the response to ${INPUT_MAX_LENGTH} characters.
+      Please use a ${{ inputs.tone }} tone and limit the response to ${{ inputs.max-length }} characters.
 
       If a template is provided, use it as a guide for the structure and format of the content.
       EOF
@@ -94,33 +97,26 @@ runs:
             "temperature": 0.7,
             "topK": 40,
             "topP": 0.95,
-            "maxOutputTokens": $((${INPUT_MAX_LENGTH} / 4))
+            "maxOutputTokens": $((${{ inputs.max-length }} / 4))
           }
         }')
 
       content=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text')
       metadata=$(echo "$response" | jq -r '.candidates[0].safetyRatings')
 
-      echo "GENERATED_CONTENT<<EOF" >> $GITHUB_ENV
-      echo "$content" >> $GITHUB_ENV
-      echo "EOF" >> $GITHUB_ENV
+      echo "GENERATED_CONTENT<<EOF" >> $GITHUB_OUTPUT
+      echo "$content" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
-      echo "GENERATION_METADATA<<EOF" >> $GITHUB_ENV
-      echo "$metadata" >> $GITHUB_ENV
-      echo "EOF" >> $GITHUB_ENV
-    shell: bash
-
-  - name: Set outputs
-    id: set-outputs
-    run: |
-      echo "generated-content=$GENERATED_CONTENT" >> $GITHUB_OUTPUT
-      echo "generation-metadata=$GENERATION_METADATA" >> $GITHUB_OUTPUT
+      echo "GENERATION_METADATA<<EOF" >> $GITHUB_OUTPUT
+      echo "$metadata" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
     shell: bash
 
   - name: Debug - Generated content
     run: |
       echo "Generated content:"
-      echo "$GENERATED_CONTENT"
+      echo "${{ steps.generate-content.outputs.GENERATED_CONTENT }}"
       echo "Generation metadata:"
-      echo "$GENERATION_METADATA"
+      echo "${{ steps.generate-content.outputs.GENERATION_METADATA }}"
     shell: bash

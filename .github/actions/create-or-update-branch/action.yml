@@ -2,6 +2,9 @@ name: 'Create or Update Branch'
 description: 'Creates a new branch or updates an existing one'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   branch-name:
     description: 'Name of the branch to create or update'
     required: true
@@ -21,69 +24,53 @@ outputs:
 runs:
   using: 'composite'
   steps:
-  - name: Check for existing branch
-    id: check-branch
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
+  - name: Create or update branch
+    id: branch-operation
     shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      BRANCH_NAME: ${{ inputs.branch-name }}
+      BASE_BRANCH: ${{ inputs.base-branch }}
+      COMMIT_CHANGES: ${{ inputs.commit-changes }}
     run: |
-      if git ls-remote --exit-code --heads origin ${{ inputs.branch-name }} >/dev/null 2>&1; then
-        echo "Branch exists"
-        echo "branch-exists=true" >> $GITHUB_OUTPUT
+      set -e
+
+      # Check if branch exists
+      if git ls-remote --exit-code --heads origin $BRANCH_NAME > /dev/null 2>&1; then
+        BRANCH_EXISTS=true
       else
-        echo "Branch does not exist"
-        echo "branch-exists=false" >> $GITHUB_OUTPUT
+        BRANCH_EXISTS=false
       fi
 
-  - name: Create new branch
-    if: steps.check-branch.outputs.branch-exists == 'false'
-    shell: bash
-    run: |
-      git checkout -b ${{ inputs.branch-name }} origin/${{ inputs.base-branch }}
-      git push -u origin ${{ inputs.branch-name }}
-      echo "operation-status=created" >> $GITHUB_OUTPUT
-
-  - name: Update existing branch
-    if: steps.check-branch.outputs.branch-exists == 'true'
-    shell: bash
-    run: |
-      git checkout ${{ inputs.branch-name }}
-      git pull origin ${{ inputs.base-branch }}
-      echo "operation-status=updated" >> $GITHUB_OUTPUT
-
-  - name: Apply commit changes
-    if: inputs.commit-changes
-    shell: bash
-    run: |
-      echo "${{ inputs.commit-changes }}" > changes.patch
-      git apply changes.patch
-      git add .
-      git commit -m "Apply changes from action"
-      git push origin ${{ inputs.branch-name }}
-
-  - name: Verify branch status
-    id: verify
-    shell: bash
-    run: |
-      if git ls-remote --exit-code --heads origin ${{ inputs.branch-name }} >/dev/null 2>&1; then
-        echo "Branch verification successful"
+      if [ "$BRANCH_EXISTS" = false ]; then
+        # Create new branch
+        git checkout -b $BRANCH_NAME origin/$BASE_BRANCH
+        git push origin $BRANCH_NAME
+        echo "operation-status=created" >> $GITHUB_OUTPUT
       else
-        echo "Branch verification failed"
-        echo "operation-status=failed" >> $GITHUB_OUTPUT
-        exit 1
+        # Update existing branch
+        git checkout $BRANCH_NAME
+        git reset --hard origin/$BASE_BRANCH
+        git push --force origin $BRANCH_NAME
+        echo "operation-status=updated" >> $GITHUB_OUTPUT
       fi
 
-  - name: Generate branch URL
-    id: generate-url
-    shell: bash
-    run: |
-      repo_url=$(git config --get remote.origin.url | sed 's/\.git$//')
-      branch_url="${repo_url}/tree/${{ inputs.branch-name }}"
-      echo "branch-url=${branch_url}" >> $GITHUB_OUTPUT
+      # Apply commit changes if provided
+      if [ -n "$COMMIT_CHANGES" ]; then
+        echo "$COMMIT_CHANGES" > changes.patch
+        git apply changes.patch
+        git add .
+        git commit -m "Apply changes from action"
+        git push origin $BRANCH_NAME
+      fi
 
-  - name: Set outputs
-    shell: bash
-    run: |
-      echo "branch-url=${{ steps.generate-url.outputs.branch-url }}" >> $GITHUB_OUTPUT
-      echo "operation-status=${{ steps.verify.outputs.operation-status || 'unchanged' }}" >> $GITHUB_OUTPUT
+      # Generate branch URL
+      REPO_URL=$(git config --get remote.origin.url | sed 's/\.git$//')
+      BRANCH_URL="${REPO_URL}/tree/${BRANCH_NAME}"
+      echo "branch-url=$BRANCH_URL" >> $GITHUB_OUTPUT
 
   - name: Error handling
     if: failure()

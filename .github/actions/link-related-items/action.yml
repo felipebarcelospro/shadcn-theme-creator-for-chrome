@@ -2,6 +2,9 @@ name: 'Link Related Items'
 description: 'Automatically links related issues and PRs to improve traceability and context'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   item-type:
     description: 'Type of item to analyze for links (issue/pr)'
     required: true
@@ -18,18 +21,14 @@ outputs:
 runs:
   using: 'composite'
   steps:
-  - name: Debug inputs
-    shell: bash
-    run: |
-      echo "Debug: Input values"
-      echo "item-type: ${{ inputs.item-type }}"
-      echo "item-number: ${{ inputs.item-number }}"
+  - name: Checkout repository
+    uses: actions/checkout@v3
 
   - name: Fetch and analyze item content
     id: fetch-content
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const itemType = '${{ inputs.item-type }}';
@@ -53,18 +52,18 @@ runs:
         }
 
         mentions = content.match(/#\d+/g) || [];
-        return { content, mentions };
+        return JSON.stringify({ content, mentions });
 
   - name: Validate and create links
     id: create-links
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const itemType = '${{ inputs.item-type }}';
         const itemNumber = '${{ inputs.item-number }}';
-        const { mentions } = ${{ steps.fetch-content.outputs.result }};
+        const { mentions } = JSON.parse('${{ steps.fetch-content.outputs.result }}');
         const linkedItems = [];
 
         for (const mention of mentions) {
@@ -81,18 +80,18 @@ runs:
           }
         }
 
-        return linkedItems;
+        return JSON.stringify(linkedItems);
 
   - name: Update item description
     id: update-description
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const itemType = '${{ inputs.item-type }}';
         const itemNumber = '${{ inputs.item-number }}';
-        const linkedItems = ${{ steps.create-links.outputs.result }};
+        const linkedItems = JSON.parse('${{ steps.create-links.outputs.result }}');
 
         const linkingSection = `
         ## Related Items

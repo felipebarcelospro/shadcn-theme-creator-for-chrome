@@ -8,18 +8,22 @@ inputs:
   affected_apps:
     description: 'JSON array of affected app names'
     required: true
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   commit_hash:
     description: 'Hash of the commit with version bump changes'
-    value: ${{ steps.commit-changes.outputs.commit_hash }}
   updated_files:
     description: 'List of files updated with new version'
-    value: ${{ steps.update-versions.outputs.updated_files }}
 
 runs:
   using: 'composite'
   steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
   - name: Setup Node.js
     uses: actions/setup-node@v3
     with:
@@ -74,4 +78,7 @@ runs:
 
   - name: Push changes
     shell: bash
-    run: git push origin HEAD
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+    run: |
+      git push https://${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git HEAD:${GITHUB_REF}

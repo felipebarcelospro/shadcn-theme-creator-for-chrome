@@ -20,6 +20,7 @@ jobs:
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
           config-path: '.github/config.yml'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get Packages
         id: get-packages
@@ -43,6 +44,7 @@ jobs:
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
           config-path: '.github/config.yml'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assign Reviewers
         uses: shufo/auto-assign-reviewer-by-files@v1.1.5
@@ -56,12 +58,14 @@ jobs:
         with:
           package-name: ${{ matrix.package }}
           config-file: ${{ fromJson(steps.setup-context.outputs.config).pr_management.pr_analysis.tools[0] }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post Code Quality Results
         uses: ./.github/actions/post-pr-comment
         with:
           pr-number: ${{ github.event.pull_request.number }}
           comment-content: ${{ steps.run-code-quality.outputs.quality-report }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check Review Guidelines
         uses: ./.github/actions/check-review-guidelines
@@ -69,6 +73,7 @@ jobs:
           pr-description: ${{ github.event.pull_request.body }}
           review-comments: ${{ github.event.review.body || '' }}
           guideline-rules: ${{ fromJson(steps.setup-context.outputs.config).pr_management.code_review.review_guidelines }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enforce Review Approval
         id: enforce-review-approval
@@ -76,6 +81,7 @@ jobs:
         with:
           pr-number: ${{ github.event.pull_request.number }}
           approval-requirements: ${{ fromJson(steps.setup-context.outputs.config).pr_management.code_review.required_approvals }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update PR Status
         uses: ./.github/actions/update-pr-status
@@ -83,6 +89,7 @@ jobs:
           pr-number: ${{ github.event.pull_request.number }}
           review-status: ${{ steps.enforce-review-approval.outputs.approval-status }}
           code-quality-results: ${{ steps.run-code-quality.outputs.quality-report }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify Reviewers
         uses: ./.github/actions/send-notification
@@ -93,3 +100,4 @@ jobs:
               "pr-url": "${{ github.event.pull_request.html_url }}",
               "assigned-reviewers": ${{ toJson(github.event.pull_request.requested_reviewers) }}
             }
+          github-token: ${{ secrets.GITHUB_TOKEN }}

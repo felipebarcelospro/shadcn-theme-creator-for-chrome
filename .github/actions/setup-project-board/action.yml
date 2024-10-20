@@ -1,5 +1,4 @@
 name: Setup Project Board
-
 description: Creates or updates a project board in the repository
 
 inputs:
@@ -13,78 +12,59 @@ inputs:
 runs:
   using: 'composite'
   steps:
-  - name: Setup Node.js
-    uses: actions/setup-node@v3
-    with:
-      node-version: '20'
-
-  - name: Install dependencies
-    shell: bash
-    run: |
-      npm install @octokit/rest
-
   - name: Create or update project board
+    id: create-update-project
     shell: bash
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       COLUMNS: ${{ inputs.columns }}
     run: |
-      node -e '
-      const { Octokit } = require("@octokit/rest");
-      const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-      const columns = JSON.parse(process.env.COLUMNS);
-
-      async function setupProjectBoard() {
-        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
-
-        try {
-          // Check if project board exists
-          const projects = await octokit.projects.listForRepo({
-            owner,
-            repo
-          });
-
-          let project = projects.data.find(p => p.name === "Main Project Board");
-
-          if (!project) {
-            // Create new project board
-            const newProject = await octokit.projects.createForRepo({
-              owner,
-              repo,
-              name: "Main Project Board",
-              body: "Main project board for tracking tasks"
-            });
-            project = newProject.data;
-            console.log("Created new project board");
-          } else {
-            console.log("Project board already exists");
-          }
-
-          // Create or update columns
-          for (const columnName of columns) {
-            const existingColumns = await octokit.projects.listColumns({
-              project_id: project.id
-            });
-
-            const existingColumn = existingColumns.data.find(c => c.name === columnName);
-
-            if (!existingColumn) {
-              await octokit.projects.createColumn({
-                project_id: project.id,
-                name: columnName
-              });
-              console.log(`Created column: ${columnName}`);
-            } else {
-              console.log(`Column already exists: ${columnName}`);
-            }
-          }
-        } catch (error) {
-          console.error("Error setting up project board:", error);
-        }
+      # Function to create a project board
+      create_project_board() {
+        local project_name="Main Project Board"
+        local project_body="Main project board for tracking tasks"
+        project_data=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/repos/$GITHUB_REPOSITORY/projects" \
+          -d "{\"name\":\"$project_name\",\"body\":\"$project_body\"}")
+        echo "$project_data" | jq -r '.html_url'
       }
 
-      setupProjectBoard().catch(console.error);
-      '
+      # Function to get existing project board
+      get_project_board() {
+        local project_name="Main Project Board"
+        project_data=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/repos/$GITHUB_REPOSITORY/projects")
+        echo "$project_data" | jq -r ".[] | select(.name == \"$project_name\") | .html_url"
+      }
+
+      # Function to create a column
+      create_column() {
+        local project_id="$1"
+        local column_name="$2"
+        curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/projects/$project_id/columns" \
+          -d "{\"name\":\"$column_name\"}"
+      }
+
+      # Main logic
+      project_url=$(get_project_board)
+      if [ -z "$project_url" ]; then
+        echo "Creating new project board..."
+        project_url=$(create_project_board)
+      fi
+
+      project_id=$(echo "$project_url" | awk -F'/' '{print $NF}')
+
+      IFS=',' read -ra COLUMN_NAMES <<< "$COLUMNS"
+      for column_name in "${COLUMN_NAMES[@]}"; do
+        echo "Creating column: $column_name"
+        create_column "$project_id" "$column_name"
+      done
+
+      echo "project-url=$project_url" >> $GITHUB_OUTPUT
 
 outputs:
   project-url:

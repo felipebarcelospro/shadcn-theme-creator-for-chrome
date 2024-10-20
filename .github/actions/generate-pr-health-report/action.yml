@@ -2,6 +2,9 @@ name: 'Generate PR Health Report'
 description: 'Generates a health report for pull requests in the repository'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   repository-context:
     description: 'Context information about the repository'
     required: true
@@ -18,7 +21,7 @@ runs:
     id: fetch-pr-data
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         console.log('Debug: Starting to fetch PR data');
         const { data: pullRequests } = await github.rest.pulls.list({
@@ -35,7 +38,7 @@ runs:
     id: analyze-pr-health
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         console.log('Debug: Starting PR health analysis');
         const pullRequests = JSON.parse('${{ steps.fetch-pr-data.outputs.result }}');
@@ -59,11 +62,12 @@ runs:
     id: generate-report
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: "console.log('Debug: Generating PR health report');\nconst healthData = JSON.parse('${{ steps.analyze-pr-health.outputs.result }}');\nconst report = healthData.map(pr => \n  `- [#${pr.number}](${pr.url}): ${pr.title}\\n  Age: ${pr.age} days | Status: ${pr.status} | Reviews: ${pr.reviewStatus} | Author: ${pr.author}`\n).join('\\n');\nconsole.log(`Debug: Generated report with ${healthData.length} PRs`);\nreturn report;\n    #magic___^_^___line\n"
   - name: Create PR Health Report Issue
     uses: ./.github/actions/create-issue
     with:
+      github-token: ${{ inputs.github-token }}
       issue-type: 'PR Health Report'
       issue-title: 'Weekly PR Health Report'
       issue-details: ${{ steps.generate-report.outputs.result }}

@@ -1,5 +1,4 @@
 name: Setup Dependabot
-
 description: Configures Dependabot for the repository
 
 inputs:
@@ -16,72 +15,76 @@ inputs:
 runs:
   using: 'composite'
   steps:
-  - name: Setup Node.js
-    uses: actions/setup-node@v3
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
+  - name: Setup Python
+    uses: actions/setup-python@v4
     with:
-      node-version: '20'
+      python-version: '3.x'
 
   - name: Install dependencies
     shell: bash
     run: |
-      npm install @octokit/rest js-yaml
+      pip install PyYAML
 
   - name: Configure Dependabot
-    shell: bash
+    id: configure-dependabot
+    shell: python
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       ECOSYSTEMS: ${{ inputs.ecosystems }}
       CONFIG: ${{ inputs.config }}
     run: |
-      node -e '
-      const { Octokit } = require("@octokit/rest");
-      const yaml = require("js-yaml");
-      const fs = require("fs");
-      const path = require("path");
+      import os
+      import json
+      import yaml
+      from github import Github
 
-      const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-      const ecosystems = JSON.parse(process.env.ECOSYSTEMS);
-      const config = JSON.parse(process.env.CONFIG);
+      def setup_dependabot():
+          ecosystems = json.loads(os.environ['ECOSYSTEMS'])
+          config = json.loads(os.environ['CONFIG'])
 
-      async function setupDependabot() {
-        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
-        const dependabotConfig = {
-          version: 2,
-          updates: ecosystems.map(ecosystem => ({
-            package-ecosystem: ecosystem,
-            directory: "/",
-            schedule: {
-              interval: "weekly"
-            },
-            ...config
-          }))
-        };
+          dependabot_config = {
+              'version': 2,
+              'updates': [
+                  {
+                      'package-ecosystem': ecosystem,
+                      'directory': '/',
+                      'schedule': {'interval': 'weekly'},
+                      **config
+                  } for ecosystem in ecosystems
+              ]
+          }
 
-        const yamlConfig = yaml.dump(dependabotConfig);
-        const configPath = path.join(process.env.GITHUB_WORKSPACE, ".github", "dependabot.yml");
+          yaml_config = yaml.dump(dependabot_config)
 
-        fs.writeFileSync(configPath, yamlConfig, "utf8");
+          github_token = os.environ['GITHUB_TOKEN']
+          repo_name = os.environ['GITHUB_REPOSITORY']
 
-        console.log("Dependabot configuration file created successfully");
+          g = Github(github_token)
+          repo = g.get_repo(repo_name)
 
-        try {
-          await octokit.repos.createOrUpdateFileContents({
-            owner,
-            repo,
-            path: ".github/dependabot.yml",
-            message: "Add Dependabot configuration",
-            content: Buffer.from(yamlConfig).toString("base64"),
-            branch: "main"
-          });
-          console.log("Dependabot configuration committed to repository");
-        } catch (error) {
-          console.error("Error committing Dependabot configuration:", error);
-          process.exit(1);
-        }
-      }
+          try:
+              contents = repo.get_contents('.github/dependabot.yml')
+              repo.update_file(
+                  contents.path,
+                  'Update Dependabot configuration',
+                  yaml_config,
+                  contents.sha
+              )
+              print('Dependabot configuration updated successfully')
+          except:
+              repo.create_file(
+                  '.github/dependabot.yml',
+                  'Add Dependabot configuration',
+                  yaml_config
+              )
+              print('Dependabot configuration created successfully')
 
-      setupDependabot().catch(console.error);
-      '
+          print('::set-output name=config-created::true')
+
+      setup_dependabot()
 
 outputs:
   config-created:

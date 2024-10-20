@@ -1,5 +1,4 @@
 name: Setup Repository Settings
-
 description: Configures repository settings based on provided parameters
 
 inputs:
@@ -36,18 +35,8 @@ inputs:
     type: boolean
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
-  - name: Setup Node.js
-    uses: actions/setup-node@v3
-    with:
-      node-version: '20'
-
-  - name: Install dependencies
-    shell: bash
-    run: |
-      npm install @octokit/rest
-
   - name: Configure repository settings
     shell: bash
     env:
@@ -60,34 +49,42 @@ runs:
       ALLOW_REBASE_MERGE: ${{ inputs.allow-rebase-merge }}
       DELETE_BRANCH_ON_MERGE: ${{ inputs.delete-branch-on-merge }}
     run: |
-      node -e '
-      const { Octokit } = require("@octokit/rest");
-      const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+      # Extract owner and repo from GITHUB_REPOSITORY
+      IFS='/' read -r OWNER REPO <<< "$GITHUB_REPOSITORY"
 
-      async function setupRepositorySettings() {
-        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
+      # Construct the API URL
+      API_URL="https://api.github.com/repos/$OWNER/$REPO"
 
-        try {
-          await octokit.repos.update({
-            owner,
-            repo,
-            has_wiki: process.env.HAS_WIKI === "true",
-            has_issues: process.env.HAS_ISSUES === "true",
-            has_projects: process.env.HAS_PROJECTS === "true",
-            allow_squash_merge: process.env.ALLOW_SQUASH_MERGE === "true",
-            allow_merge_commit: process.env.ALLOW_MERGE_COMMIT === "true",
-            allow_rebase_merge: process.env.ALLOW_REBASE_MERGE === "true",
-            delete_branch_on_merge: process.env.DELETE_BRANCH_ON_MERGE === "true"
-          });
-          console.log("Repository settings updated successfully");
-        } catch (error) {
-          console.error("Error updating repository settings:", error);
-          process.exit(1);
-        }
+      # Prepare the JSON payload
+      PAYLOAD=$(cat << EOF
+      {
+        "has_wiki": $HAS_WIKI,
+        "has_issues": $HAS_ISSUES,
+        "has_projects": $HAS_PROJECTS,
+        "allow_squash_merge": $ALLOW_SQUASH_MERGE,
+        "allow_merge_commit": $ALLOW_MERGE_COMMIT,
+        "allow_rebase_merge": $ALLOW_REBASE_MERGE,
+        "delete_branch_on_merge": $DELETE_BRANCH_ON_MERGE
       }
+      EOF
+      )
 
-      setupRepositorySettings();
-      '
+      # Make the API call to update repository settings
+      RESPONSE=$(curl -s -X PATCH \
+        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        -d "$PAYLOAD" \
+        "$API_URL")
+
+      # Check if the update was successful
+      if [[ $(echo "$RESPONSE" | jq -r '.id') ]]; then
+        echo "Repository settings updated successfully"
+        echo "settings-updated=true" >> $GITHUB_OUTPUT
+      else
+        echo "Error updating repository settings: $RESPONSE"
+        echo "settings-updated=false" >> $GITHUB_OUTPUT
+        exit 1
+      fi
 
 outputs:
   settings-updated:

@@ -63,6 +63,7 @@ jobs:
           package-manager: ${{ fromJson(steps.setup-context.outputs.config-data).package_manager }}
           cache-key: ${{ runner.os }}-${{ matrix.package }}-${{ hashFiles(format('{0}/package-lock.json', fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path)) }}
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Linting
         id: run-linting
@@ -70,6 +71,7 @@ jobs:
         with:
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
           lint-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.lint }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         id: run-tests
@@ -77,6 +79,7 @@ jobs:
         with:
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
           test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.test }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Code Coverage
         id: upload-coverage
@@ -93,6 +96,7 @@ jobs:
         with:
           build-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.build }}
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy Application
         id: deploy-app
@@ -103,6 +107,7 @@ jobs:
           artifacts-path: ${{ steps.build-app.outputs.artifacts-path }}
           deployment-type: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.deployment.type }}
           deployment-config: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.deployment) }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Post-Deployment Tests
         id: post-deployment-tests
@@ -111,6 +116,7 @@ jobs:
         with:
           app-url: ${{ steps.deploy-app.outputs.deployed-url }}
           test-suite: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.post_deployment_tests.url }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Notifications
         id: send-notifications
@@ -126,6 +132,7 @@ jobs:
               "run_id": "${{ github.run_id }}",
               "run_number": "${{ github.run_number }}"
             }
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Issue on Failure
         id: create-issue-on-failure

@@ -2,6 +2,9 @@ name: 'Set Milestone'
 description: 'Automatically assigns issues and PRs to appropriate milestones'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   item-type:
     description: 'Type of item to assign milestone (issue/pr)'
     required: true
@@ -22,8 +25,11 @@ outputs:
     description: 'Status of the milestone assignment operation'
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
   - name: Debug inputs
     shell: bash
     run: |
@@ -33,112 +39,77 @@ runs:
       echo "milestone-title: ${{ inputs.milestone-title }}"
       echo "label-to-match: ${{ inputs.label-to-match }}"
 
-  - name: Fetch item details
-    id: fetch-item
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const { owner, repo } = context.repo;
-        const itemType = '${{ inputs.item-type }}';
-        const itemNumber = '${{ inputs.item-number }}';
-        let item;
-        if (itemType === 'issue') {
-          const { data: issue } = await github.rest.issues.get({
-            owner,
-            repo,
-            issue_number: itemNumber
-          });
-          item = issue;
-        } else if (itemType === 'pr') {
-          const { data: pr } = await github.rest.pulls.get({
-            owner,
-            repo,
-            pull_number: itemNumber
-          });
-          item = pr;
-        }
-        return item;
-
-  - name: Assign milestone
+  - name: Fetch item details and assign milestone
     id: assign-milestone
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const item = ${{ steps.fetch-item.outputs.result }};
-        const { owner, repo } = context.repo;
-        const milestoneTitle = '${{ inputs.milestone-title }}';
-        const labelToMatch = '${{ inputs.label-to-match }}';
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      ITEM_TYPE: ${{ inputs.item-type }}
+      ITEM_NUMBER: ${{ inputs.item-number }}
+      MILESTONE_TITLE: ${{ inputs.milestone-title }}
+      LABEL_TO_MATCH: ${{ inputs.label-to-match }}
+    run: |
+      set -e
 
-        let assignedMilestone = null;
-        let assignmentStatus = 'not_assigned';
+      # Fetch item details
+      if [ "$ITEM_TYPE" = "issue" ]; then
+        item=$(gh api repos/:owner/:repo/issues/$ITEM_NUMBER)
+      elif [ "$ITEM_TYPE" = "pr" ]; then
+        item=$(gh api repos/:owner/:repo/pulls/$ITEM_NUMBER)
+      else
+        echo "Error: Invalid item type"
+        exit 1
+      fi
 
-        try {
-          // Fetch current milestones
-          const { data: milestones } = await github.rest.issues.listMilestones({
-            owner,
-            repo,
-            state: 'open'
-          });
+      # Fetch milestones
+      milestones=$(gh api repos/:owner/:repo/milestones --jq '.[] | select(.state == "open")')
 
-          // Find the specified milestone
-          assignedMilestone = milestones.find(m => m.title === milestoneTitle);
+      # Find specified milestone
+      milestone=$(echo "$milestones" | jq -r "select(.title == \"$MILESTONE_TITLE\")")
 
-          if (assignedMilestone && item.labels.some(label => label.name === labelToMatch)) {
-            // Assign item to milestone
-            await github.rest.issues.update({
-              owner,
-              repo,
-              issue_number: item.number,
-              milestone: assignedMilestone.number
-            });
-            assignmentStatus = 'assigned';
-          } else if (!assignedMilestone) {
-            assignmentStatus = 'milestone_not_found';
-          } else {
-            assignmentStatus = 'label_not_matched';
-          }
-        } catch (error) {
-          console.error('Error assigning milestone:', error);
-          assignmentStatus = 'error';
-        }
+      if [ -z "$milestone" ]; then
+        echo "assignment-status=milestone_not_found" >> $GITHUB_OUTPUT
+        echo "assigned-milestone=None" >> $GITHUB_OUTPUT
+        exit 0
+      fi
 
-        // Set outputs
-        core.setOutput('assigned-milestone', assignedMilestone ? assignedMilestone.title : 'None');
-        core.setOutput('assignment-status', assignmentStatus);
+      milestone_number=$(echo "$milestone" | jq -r '.number')
+
+      # Check if item has matching label
+      labels=$(echo "$item" | jq -r '.labels[].name')
+      if echo "$labels" | grep -q "$LABEL_TO_MATCH"; then
+        # Assign milestone
+        if [ "$ITEM_TYPE" = "issue" ]; then
+          gh api repos/:owner/:repo/issues/$ITEM_NUMBER -f milestone=$milestone_number
+        else
+          gh api repos/:owner/:repo/pulls/$ITEM_NUMBER -f milestone=$milestone_number
+        fi
+        echo "assignment-status=assigned" >> $GITHUB_OUTPUT
+        echo "assigned-milestone=$MILESTONE_TITLE" >> $GITHUB_OUTPUT
+      else
+        echo "assignment-status=label_not_matched" >> $GITHUB_OUTPUT
+        echo "assigned-milestone=None" >> $GITHUB_OUTPUT
+      fi
 
   - name: Update milestone progress
     if: steps.assign-milestone.outputs.assignment-status == 'assigned'
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const { owner, repo } = context.repo;
-        const milestoneNumber = ${{ fromJson(steps.assign-milestone.outputs.result).number }};
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      MILESTONE_TITLE: ${{ inputs.milestone-title }}
+    run: |
+      set -e
 
-        try {
-          const { data: milestone } = await github.rest.issues.getMilestone({
-            owner,
-            repo,
-            milestone_number: milestoneNumber
-          });
+      milestone=$(gh api repos/:owner/:repo/milestones --jq ".[] | select(.title == \"$MILESTONE_TITLE\")")
+      milestone_number=$(echo "$milestone" | jq -r '.number')
 
-          const { data: issues } = await github.rest.issues.listForRepo({
-            owner,
-            repo,
-            milestone: milestoneNumber,
-            state: 'all'
-          });
+      issues=$(gh api repos/:owner/:repo/issues -f milestone=$milestone_number -f state=all)
+      total_issues=$(echo "$issues" | jq length)
+      closed_issues=$(echo "$issues" | jq '[.[] | select(.state == "closed")] | length')
 
-          const totalIssues = issues.length;
-          const closedIssues = issues.filter(issue => issue.state === 'closed').length;
-          const progressPercentage = Math.round((closedIssues / totalIssues) * 100);
+      progress_percentage=$((closed_issues * 100 / total_issues))
 
-          console.log(`Milestone progress: ${progressPercentage}%`);
-        } catch (error) {
-          console.error('Error updating milestone progress:', error);
-        }
+      echo "Milestone progress: $progress_percentage%"
 
   - name: Error handling
     if: failure()

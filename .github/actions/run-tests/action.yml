@@ -2,6 +2,9 @@ name: 'Run Tests'
 description: 'Runs comprehensive tests on the codebase to ensure functionality and catch regressions'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   working-directory:
     description: 'Directory to run tests in (for monorepos)'
     required: false
@@ -30,15 +33,25 @@ outputs:
 runs:
   using: 'composite'
   steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
   - name: Setup Node.js
     uses: actions/setup-node@v3
     with:
       node-version: '20'
 
   - name: Install dependencies
-    uses: ./.github/actions/install-dependencies
-    with:
-      working-directory: ${{ inputs.working-directory }}
+    shell: bash
+    working-directory: ${{ inputs.working-directory }}
+    run: |
+      if [ -f "package-lock.json" ]; then
+        npm ci
+      elif [ -f "yarn.lock" ]; then
+        yarn install --frozen-lockfile
+      else
+        npm install
+      fi
 
   - name: Detect test framework
     id: detect-framework
@@ -57,20 +70,19 @@ runs:
     id: run-tests
     shell: bash
     working-directory: ${{ inputs.working-directory }}
-    run: |
-      ${{ inputs.test-command }}
+    run: ${{ inputs.test-command }}
 
   - name: Run coverage
     id: run-coverage
     if: inputs.coverage-command
     shell: bash
     working-directory: ${{ inputs.working-directory }}
-    run: |
-      ${{ inputs.coverage-command }}
+    run: ${{ inputs.coverage-command }}
 
   - name: Check coverage threshold
     if: inputs.coverage-command && inputs.coverage-threshold
     shell: bash
+    working-directory: ${{ inputs.working-directory }}
     run: |
       coverage_file=""
       if [ -f "coverage/coverage-summary.json" ]; then
@@ -92,6 +104,7 @@ runs:
   - name: Parse test results
     id: parse-results
     shell: bash
+    working-directory: ${{ inputs.working-directory }}
     run: |
       if [ ${{ steps.run-tests.outcome }} == 'success' ]; then
         echo "test-status=pass" >> $GITHUB_OUTPUT

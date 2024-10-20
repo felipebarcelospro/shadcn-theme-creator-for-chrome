@@ -2,6 +2,9 @@ name: 'Close Stale Issues'
 description: 'Automatically identifies and closes stale issues and PRs to keep the project board clean and focused on active work'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   days-before-stale:
     description: 'Number of days of inactivity before an issue becomes stale'
     required: true
@@ -51,7 +54,7 @@ runs:
     id: fetch-items
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const { data: issues } = await github.rest.issues.listForRepo({
@@ -65,7 +68,7 @@ runs:
     id: close-stale
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const daysBeforeStale = parseInt('${{ inputs.days-before-stale }}');
         const daysBeforeClose = parseInt('${{ inputs.days-before-close }}');
@@ -129,7 +132,7 @@ runs:
     id: generate-report
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const closedItems = ${{ steps.close-stale.outputs.result }};
         const summary = `Closed ${closedItems.length} stale items:\n${closedItems.map(item => `- ${item.type} #${item.number}: ${item.title}`).join('\n')}`;

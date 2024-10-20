@@ -2,6 +2,9 @@ name: 'Wait for PR'
 description: 'Implements a waiting period before automatically creating a PR'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   branch-name:
     description: 'Name of the branch to check for PRs'
     required: true
@@ -17,52 +20,47 @@ outputs:
     description: 'Actual duration waited in minutes'
 
 runs:
-  using: 'node20'
-  main: 'index.js'
+  using: 'composite'
+  steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
 
-jobs:
-  wait-for-pr:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+  - name: Debug - Input values
+    shell: bash
+    run: |
+      echo "Branch name: ${{ inputs.branch-name }}"
+      echo "Wait time: ${{ inputs.wait-time }} minutes"
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
+  - name: Wait for PR
+    id: wait
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+    run: |
+      start_time=$(date +%s)
+      end_time=$((start_time + ${{ inputs.wait-time }} * 60))
+      pr_created=false
 
-    - name: Debug - Input values
-      run: |
-        echo "Branch name: ${{ inputs.branch-name }}"
-        echo "Wait time: ${{ inputs.wait-time }} minutes"
-
-    - name: Wait for PR
-      id: wait
-      run: |
-        start_time=$(date +%s)
-        end_time=$((start_time + ${{ inputs.wait-time }} * 60))
-        pr_created=false
-
-        while [ $(date +%s) -lt $end_time ]; do
-          pr_exists=$(gh pr list --head ${{ inputs.branch-name }} --json number --jq length)
-          if [ "$pr_exists" -gt 0 ]; then
-            pr_created=true
-            break
-          fi
-          sleep 60
-        done
-
-        wait_duration=$(( ($(date +%s) - start_time) / 60 ))
-
-        if [ "$pr_created" = true ]; then
-          echo "::set-output name=pr-status::manual"
-        else
-          echo "::set-output name=pr-status::automatic"
+      while [ $(date +%s) -lt $end_time ]; do
+        pr_exists=$(gh pr list --head ${{ inputs.branch-name }} --json number --jq length)
+        if [ "$pr_exists" -gt 0 ]; then
+          pr_created=true
+          break
         fi
-        echo "::set-output name=wait-duration::$wait_duration"
+        sleep 60
+      done
 
-    - name: Debug - Wait result
-      run: |
-        echo "PR status: ${{ steps.wait.outputs.pr-status }}"
-        echo "Wait duration: ${{ steps.wait.outputs.wait-duration }} minutes"
+      wait_duration=$(( ($(date +%s) - start_time) / 60 ))
+
+      if [ "$pr_created" = true ]; then
+        echo "pr-status=manual" >> $GITHUB_OUTPUT
+      else
+        echo "pr-status=automatic" >> $GITHUB_OUTPUT
+      fi
+      echo "wait-duration=$wait_duration" >> $GITHUB_OUTPUT
+
+  - name: Debug - Wait result
+    shell: bash
+    run: |
+      echo "PR status: ${{ steps.wait.outputs.pr-status }}"
+      echo "Wait duration: ${{ steps.wait.outputs.wait-duration }} minutes"

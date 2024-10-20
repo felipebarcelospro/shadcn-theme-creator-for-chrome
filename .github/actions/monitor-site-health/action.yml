@@ -30,16 +30,17 @@ runs:
       sudo apt-get install -y jq curl
 
   - name: Check site availability and performance
+    id: check_site
     shell: bash
     run: |
-      urls=(${URLS//,/ })
+      IFS=',' read -ra urls <<< "${{ inputs.urls }}"
       availability_status="{}"
       performance_metrics="{}"
       for url in "${urls[@]}"; do
         retries=0
-        while [ $retries -lt $MAX_RETRIES ]; do
+        while [ $retries -lt ${{ inputs.max_retries }} ]; do
           start_time=$(date +%s%N)
-          http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time $TIMEOUT "$url")
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time ${{ inputs.timeout }} "$url")
           end_time=$(date +%s%N)
           response_time=$((($end_time - $start_time)/1000000))
 
@@ -48,13 +49,13 @@ runs:
             break
           else
             retries=$((retries+1))
-            if [ $retries -lt $MAX_RETRIES ]; then
+            if [ $retries -lt ${{ inputs.max_retries }} ]; then
               sleep 5
             fi
           fi
         done
 
-        if [ $retries -eq $MAX_RETRIES ]; then
+        if [ $retries -eq ${{ inputs.max_retries }} ]; then
           status="unavailable"
         fi
 
@@ -63,11 +64,6 @@ runs:
       done
       echo "availability-status=$availability_status" >> $GITHUB_OUTPUT
       echo "performance-metrics=$performance_metrics" >> $GITHUB_OUTPUT
-
-    env:
-      URLS: ${{ inputs.urls }}
-      TIMEOUT: ${{ inputs.timeout }}
-      MAX_RETRIES: ${{ inputs.max_retries }}
 
   - name: Log results
     shell: bash

@@ -2,6 +2,9 @@ name: 'Create Issue'
 description: 'Creates a GitHub issue based on provided data'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   issue-type:
     description: 'Type of issue to create'
     required: true
@@ -40,6 +43,7 @@ runs:
     id: generate-content
     uses: ./.github/actions/ai-generate-content
     with:
+      github-token: ${{ inputs.github-token }}
       content-type: "issue_content"
       context-data: |
         {
@@ -58,7 +62,7 @@ runs:
     id: create-issue
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         console.log('Debug: Starting issue creation');
         const title = '${{ inputs.issue-title }}' || `${{ inputs.issue-type }} Issue`;

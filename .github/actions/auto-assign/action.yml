@@ -2,6 +2,9 @@ name: 'Auto Assign'
 description: 'Automatically assigns team members to issues and PRs based on their expertise and contributions'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   item-type:
     description: 'Type of item to assign (issue/pr)'
     required: true
@@ -29,7 +32,7 @@ runs:
     id: fetch-contributors
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const { data: contributors } = await github.rest.repos.listContributors({ owner, repo });
@@ -68,7 +71,7 @@ runs:
     id: generate-rules
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const contributorExpertise = ${{ steps.fetch-contributors.outputs.result }};
         const rules = Object.entries(contributorExpertise).reduce((acc, [contributor, expertise]) => {
@@ -82,7 +85,7 @@ runs:
     id: fetch-item
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const itemType = '${{ inputs.item-type }}';
@@ -111,7 +114,7 @@ runs:
     id: determine-assignees
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const rules = ${{ steps.generate-rules.outputs.result }};
         const { content, labels } = ${{ steps.fetch-item.outputs.result }};
@@ -127,7 +130,7 @@ runs:
     id: assign-members
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const itemType = '${{ inputs.item-type }}';

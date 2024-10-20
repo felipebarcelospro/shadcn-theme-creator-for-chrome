@@ -1,6 +1,5 @@
-name: Commit Changes
-
-description: Commits changes to the repository
+name: 'Commit Changes'
+description: 'Commits changes to the repository'
 
 inputs:
   github-token:
@@ -57,4 +56,3 @@ outputs:
   commit-sha:
     description: 'The SHA of the commit'
     value: ${{ steps.commit.outputs.commit-sha }}
-

@@ -1,6 +1,5 @@
-name: Create Wiki Page
-
-description: Creates a new wiki page in the repository
+name: 'Create Wiki Page'
+description: 'Creates a new wiki page in the repository'
 
 inputs:
   github-token:
@@ -20,7 +19,9 @@ runs:
     shell: bash
     run: |
       echo "Debug: Creating wiki page with name '${{ inputs.page-name }}'"
-      echo "Debug: Content length: ${#inputs.page-content}"
+      echo "Debug: Content length: ${#PAGE_CONTENT}"
+    env:
+      PAGE_CONTENT: ${{ inputs.page-content }}
 
   - name: Checkout wiki
     uses: actions/checkout@v3
@@ -32,8 +33,10 @@ runs:
     shell: bash
     run: |
       echo "Debug: Writing content to ${{ inputs.page-name }}.md"
-      echo "${{ inputs.page-content }}" > "${{ inputs.page-name }}.md"
+      echo "$PAGE_CONTENT" > "${{ inputs.page-name }}.md"
       echo "Debug: File created successfully"
+    env:
+      PAGE_CONTENT: ${{ inputs.page-content }}
 
   - name: Commit and push changes
     shell: bash

@@ -6,6 +6,9 @@ inputs:
     description: 'Directory to run linting in (for monorepos)'
     required: false
     default: '.'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   linting-status:
@@ -18,6 +21,9 @@ outputs:
 runs:
   using: 'composite'
   steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
   - name: Setup Node.js
     uses: actions/setup-node@v3
     with:
@@ -25,11 +31,13 @@ runs:
 
   - name: Detect package manager and install dependencies
     id: detect-pm
+    shell: bash
+    working-directory: ${{ inputs.working-directory }}
     run: |
-      if [ -f "${{ inputs.working-directory }}/yarn.lock" ]; then
+      if [ -f "yarn.lock" ]; then
         echo "package-manager=yarn" >> $GITHUB_OUTPUT
         yarn install --frozen-lockfile
-      elif [ -f "${{ inputs.working-directory }}/pnpm-lock.yaml" ]; then
+      elif [ -f "pnpm-lock.yaml" ]; then
         echo "package-manager=pnpm" >> $GITHUB_OUTPUT
         npm install -g pnpm
         pnpm install --frozen-lockfile
@@ -37,30 +45,29 @@ runs:
         echo "package-manager=npm" >> $GITHUB_OUTPUT
         npm ci
       fi
-    shell: bash
-    working-directory: ${{ inputs.working-directory }}
 
   - name: Detect and run linter
     id: run-lint
+    shell: bash
+    working-directory: ${{ inputs.working-directory }}
     run: |
-      if [ -f "${{ inputs.working-directory }}/.eslintrc.js" ] || [ -f "${{ inputs.working-directory }}/.eslintrc.json" ] || [ -f "${{ inputs.working-directory }}/.eslintrc.yaml" ] || [ -f "${{ inputs.working-directory }}/.eslintrc.yml" ]; then
+      if [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ] || [ -f ".eslintrc.yaml" ] || [ -f ".eslintrc.yml" ]; then
         echo "Detected ESLint configuration"
         ${{ steps.detect-pm.outputs.package-manager }} run lint || ${{ steps.detect-pm.outputs.package-manager }} run eslint || npx eslint . --ext .js,.jsx,.ts,.tsx
-      elif [ -f "${{ inputs.working-directory }}/tslint.json" ]; then
+      elif [ -f "tslint.json" ]; then
         echo "Detected TSLint configuration"
         ${{ steps.detect-pm.outputs.package-manager }} run lint || ${{ steps.detect-pm.outputs.package-manager }} run tslint || npx tslint -p tsconfig.json
-      elif [ -f "${{ inputs.working-directory }}/.prettierrc" ] || [ -f "${{ inputs.working-directory }}/.prettierrc.js" ] || [ -f "${{ inputs.working-directory }}/.prettierrc.json" ]; then
+      elif [ -f ".prettierrc" ] || [ -f ".prettierrc.js" ] || [ -f ".prettierrc.json" ]; then
         echo "Detected Prettier configuration"
         ${{ steps.detect-pm.outputs.package-manager }} run lint || ${{ steps.detect-pm.outputs.package-manager }} run prettier || npx prettier --check .
       else
         echo "No linter configuration detected. Please add a linter configuration file to your project."
         exit 1
       fi
-    shell: bash
-    working-directory: ${{ inputs.working-directory }}
 
   - name: Parse linting results
     id: parse-results
+    shell: bash
     run: |
       if [ ${{ steps.run-lint.outcome }} == 'success' ]; then
         echo "linting-status=pass" >> $GITHUB_OUTPUT
@@ -71,11 +78,10 @@ runs:
         echo "linting-report={\"status\": \"fail\", \"message\": \"Linting failed. Please check the logs for more details.\"}" >> $GITHUB_OUTPUT
         echo "pr-comment=## Linting Results\n\nLinting checks failed. Please review the logs and fix the issues. :x:" >> $GITHUB_OUTPUT
       fi
-    shell: bash
 
   - name: Output results
+    shell: bash
     run: |
       echo "Linting Status: ${{ steps.parse-results.outputs.linting-status }}"
       echo "Linting Report: ${{ steps.parse-results.outputs.linting-report }}"
       echo "PR Comment: ${{ steps.parse-results.outputs.pr-comment }}"
-    shell: bash

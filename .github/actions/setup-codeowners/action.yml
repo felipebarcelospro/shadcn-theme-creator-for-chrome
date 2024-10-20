@@ -1,5 +1,4 @@
 name: Setup CODEOWNERS
-
 description: Configures CODEOWNERS file for the repository
 
 inputs:
@@ -13,55 +12,38 @@ inputs:
 runs:
   using: 'composite'
   steps:
-  - name: Setup Node.js
-    uses: actions/setup-node@v3
-    with:
-      node-version: '20'
-
-  - name: Install dependencies
-    shell: bash
-    run: |
-      npm install @octokit/rest
+  - name: Checkout repository
+    uses: actions/checkout@v3
 
   - name: Configure CODEOWNERS
+    id: configure-codeowners
     shell: bash
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       REPOSITORY_ADMINS: ${{ inputs.repository-admins }}
     run: |
-      node -e '
-      const { Octokit } = require("@octokit/rest");
-      const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-      const admins = JSON.parse(process.env.REPOSITORY_ADMINS);
+      # Parse repository admins
+      IFS=',' read -ra ADMINS <<< "$(echo "$REPOSITORY_ADMINS" | jq -r '.[]')"
 
-      async function setupCodeowners() {
-        const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
-        const codeownersContent = `# This file is maintained automatically by "GitHub Repository Setup Workflow"
-# These owners will be the default owners for everything in
-# the repo. Unless a later match takes precedence,
-# ${admins.join(", ")} will be requested for
-# review when someone opens a pull request.
-*       ${admins.map(admin => `@${admin}`).join(" ")}
-`;
+      # Generate CODEOWNERS content
+      CODEOWNERS_CONTENT="# This file is maintained automatically by \"GitHub Repository Setup Workflow\"\n"
+      CODEOWNERS_CONTENT+="# These owners will be the default owners for everything in\n"
+      CODEOWNERS_CONTENT+="# the repo. Unless a later match takes precedence,\n"
+      CODEOWNERS_CONTENT+="# ${ADMINS[*]} will be requested for\n"
+      CODEOWNERS_CONTENT+="# review when someone opens a pull request.\n"
+      CODEOWNERS_CONTENT+="*       ${ADMINS[@]/#/@}"
 
-        try {
-          await octokit.repos.createOrUpdateFileContents({
-            owner,
-            repo,
-            path: "CODEOWNERS",
-            message: "Update CODEOWNERS file",
-            content: Buffer.from(codeownersContent).toString("base64"),
-            branch: "main"
-          });
-          console.log("CODEOWNERS file created/updated successfully");
-        } catch (error) {
-          console.error("Error updating CODEOWNERS file:", error);
-          process.exit(1);
-        }
-      }
+      # Write CODEOWNERS file
+      echo -e "$CODEOWNERS_CONTENT" > CODEOWNERS
 
-      setupCodeowners().catch(console.error);
-      '
+      # Commit and push changes
+      git config user.name "GitHub Action"
+      git config user.email "action@github.com"
+      git add CODEOWNERS
+      git commit -m "Update CODEOWNERS file"
+      git push
+
+      echo "codeowners-updated=true" >> $GITHUB_OUTPUT
 
 outputs:
   codeowners-updated:

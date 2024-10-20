@@ -2,6 +2,9 @@ name: 'Create Project Card'
 description: 'Automatically creates project cards for new issues and PRs'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   item-type:
     description: 'Type of item to create a card for (issue/pr)'
     required: true
@@ -37,7 +40,7 @@ runs:
     id: fetch-item
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const itemType = '${{ inputs.item-type }}';
@@ -64,7 +67,7 @@ runs:
     id: create-card
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const item = ${{ steps.fetch-item.outputs.result }};
         const projectBoardId = '${{ inputs.project-board-id }}';
@@ -86,15 +89,15 @@ runs:
 
   - name: Set outputs
     id: set-outputs
+    shell: bash
     run: |
       echo "card-url=${{ fromJson(steps.create-card.outputs.result).url }}" >> $GITHUB_OUTPUT
       echo "creation-status=${{ fromJson(steps.create-card.outputs.result).status }}" >> $GITHUB_OUTPUT
-    shell: bash
 
   - name: Error handling
     if: failure()
+    shell: bash
     run: |
       echo "An error occurred during the project card creation process"
       echo "card-url=" >> $GITHUB_OUTPUT
       echo "creation-status=failed" >> $GITHUB_OUTPUT
-    shell: bash

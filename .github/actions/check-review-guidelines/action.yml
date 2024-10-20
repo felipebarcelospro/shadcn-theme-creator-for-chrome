@@ -11,6 +11,9 @@ inputs:
   guideline-rules:
     description: 'Path to the guideline rules configuration file'
     required: true
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   compliance-status:
@@ -19,49 +22,77 @@ outputs:
     description: 'List of guideline violations (if any)'
 
 runs:
-  using: 'node20'
-  main: 'index.js'
+  using: 'composite'
+  steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
 
-jobs:
-  check-guidelines:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '20'
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
+  - name: Install dependencies
+    shell: bash
+    run: npm install @actions/github @actions/core
 
-    - name: Debug - Input values
-      run: |
-        echo "PR description: ${{ inputs.pr-description }}"
-        echo "Review comments: ${{ inputs.review-comments }}"
-        echo "Guideline rules: ${{ inputs.guideline-rules }}"
+  - name: Debug - Input values
+    shell: bash
+    run: |
+      echo "PR description: ${{ inputs.pr-description }}"
+      echo "Review comments: ${{ inputs.review-comments }}"
+      echo "Guideline rules: ${{ inputs.guideline-rules }}"
 
-    - name: Load guideline rules
-      id: load-rules
-      run: |
-        rules=$(cat ${{ inputs.guideline-rules }})
-        echo "::set-output name=rules::$rules"
+  - name: Load guideline rules
+    id: load-rules
+    shell: bash
+    run: |
+      rules=$(cat ${{ inputs.guideline-rules }})
+      echo "rules=$rules" >> $GITHUB_OUTPUT
 
-    - name: Check compliance
-      id: check-compliance
-      run: |
-        pr_description='${{ inputs.pr-description }}'
-        review_comments='${{ inputs.review-comments }}'
-        rules='${{ steps.load-rules.outputs.rules }}'
+  - name: Check compliance
+    id: check-compliance
+    shell: node
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      PR_DESCRIPTION: ${{ inputs.pr-description }}
+      REVIEW_COMMENTS: ${{ inputs.review-comments }}
+      GUIDELINE_RULES: ${{ steps.load-rules.outputs.rules }}
+    run: |
+      const github = require('@actions/github');
+      const core = require('@actions/core');
 
-        # Implement compliance checking logic here
-        # This is a placeholder implementation
-        compliance_status="compliant"
-        violations=[]
+      async function checkCompliance() {
+        const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+        const { owner, repo } = github.context.repo;
 
-        echo "::set-output name=compliance-status::$compliance_status"
-        echo "::set-output name=violations-list::$violations"
+        try {
+          const prDescription = process.env.PR_DESCRIPTION;
+          const reviewComments = process.env.REVIEW_COMMENTS;
+          const rules = JSON.parse(process.env.GUIDELINE_RULES);
 
-    - name: Debug - Compliance result
-      run: |
-        echo "Compliance status: ${{ steps.check-compliance.outputs.compliance-status }}"
-        echo "Violations: ${{ steps.check-compliance.outputs.violations-list }}"
+          // Implement compliance checking logic here
+          // This is a placeholder implementation
+          let complianceStatus = "compliant";
+          let violations = [];
+
+          // Example rule check
+          if (!prDescription.includes("## Changes Made")) {
+            complianceStatus = "non-compliant";
+            violations.push("PR description missing 'Changes Made' section");
+          }
+
+          core.setOutput('compliance-status', complianceStatus);
+          core.setOutput('violations-list', JSON.stringify(violations));
+        } catch (error) {
+          core.setFailed(`Error checking compliance: ${error.message}`);
+        }
+      }
+
+      checkCompliance();
+
+  - name: Debug - Compliance result
+    shell: bash
+    run: |
+      echo "Compliance status: ${{ steps.check-compliance.outputs.compliance-status }}"
+      echo "Violations: ${{ steps.check-compliance.outputs.violations-list }}"

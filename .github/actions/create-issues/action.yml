@@ -2,6 +2,9 @@ name: 'Create Issues'
 description: 'Creates GitHub issues based on provided data'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   issues-data:
     description: 'JSON string containing data for creating issues'
     required: true
@@ -21,36 +24,43 @@ runs:
 
   - name: Create Issues
     id: create-issues
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        console.log('Debug: Starting issue creation process');
-        const issuesData = JSON.parse('${{ inputs.issues-data }}');
-        console.log('Debug: Parsed issues data:', JSON.stringify(issuesData, null, 2));
-        const createdIssues = [];
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      ISSUES_DATA: ${{ inputs.issues-data }}
+    run: |
+      echo "Debug: Starting issue creation process"
+      created_issues=()
 
-        for (const issue of issuesData) {
-          try {
-            console.log('Debug: Creating issue:', JSON.stringify(issue, null, 2));
-            const { data: createdIssue } = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: issue.title,
-              body: issue.body,
-              labels: issue.labels || [],
-              assignees: issue.assignees || []
-            });
-            console.log(`Debug: Created issue #${createdIssue.number}: ${createdIssue.title}`);
-            createdIssues.push(createdIssue.number);
-          } catch (error) {
-            console.error(`Debug: Error creating issue: ${error.message}`);
-            console.error(error.stack);
-          }
-        }
+      while IFS= read -r issue; do
+        title=$(echo "$issue" | jq -r '.title')
+        body=$(echo "$issue" | jq -r '.body')
+        labels=$(echo "$issue" | jq -r '.labels | join(",")')
+        assignees=$(echo "$issue" | jq -r '.assignees | join(",")')
 
-        console.log('Debug: All issues created. Created issues:', JSON.stringify(createdIssues));
-        core.setOutput('created-issues', JSON.stringify(createdIssues));
+        echo "Debug: Creating issue: $title"
+
+        response=$(curl -s -X POST \
+          -H "Authorization: token $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/repos/$GITHUB_REPOSITORY/issues" \
+          -d "{\"title\":\"$title\",\"body\":\"$body\",\"labels\":[$labels],\"assignees\":[$assignees]}")
+
+        issue_number=$(echo "$response" | jq -r '.number')
+
+        if [ "$issue_number" != "null" ]; then
+          echo "Debug: Created issue #$issue_number: $title"
+          created_issues+=("$issue_number")
+        else
+          echo "Debug: Error creating issue: $title"
+          echo "Response: $response"
+        fi
+      done < <(echo "$ISSUES_DATA" | jq -c '.[]')
+
+      created_issues_json=$(printf '%s\n' "${created_issues[@]}" | jq -R . | jq -s .)
+      echo "created-issues=$created_issues_json" >> $GITHUB_OUTPUT
+
+      echo "Debug: All issues created. Created issues: $created_issues_json"
 
   - name: Debug Output
     shell: bash
@@ -60,8 +70,7 @@ runs:
 
   - name: Error Handling
     if: failure()
+    shell: bash
     run: |
       echo "Debug: An error occurred during the issue creation process"
       echo "created-issues=[]" >> $GITHUB_OUTPUT
-    shell: bash
-

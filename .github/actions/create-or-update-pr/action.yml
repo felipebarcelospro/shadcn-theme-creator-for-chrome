@@ -2,6 +2,9 @@ name: 'Create or Update Pull Request'
 description: 'Creates a new pull request or updates an existing one'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   branch-name:
     description: 'Name of the branch for the PR'
     required: true
@@ -44,7 +47,7 @@ runs:
     id: check-pr
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const branch = '${{ inputs.branch-name }}';
@@ -77,7 +80,7 @@ runs:
     id: create-update-pr
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const existingPrNumber = ${{ steps.check-pr.outputs.result }};
@@ -125,7 +128,7 @@ runs:
     if: inputs.labels
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const prNumber = ${{ steps.create-update-pr.outputs.result }};
@@ -149,7 +152,7 @@ runs:
     if: inputs.reviewers
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const prNumber = ${{ steps.create-update-pr.outputs.result }};
@@ -173,7 +176,7 @@ runs:
     id: verify
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const prNumber = ${{ steps.create-update-pr.outputs.result }};

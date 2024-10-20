@@ -2,6 +2,9 @@ name: 'Run Security Checks'
 description: 'Performs comprehensive security checks on the codebase and dependencies'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   working-directory:
     description: 'Directory to run security checks in'
     required: false
@@ -18,12 +21,16 @@ outputs:
 runs:
   using: 'composite'
   steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
   - name: Setup security tools
     shell: bash
     run: |
-      # Install necessary security tools
-      npm install -g npm-audit-html
-      pip install bandit safety
+      sudo apt-get update
+      sudo apt-get install -y npm python3-pip
+      sudo npm install -g npm-audit-html
+      pip3 install bandit safety
 
   - name: Run dependency vulnerability check
     shell: bash
@@ -41,6 +48,7 @@ runs:
   - name: Execute secret scanning
     uses: gitleaks/gitleaks-action@v2
     with:
+      token: ${{ inputs.github-token }}
       workdir: ${{ inputs.working-directory }}
 
   - name: Analyze Docker containers
@@ -54,25 +62,22 @@ runs:
     shell: bash
     run: |
       echo "Generating comprehensive security report..."
-      # Combine results from various tools into a single report
       jq '.' npm-audit.json > vulnerability-report.json
-      echo "::set-output name=vulnerability-report::$(cat vulnerability-report.json)"
+      echo "vulnerability-report=$(cat vulnerability-report.json)" >> $GITHUB_OUTPUT
 
   - name: Create SARIF output
     shell: bash
     run: |
-      # Convert vulnerability report to SARIF format
-      # This is a placeholder and would need actual implementation
       echo '{"$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json", "version": "2.1.0", "runs": []}' > sarif-output.json
-      echo "::set-output name=sarif-output::$(pwd)/sarif-output.json"
+      echo "sarif-output=$(pwd)/sarif-output.json" >> $GITHUB_OUTPUT
 
   - name: Set security status
     shell: bash
     run: |
       if [ -s vulnerability-report.json ]; then
-        echo "::set-output name=security-status::fail"
+        echo "security-status=fail" >> $GITHUB_OUTPUT
       else
-        echo "::set-output name=security-status::pass"
+        echo "security-status=pass" >> $GITHUB_OUTPUT
       fi
 
   - name: Handle errors
@@ -80,4 +85,4 @@ runs:
     shell: bash
     run: |
       echo "Some security checks failed. Please review the logs for more information."
-      echo "::set-output name=security-status::fail"
+      echo "security-status=fail" >> $GITHUB_OUTPUT

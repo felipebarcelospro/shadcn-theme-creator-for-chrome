@@ -11,6 +11,9 @@ inputs:
   environment:
     description: 'Target environment for the operation'
     required: true
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   operation-status:
@@ -27,44 +30,43 @@ runs:
   steps:
   - name: Parse deployment information
     id: parse-info
-    uses: actions/github-script@v6
-    with:
-      script: |
-        const info = JSON.parse('${{ inputs.deployment-info }}');
-        return info;
+    shell: bash
+    run: |
+      echo '${{ inputs.deployment-info }}' | jq -r 'to_entries | .[] | "echo \(.key)=\(.value) >> $GITHUB_OUTPUT"' | sh
 
   - name: Deploy application
-    if: ${{ inputs.operation == 'deploy' }}
+    if: inputs.operation == 'deploy'
     uses: ./.github/actions/deploy-app
     with:
-      package-name: ${{ fromJson(steps.parse-info.outputs.result).appName }}
-      artifacts-path: ${{ fromJson(steps.parse-info.outputs.result).artifactsPath }}
-      deployment-type: ${{ fromJson(steps.parse-info.outputs.result).deploymentType }}
-      deployment-config: ${{ toJson(fromJson(steps.parse-info.outputs.result).deploymentConfig) }}
+      package-name: ${{ steps.parse-info.outputs.appName }}
+      artifacts-path: ${{ steps.parse-info.outputs.artifactsPath }}
+      deployment-type: ${{ steps.parse-info.outputs.deploymentType }}
+      deployment-config: ${{ steps.parse-info.outputs.deploymentConfig }}
 
   - name: Verify deployment
-    if: ${{ inputs.operation == 'verify' }}
+    if: inputs.operation == 'verify'
     uses: ./.github/actions/verify-deployment
     with:
-      app-name: ${{ fromJson(steps.parse-info.outputs.result).appName }}
+      app-name: ${{ steps.parse-info.outputs.appName }}
       environment: ${{ inputs.environment }}
-      verification-url: ${{ fromJson(steps.parse-info.outputs.result).verificationUrl }}
-      timeout: ${{ fromJson(steps.parse-info.outputs.result).timeout || '30' }}
-      max-retries: ${{ fromJson(steps.parse-info.outputs.result).maxRetries || '3' }}
+      verification-url: ${{ steps.parse-info.outputs.verificationUrl }}
+      timeout: ${{ steps.parse-info.outputs.timeout || '30' }}
+      max-retries: ${{ steps.parse-info.outputs.maxRetries || '3' }}
 
   - name: Rollback deployment
-    if: ${{ inputs.operation == 'rollback' }}
+    if: inputs.operation == 'rollback'
     uses: ./.github/actions/rollback-deployment
     with:
-      app-name: ${{ fromJson(steps.parse-info.outputs.result).appName }}
+      app-name: ${{ steps.parse-info.outputs.appName }}
       environment: ${{ inputs.environment }}
-      current-deployment: ${{ toJson(fromJson(steps.parse-info.outputs.result).currentDeployment) }}
-      last-stable-commit: ${{ fromJson(steps.parse-info.outputs.result).lastStableCommit }}
-      deployment-type: ${{ fromJson(steps.parse-info.outputs.result).deploymentType }}
-      deployment-config: ${{ toJson(fromJson(steps.parse-info.outputs.result).deploymentConfig) }}
+      current-deployment: ${{ steps.parse-info.outputs.currentDeployment }}
+      last-stable-commit: ${{ steps.parse-info.outputs.lastStableCommit }}
+      deployment-type: ${{ steps.parse-info.outputs.deploymentType }}
+      deployment-config: ${{ steps.parse-info.outputs.deploymentConfig }}
 
   - name: Set outputs
     id: set-outputs
+    shell: bash
     run: |
       if [[ "${{ inputs.operation }}" == "deploy" ]]; then
         echo "operation-status=${{ steps.deploy-application.outputs.deployment-status }}" >> $GITHUB_OUTPUT
@@ -76,12 +78,11 @@ runs:
         echo "operation-status=${{ steps.rollback-deployment.outputs.rollback-status }}" >> $GITHUB_OUTPUT
         echo "rollback-status=${{ steps.rollback-deployment.outputs.new-deployment-details }}" >> $GITHUB_OUTPUT
       fi
-    shell: bash
 
   - name: Notify on failure
     if: failure()
     uses: 8398a7/action-slack@v3
     with:
       status: ${{ job.status }}
-      text: "Deployment operation failed for ${{ fromJson(steps.parse-info.outputs.result).appName }} in ${{ inputs.environment }}"
+      text: "Deployment operation failed for ${{ steps.parse-info.outputs.appName }} in ${{ inputs.environment }}"
       webhook_url: ${{ secrets.SLACK_WEBHOOK }}

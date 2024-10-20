@@ -1,8 +1,10 @@
-
 name: 'Prioritize Issue'
 description: 'Automatically prioritizes new issues based on predefined rules'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   issue-number:
     description: 'Number of the issue to prioritize'
     required: true
@@ -19,84 +21,62 @@ outputs:
 runs:
   using: 'composite'
   steps:
-  - name: Debug inputs
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
+  - name: Setup Python
+    uses: actions/setup-python@v4
+    with:
+      python-version: '3.x'
+
+  - name: Install dependencies
     shell: bash
-    run: |
-      echo "Debug: Input values"
-      echo "issue-number: ${{ inputs.issue-number }}"
-      echo "prioritization-rules: ${{ inputs.prioritization-rules }}"
+    run: pip install PyGithub
 
-  - name: Load prioritization rules
-    id: load-rules
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const rules = JSON.parse('${{ inputs.prioritization-rules }}');
-        console.log('Loaded prioritization rules:', rules);
-        return rules;
-
-  - name: Fetch issue details
-    id: fetch-issue
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const { owner, repo } = context.repo;
-        const issueNumber = '${{ inputs.issue-number }}';
-        const { data: issue } = await github.rest.issues.get({
-          owner,
-          repo,
-          issue_number: issueNumber
-        });
-        return issue;
-
-  - name: Analyze and prioritize issue
+  - name: Prioritize Issue
     id: prioritize
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const issue = ${{ steps.fetch-issue.outputs.result }};
-        const rules = ${{ steps.load-rules.outputs.result }};
+    shell: python
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      ISSUE_NUMBER: ${{ inputs.issue-number }}
+      PRIORITIZATION_RULES: ${{ inputs.prioritization-rules }}
+    run: |
+      import os
+      import json
+      from github import Github
 
-        // Implement prioritization logic here
-        // This is a placeholder implementation
-        let priority = 'medium';
-        let reasoning = 'Default priority assigned';
+      # Initialize GitHub client
+      g = Github(os.environ['GITHUB_TOKEN'])
+      repo = g.get_repo(os.environ['GITHUB_REPOSITORY'])
+      issue = repo.get_issue(int(os.environ['ISSUE_NUMBER']))
 
-        // Set outputs
-        core.setOutput('assigned-priority', priority);
-        core.setOutput('prioritization-reasoning', reasoning);
+      # Load prioritization rules
+      rules = json.loads(os.environ['PRIORITIZATION_RULES'])
 
-  - name: Update issue with priority
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const { owner, repo } = context.repo;
-        const issueNumber = '${{ inputs.issue-number }}';
-        const priority = '${{ steps.prioritize.outputs.assigned-priority }}';
-        const reasoning = '${{ steps.prioritize.outputs.prioritization-reasoning }}';
+      # Implement prioritization logic here
+      # This is a placeholder implementation
+      priority = 'medium'
+      reasoning = 'Default priority assigned'
 
-        await github.rest.issues.addLabels({
-          owner,
-          repo,
-          issue_number: issueNumber,
-          labels: [`priority:${priority}`]
-        });
+      # Example of how you might use the rules:
+      for rule in rules:
+        if rule['condition'] in issue.title.lower():
+          priority = rule['priority']
+          reasoning = rule['reason']
+          break
 
-        await github.rest.issues.update({
-          owner,
-          repo,
-          issue_number: issueNumber,
-          body: `${issue.body}\n\n## Prioritization\nPriority: ${priority}\nReasoning: ${reasoning}`
-        });
+      # Update issue with priority
+      issue.add_to_labels(f"priority:{priority}")
+      issue.edit(body=f"{issue.body}\n\n## Prioritization\nPriority: {priority}\nReasoning: {reasoning}")
+
+      # Set outputs
+      print(f"::set-output name=assigned-priority::{priority}")
+      print(f"::set-output name=prioritization-reasoning::{reasoning}")
 
   - name: Error handling
     if: failure()
+    shell: bash
     run: |
       echo "An error occurred during the prioritization process"
       echo "assigned-priority=undefined" >> $GITHUB_OUTPUT
       echo "prioritization-reasoning=Prioritization failed due to an error" >> $GITHUB_OUTPUT
-    shell: bash

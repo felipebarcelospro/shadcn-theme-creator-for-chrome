@@ -2,6 +2,9 @@ name: 'Merge Branch'
 description: 'Automates the process of merging branches while following the project''s merge strategy'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   source-branch:
     description: 'Name of the source branch to merge'
     required: true
@@ -110,6 +113,7 @@ runs:
   - name: Apply branch protection
     uses: ./.github/actions/apply-branch-protection
     with:
+      github-token: ${{ inputs.github-token }}
       branch-name: ${{ inputs.target-branch }}
       require-pull-request: true
       required-approvals: 1

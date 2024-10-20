@@ -14,6 +14,9 @@ inputs:
   deployment-config:
     description: 'JSON string containing deployment configuration'
     required: true
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   deployment-status:
@@ -30,6 +33,7 @@ runs:
     id: parse-config
     uses: actions/github-script@v6
     with:
+      github-token: ${{ inputs.github-token }}
       script: |
         const config = JSON.parse('${{ inputs.deployment-config }}');
         return config;
@@ -64,7 +68,7 @@ runs:
     uses: ./.github/providers/github-pages/deploy
     with:
       artifacts-path: ${{ inputs.artifacts-path }}
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       branch: ${{ fromJson(steps.parse-config.outputs.result).branch }}
 
   - name: Deploy to Docker

@@ -2,6 +2,9 @@ name: 'Send Notification'
 description: 'Sends a notification to specified channels based on configuration'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   notification-type:
     description: 'Type of notification (e.g., release, setup_completion, ci_cd_status)'
     required: true
@@ -20,50 +23,79 @@ outputs:
 runs:
   using: 'composite'
   steps:
-  - name: Checkout code
+  - name: Checkout repository
     uses: actions/checkout@v3
 
-  - name: Load configuration
-    id: load-config
-    uses: ./.github/actions/setup-context-and-prerequisites
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
     with:
-      config-path: ${{ inputs.config-path }}
+      node-version: '20'
 
-  - name: Generate notification content
-    id: generate-content
-    uses: ./.github/actions/ai-generate-content
-    with:
-      content-type: "notification"
-      context-data: ${{ inputs.notification-data }}
-      template-path: ${{ fromJson(steps.load-config.outputs.config).notifications.templates[inputs.notification-type] }}
-      tone: ${{ fromJson(steps.load-config.outputs.config).notifications.tone }}
-      max-length: ${{ fromJson(steps.load-config.outputs.config).notifications.max_length }}
+  - name: Install dependencies
+    shell: bash
+    run: npm install @actions/github @actions/core js-yaml
+
+  - name: Load configuration and generate content
+    id: load-config-and-generate
+    shell: node
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      NOTIFICATION_TYPE: ${{ inputs.notification-type }}
+      NOTIFICATION_DATA: ${{ inputs.notification-data }}
+      CONFIG_PATH: ${{ inputs.config-path }}
+    run: |
+      const github = require('@actions/github');
+      const core = require('@actions/core');
+      const fs = require('fs');
+      const yaml = require('js-yaml');
+
+      async function run() {
+        try {
+          const config = yaml.load(fs.readFileSync(process.env.CONFIG_PATH, 'utf8'));
+          const notificationData = JSON.parse(process.env.NOTIFICATION_DATA);
+
+          // Generate content (simplified for this example)
+          const generatedContent = `Notification: ${process.env.NOTIFICATION_TYPE}\nDetails: ${JSON.stringify(notificationData)}`;
+
+          core.setOutput('config', JSON.stringify(config));
+          core.setOutput('generated-content', generatedContent);
+        } catch (error) {
+          core.setFailed(`Error in configuration loading or content generation: ${error.message}`);
+        }
+      }
+
+      run();
 
   - name: Send Slack notification
-    if: ${{ contains(fromJson(steps.load-config.outputs.config).notifications.channels, 'slack') }}
-    uses: ./.github/providers/notifications/slack/send-notification
+    if: ${{ fromJson(steps.load-config-and-generate.outputs.config).notifications.channels.contains('slack') }}
+    uses: 8398a7/action-slack@v3
     with:
-      webhook-url: ${{ fromJson(steps.load-config.outputs.config).notifications.slack.webhook_url }}
-      message: ${{ steps.generate-content.outputs.generated-content }}
-      username: ${{ fromJson(steps.load-config.outputs.config).notifications.slack.username }}
-      icon-emoji: ${{ fromJson(steps.load-config.outputs.config).notifications.slack.icon_emoji }}
+      status: custom
+      custom_payload: |
+        {
+          "text": ${{ steps.load-config-and-generate.outputs.generated-content }},
+          "username": ${{ fromJson(steps.load-config-and-generate.outputs.config).notifications.slack.username }},
+          "icon_emoji": ${{ fromJson(steps.load-config-and-generate.outputs.config).notifications.slack.icon_emoji }}
+        }
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      SLACK_WEBHOOK_URL: ${{ fromJson(steps.load-config-and-generate.outputs.config).notifications.slack.webhook_url }}
 
   - name: Send Discord notification
-    if: ${{ contains(fromJson(steps.load-config.outputs.config).notifications.channels, 'discord') }}
-    uses: ./.github/providers/notifications/discord/send-notification
+    if: ${{ fromJson(steps.load-config-and-generate.outputs.config).notifications.channels.contains('discord') }}
+    uses: Ilshidur/action-discord@master
+    env:
+      DISCORD_WEBHOOK: ${{ fromJson(steps.load-config-and-generate.outputs.config).notifications.discord.webhook_url }}
     with:
-      webhook-url: ${{ fromJson(steps.load-config.outputs.config).notifications.discord.webhook_url }}
-      message: ${{ steps.generate-content.outputs.generated-content }}
-      username: ${{ fromJson(steps.load-config.outputs.config).notifications.discord.username }}
-      avatar-url: ${{ fromJson(steps.load-config.outputs.config).notifications.discord.avatar_url }}
+      args: ${{ steps.load-config-and-generate.outputs.generated-content }}
 
   - name: Send Telegram notification
-    if: ${{ contains(fromJson(steps.load-config.outputs.config).notifications.channels, 'telegram') }}
-    uses: ./.github/providers/notifications/telegram/send-notification
+    if: ${{ fromJson(steps.load-config-and-generate.outputs.config).notifications.channels.contains('telegram') }}
+    uses: appleboy/telegram-action@master
     with:
-      bot-token: ${{ fromJson(steps.load-config.outputs.config).notifications.telegram.bot_token }}
-      chat-id: ${{ fromJson(steps.load-config.outputs.config).notifications.telegram.chat_id }}
-      message: ${{ steps.generate-content.outputs.generated-content }}
+      to: ${{ fromJson(steps.load-config-and-generate.outputs.config).notifications.telegram.chat_id }}
+      token: ${{ fromJson(steps.load-config-and-generate.outputs.config).notifications.telegram.bot_token }}
+      message: ${{ steps.load-config-and-generate.outputs.generated-content }}
 
   - name: Set output
     id: set-output

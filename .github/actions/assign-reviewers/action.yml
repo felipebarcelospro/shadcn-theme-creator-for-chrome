@@ -2,6 +2,9 @@ name: 'Assign Reviewers'
 description: 'Assigns appropriate reviewers to pull requests based on changed files and team expertise'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   pr-number:
     description: 'Number of the pull request'
     required: true
@@ -17,38 +20,77 @@ outputs:
     description: 'Explanation of reviewer assignment decisions'
 
 runs:
-  using: 'node20'
-  main: 'index.js'
+  using: 'composite'
+  steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
 
-jobs:
-  assign:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '20'
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
+  - name: Install dependencies
+    shell: bash
+    run: npm install @actions/github @actions/core
 
-    - name: Debug - Input values
-      run: |
-        echo "PR number: ${{ inputs.pr-number }}"
-        echo "CODEOWNERS path: ${{ inputs.codeowners-path }}"
+  - name: Assign reviewers
+    id: assign
+    shell: node
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      PR_NUMBER: ${{ inputs.pr-number }}
+      CODEOWNERS_PATH: ${{ inputs.codeowners-path }}
+    run: |
+      const github = require('@actions/github');
+      const core = require('@actions/core');
+      const fs = require('fs');
 
-    - name: Assign reviewers
-      id: assign
-      run: |
-        # Implement reviewer assignment logic here
-        # This is a placeholder implementation
-        assigned_reviewers="@user1, @user2"
-        assignment_reasoning="Assigned based on file changes and expertise"
+      async function assignReviewers() {
+        const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+        const { owner, repo } = github.context.repo;
 
-        echo "::set-output name=assigned-reviewers::$assigned_reviewers"
-        echo "::set-output name=assignment-reasoning::$assignment_reasoning"
+        try {
+          // Fetch PR details
+          const { data: pr } = await octokit.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: parseInt(process.env.PR_NUMBER),
+          });
 
-    - name: Debug - Assignment result
-      run: |
-        echo "Assigned reviewers: ${{ steps.assign.outputs.assigned-reviewers }}"
-        echo "Assignment reasoning: ${{ steps.assign.outputs.assignment-reasoning }}"
+          // Read CODEOWNERS file
+          const codeowners = fs.readFileSync(process.env.CODEOWNERS_PATH, 'utf8');
+
+          // Implement logic to match changed files with CODEOWNERS
+          // This is a simplified example
+          const changedFiles = pr.changed_files;
+          const potentialReviewers = new Set();
+
+          // Simple parsing of CODEOWNERS (this should be more robust in practice)
+          const codeownerRules = codeowners.split('\n').filter(line => line && !line.startsWith('#'));
+
+          codeownerRules.forEach(rule => {
+            const [pattern, ...owners] = rule.split(/\s+/);
+            if (changedFiles.some(file => file.match(new RegExp(pattern)))) {
+              owners.forEach(owner => potentialReviewers.add(owner));
+            }
+          });
+
+          const assignedReviewers = Array.from(potentialReviewers).slice(0, 2); // Limit to 2 reviewers
+
+          // Assign reviewers
+          await octokit.rest.pulls.requestReviewers({
+            owner,
+            repo,
+            pull_number: pr.number,
+            reviewers: assignedReviewers,
+          });
+
+          core.setOutput('assigned-reviewers', assignedReviewers.join(', '));
+          core.setOutput('assignment-reasoning', 'Assigned based on CODEOWNERS matches with changed files');
+        } catch (error) {
+          core.setFailed(`Error assigning reviewers: ${error.message}`);
+        }
+      }
+
+      assignReviewers();

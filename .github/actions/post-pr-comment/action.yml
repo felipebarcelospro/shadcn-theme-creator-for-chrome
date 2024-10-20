@@ -2,6 +2,9 @@ name: 'Post PR Comment'
 description: 'Posts informative comments on pull requests'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   pr-number:
     description: 'Number of the pull request'
     required: true
@@ -16,38 +19,34 @@ outputs:
     description: 'URL of the posted comment'
 
 runs:
-  using: 'node20'
-  main: 'index.js'
+  using: 'composite'
+  steps:
+  - name: Post comment
+    id: post-comment
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      PR_NUMBER: ${{ inputs.pr-number }}
+      COMMENT_CONTENT: ${{ inputs.comment-content }}
+    run: |
+      response=$(curl -s -X POST \
+        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+        -d "{\"body\":\"$COMMENT_CONTENT\"}")
 
-jobs:
-  post-comment:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      comment_url=$(echo "$response" | jq -r '.html_url')
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
+      if [ -n "$comment_url" ] && [ "$comment_url" != "null" ]; then
+        echo "comment-status=success" >> $GITHUB_OUTPUT
+        echo "comment-url=$comment_url" >> $GITHUB_OUTPUT
+      else
+        echo "comment-status=failure" >> $GITHUB_OUTPUT
+        echo "Failed to post comment. Response: $response" >&2
+      fi
 
-    - name: Debug - Input values
-      run: |
-        echo "PR number: ${{ inputs.pr-number }}"
-        echo "Comment content: ${{ inputs.comment-content }}"
-
-    - name: Post comment
-      id: post
-      run: |
-        # Implement comment posting logic here
-        # This is a placeholder implementation
-        comment_status="success"
-        comment_url="https://github.com/example/repo/pull/${{ inputs.pr-number }}#issuecomment-123456789"
-
-        echo "::set-output name=comment-status::$comment_status"
-        echo "::set-output name=comment-url::$comment_url"
-
-    - name: Debug - Comment posting result
-      run: |
-        echo "Comment status: ${{ steps.post.outputs.comment-status }}"
-        echo "Comment URL: ${{ steps.post.outputs.comment-url }}"
+  - name: Debug - Comment posting result
+    shell: bash
+    run: |
+      echo "Comment status: ${{ steps.post-comment.outputs.comment-status }}"
+      echo "Comment URL: ${{ steps.post-comment.outputs.comment-url }}"

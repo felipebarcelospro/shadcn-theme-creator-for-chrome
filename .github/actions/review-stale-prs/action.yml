@@ -2,128 +2,79 @@ name: 'Review Stale PRs'
 description: 'Reviews and manages stale pull requests'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   stale-threshold:
     description: 'Number of days after which a PR is considered stale'
     required: true
 
+outputs:
+  stale-prs-count:
+    description: 'Number of stale PRs found'
+  stale-prs-report:
+    description: 'Report of stale PRs'
+
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
   - name: Debug Inputs
     shell: bash
     run: |
       echo "Debug: Stale Threshold - ${{ inputs.stale-threshold }}"
 
-  - name: Fetch Stale PRs
-    id: fetch-stale-prs
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        console.log('Debug: Starting to fetch stale PRs');
-        const staleThreshold = parseInt('${{ inputs.stale-threshold }}');
-        const staleDate = new Date();
-        staleDate.setDate(staleDate.getDate() - staleThreshold);
-
-        console.log(`Debug: Stale date threshold - ${staleDate.toISOString()}`);
-
-        const { data: pullRequests } = await github.rest.pulls.list({
-          owner: context.repo.owner,
-          repo: context.repo.repo,
-          state: 'open',
-          sort: 'updated',
-          direction: 'asc'
-        });
-
-        console.log(`Debug: Total open PRs - ${pullRequests.length}`);
-
-        const stalePRs = pullRequests.filter(pr => new Date(pr.updated_at) < staleDate);
-        console.log(`Debug: Found ${stalePRs.length} stale PRs`);
-        return JSON.stringify(stalePRs);
-
-  - name: Debug Fetched PRs
+  - name: Fetch and Process Stale PRs
+    id: fetch-process-prs
     shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      STALE_THRESHOLD: ${{ inputs.stale-threshold }}
     run: |
-      echo "Debug: Fetched Stale PRs"
-      echo "${{ steps.fetch-stale-prs.outputs.result }}"
+      stale_date=$(date -d "$STALE_THRESHOLD days ago" +%Y-%m-%d)
+      echo "Debug: Stale date threshold - $stale_date"
 
-  - name: Process Stale PRs
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        console.log('Debug: Starting to process stale PRs');
-        const stalePRs = JSON.parse('${{ steps.fetch-stale-prs.outputs.result }}');
+      stale_prs=$(gh pr list --json number,title,url,updatedAt --limit 1000 | jq --arg date "$stale_date" '[.[] | select(.updatedAt < $date)]')
+      stale_prs_count=$(echo "$stale_prs" | jq length)
+      echo "stale-prs-count=$stale_prs_count" >> $GITHUB_OUTPUT
 
-        for (const pr of stalePRs) {
-          console.log(`Debug: Processing stale PR #${pr.number}`);
+      echo "Debug: Found $stale_prs_count stale PRs"
 
-          console.log(`Debug: Adding 'stale' label to PR #${pr.number}`);
-          await github.rest.issues.addLabels({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: pr.number,
-            labels: ['stale']
-          });
+      for pr in $(echo "$stale_prs" | jq -c '.[]'); do
+        number=$(echo $pr | jq -r '.number')
+        title=$(echo $pr | jq -r '.title')
+        url=$(echo $pr | jq -r '.url')
 
-          console.log(`Debug: Posting comment on PR #${pr.number}`);
-          await github.rest.issues.createComment({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: pr.number,
-            body: 'This pull request has been marked as stale due to lack of recent activity. Please update or close this PR if it's no longer relevant.'
-          });
+        echo "Debug: Processing stale PR #$number"
 
-          if (pr.assignees.length > 0) {
-            console.log(`Debug: Notifying assignees for PR #${pr.number}`);
-            const assignees = pr.assignees.map(a => `@${a.login}`).join(' ');
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              body: `${assignees} This PR requires your attention as it has become stale.`
-            });
-          }
-        }
-        console.log('Debug: Finished processing stale PRs');
+        gh pr edit $number --add-label "stale"
+        gh pr comment $number --body "This pull request has been marked as stale due to lack of recent activity. Please update or close this PR if it's no longer relevant."
 
-  - name: Generate Stale PR Report
-    id: generate-report
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        console.log('Debug: Generating stale PR report');
-        const stalePRs = JSON.parse('${{ steps.fetch-stale-prs.outputs.result }}');
-        const report = stalePRs.map(pr => `- [#${pr.number}](${pr.html_url}): ${pr.title}`).join('\n');
-        console.log(`Debug: Generated report with ${stalePRs.length} PRs`);
-        return report;
+        assignees=$(gh pr view $number --json assignees | jq -r '.assignees[].login')
+        if [ ! -z "$assignees" ]; then
+          echo "Debug: Notifying assignees for PR #$number"
+          assignee_mentions=$(echo $assignees | sed 's/\S\+/@&/g')
+          gh pr comment $number --body "$assignee_mentions This PR requires your attention as it has become stale."
+        fi
+      done
 
-  - name: Debug Generated Report
-    shell: bash
-    run: |
-      echo "Debug: Generated Stale PR Report"
-      echo "${{ steps.generate-report.outputs.result }}"
+      report=$(echo "$stale_prs" | jq -r '.[] | "- [#\(.number)](\(.url)): \(.title)"' | sed ':a;N;$!ba;s/\n/\\n/g')
+      echo "stale-prs-report<<EOF" >> $GITHUB_OUTPUT
+      echo "$report" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
   - name: Create Stale PR Report Issue
-    if: steps.generate-report.outputs.result != ''
-    uses: ./.github/actions/create-issue
-    with:
-      issue-type: 'Stale PR Report'
-      issue-title: 'Weekly Stale PR Report'
-      issue-details: ${{ steps.generate-report.outputs.result }}
-      issue-template: .github/templates/stale_pr_report_template.md
-      labels: '["report", "maintenance"]'
-
-  - name: Debug Issue Creation
-    if: steps.generate-report.outputs.result != ''
+    if: steps.fetch-process-prs.outputs.stale-prs-count != '0'
     shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
-      echo "Debug: Stale PR Report Issue created"
+      issue_title="Weekly Stale PR Report"
+      issue_body="## Stale Pull Requests Report\n\n${{ steps.fetch-process-prs.outputs.stale-prs-report }}"
+      gh issue create --title "$issue_title" --body "$issue_body" --label "report,maintenance"
 
   - name: Error Handling
     if: failure()
+    shell: bash
     run: |
       echo "Debug: An error occurred during the stale PR review process"
       echo "Please check the workflow logs for more details"
-    shell: bash

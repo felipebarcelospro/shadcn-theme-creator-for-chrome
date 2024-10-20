@@ -2,6 +2,9 @@ name: 'Check Existing PR'
 description: 'Checks for existing pull requests to avoid duplicate work'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   branch-name:
     description: 'Name of the branch to check for existing PRs'
     required: true
@@ -25,7 +28,7 @@ runs:
     id: check-pr
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const branch = '${{ inputs.branch-name }}';
@@ -56,7 +59,7 @@ runs:
     id: set-outputs
     shell: bash
     run: |
-      result=${{ steps.check-pr.outputs.result }}
+      result='${{ steps.check-pr.outputs.result }}'
       echo "pr-exists=$(echo $result | jq -r .exists)" >> $GITHUB_OUTPUT
       echo "existing-pr-url=$(echo $result | jq -r .url)" >> $GITHUB_OUTPUT
 

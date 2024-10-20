@@ -2,6 +2,9 @@ name: 'Run Code Quality'
 description: 'Runs code quality checks and linting for the project'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   package-name:
     description: 'Name of the package to run code quality checks on (e.g., web, chrome-extension)'
     required: true
@@ -25,17 +28,19 @@ outputs:
 runs:
   using: "composite"
   steps:
-  - name: Load project configuration
-    id: load-config
-    uses: ./.github/actions/setup-context-and-prerequisites
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
     with:
-      github-token: ${{ github.token }}
+      node-version: '20'
 
   - name: Get package configuration
     id: get-package-config
     shell: bash
     run: |
-      package_config=$(echo '${{ steps.load-config.outputs.config-data }}' | jq -r '.packages[] | select(.name == "${{ inputs.package-name }}")')
+      package_config=$(cat .github/config.json | jq -r '.packages[] | select(.name == "${{ inputs.package-name }}")')
       echo "package-path=$(echo $package_config | jq -r '.path')" >> $GITHUB_OUTPUT
       echo "lint-command=$(echo $package_config | jq -r '.commands.lint')" >> $GITHUB_OUTPUT
 

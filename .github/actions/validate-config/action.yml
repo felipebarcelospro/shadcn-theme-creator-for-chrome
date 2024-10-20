@@ -25,7 +25,7 @@ runs:
   - name: Validate YAML structure
     shell: bash
     run: |
-      if ! yaml-lint .github/config.yml; then
+      if ! yq eval '.github/config.yml' > /dev/null 2>&1; then
         echo "config-validation-status=false" >> $GITHUB_OUTPUT
         echo "::error::config.yml is not a valid YAML file"
         exit 1
@@ -33,7 +33,7 @@ runs:
         echo "config-validation-status=true" >> $GITHUB_OUTPUT
       fi
 
-  - name: Install yaml-lint
+  - name: Install yq
     shell: bash
     run: |
-      npm install -g yaml-lint
+      sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq

@@ -2,8 +2,11 @@ name: 'Enforce Review Approval'
 description: 'Enforces review approval requirements before allowing pull requests to be merged'
 
 inputs:
-  pr-reviews:
-    description: 'Reviews on the pull request'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+  pr-number:
+    description: 'Number of the pull request'
     required: true
   approval-requirements:
     description: 'Path to the approval requirements configuration file'
@@ -16,47 +19,57 @@ outputs:
     description: 'List of missing approvals (if any)'
 
 runs:
-  using: 'node20'
-  main: 'index.js'
+  using: 'composite'
+  steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
 
-jobs:
-  enforce-approval:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '20'
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
+  - name: Install dependencies
+    shell: bash
+    run: npm install @actions/github @actions/core
 
-    - name: Debug - Input values
-      run: |
-        echo "PR reviews: ${{ inputs.pr-reviews }}"
-        echo "Approval requirements: ${{ inputs.approval-requirements }}"
+  - name: Enforce review approval
+    id: enforce-approval
+    shell: node
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      PR_NUMBER: ${{ inputs.pr-number }}
+      APPROVAL_REQUIREMENTS: ${{ inputs.approval-requirements }}
+    run: |
+      const github = require('@actions/github');
+      const core = require('@actions/core');
+      const fs = require('fs');
 
-    - name: Load approval requirements
-      id: load-requirements
-      run: |
-        requirements=$(cat ${{ inputs.approval-requirements }})
-        echo "::set-output name=requirements::$requirements"
+      async function enforceReviewApproval() {
+        const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+        const { owner, repo } = github.context.repo;
 
-    - name: Check approvals
-      id: check-approvals
-      run: |
-        pr_reviews='${{ inputs.pr-reviews }}'
-        requirements='${{ steps.load-requirements.outputs.requirements }}'
+        try {
+          // Fetch PR reviews
+          const { data: reviews } = await octokit.rest.pulls.listReviews({
+            owner,
+            repo,
+            pull_number: parseInt(process.env.PR_NUMBER),
+          });
 
-        # Implement approval checking logic here
-        # This is a placeholder implementation
-        approval_status="approved"
-        missing_approvals=[]
+          // Load approval requirements
+          const requirements = JSON.parse(fs.readFileSync(process.env.APPROVAL_REQUIREMENTS, 'utf8'));
 
-        echo "::set-output name=approval-status::$approval_status"
-        echo "::set-output name=missing-approvals::$missing_approvals"
+          // Implement approval checking logic here
+          // This is a placeholder implementation
+          const approvalStatus = "approved";
+          const missingApprovals = [];
 
-    - name: Debug - Approval result
-      run: |
-        echo "Approval status: ${{ steps.check-approvals.outputs.approval-status }}"
-        echo "Missing approvals: ${{ steps.check-approvals.outputs.missing-approvals }}"
+          core.setOutput('approval-status', approvalStatus);
+          core.setOutput('missing-approvals', JSON.stringify(missingApprovals));
+        } catch (error) {
+          core.setFailed(`Error enforcing review approval: ${error.message}`);
+        }
+      }
+
+      enforceReviewApproval();

@@ -2,6 +2,9 @@ name: 'Create Dependency Update PRs'
 description: 'Creates pull requests for dependency updates'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   update-report:
     description: 'Report of available updates from check-dependency-updates'
     required: true
@@ -16,72 +19,97 @@ outputs:
     description: 'Summary of the pull request creation operation'
 
 runs:
-  using: 'node20'
-  main: 'index.js'
+  using: 'composite'
+  steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
 
-jobs:
-  create-update-prs:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '20'
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
+  - name: Install dependencies
+    shell: bash
+    run: npm install @actions/github @actions/core
 
-    - name: Debug - Input values
-      run: |
-        echo "Update report: ${{ inputs.update-report }}"
-        echo "Vulnerability report: ${{ inputs.vulnerability-report }}"
+  - name: Create update branches and PRs
+    id: create-prs
+    shell: node
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      UPDATE_REPORT: ${{ inputs.update-report }}
+      VULNERABILITY_REPORT: ${{ inputs.vulnerability-report }}
+    run: |
+      const github = require('@actions/github');
+      const core = require('@actions/core');
 
-    - name: Create update branches and PRs
-      id: create-prs
-      run: |
-        update_report='${{ inputs.update-report }}'
-        vulnerability_report='${{ inputs.vulnerability-report }}'
+      async function createUpdatePRs() {
+        const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+        const { owner, repo } = github.context.repo;
 
-        created_prs=()
-        for update_type in major minor patch
-        do
-          updates=$(echo $update_report | jq -r ".$update_type[]")
-          for update in $updates
-          do
-            package=$(echo $update | cut -d: -f1)
-            version=$(echo $update | cut -d: -f2 | cut -d'>' -f2 | tr -d ' ')
-            branch_name="dependency-update/$package-$version"
-            git checkout -b $branch_name
+        try {
+          const updateReport = JSON.parse(process.env.UPDATE_REPORT);
+          const vulnerabilityReport = JSON.parse(process.env.VULNERABILITY_REPORT);
 
-            # Update dependency version (this is a simplified example)
-            sed -i "s/\"$package\": \".*\"/\"$package\": \"$version\"/" package.json
+          const createdPRs = [];
 
-            git add package.json
-            git commit -m "Update $package to version $version"
-            git push origin $branch_name
+          for (const updateType of ['major', 'minor', 'patch']) {
+            const updates = updateReport[updateType] || [];
+            for (const update of updates) {
+              const [packageName, version] = update.split(':');
+              const branchName = `dependency-update/${packageName}-${version.trim()}`;
 
-            pr_title="Update $package to version $version"
-            pr_body="This PR updates $package to version $version."
-            pr_url=$(gh pr create --title "$pr_title" --body "$pr_body" --base main)
+              // Create a new branch
+              await octokit.rest.git.createRef({
+                owner,
+                repo,
+                ref: `refs/heads/${branchName}`,
+                sha: github.context.sha
+              });
 
-            created_prs+=("$pr_url")
+              // Update package.json (simplified example)
+              const { data: packageJson } = await octokit.rest.repos.getContent({
+                owner,
+                repo,
+                path: 'package.json'
+              });
 
-            git checkout main
-          done
-        done
+              const content = Buffer.from(packageJson.content, 'base64').toString('utf-8');
+              const updatedContent = content.replace(
+                new RegExp(`"${packageName}": ".*"`),
+                `"${packageName}": "${version.trim()}"`
+              );
 
-        echo "::set-output name=created-prs::$(echo "${created_prs[@]}" | jq -R -s -c 'split(" ")')"
+              await octokit.rest.repos.createOrUpdateFileContents({
+                owner,
+                repo,
+                path: 'package.json',
+                message: `Update ${packageName} to version ${version.trim()}`,
+                content: Buffer.from(updatedContent).toString('base64'),
+                branch: branchName,
+                sha: packageJson.sha
+              });
 
-    - name: Debug - Created PRs
-      run: |
-        echo "Created PRs: ${{ steps.create-prs.outputs.created-prs }}"
+              // Create PR
+              const { data: pr } = await octokit.rest.pulls.create({
+                owner,
+                repo,
+                title: `Update ${packageName} to version ${version.trim()}`,
+                head: branchName,
+                base: 'main',
+                body: `This PR updates ${packageName} to version ${version.trim()}.`
+              });
 
-    - name: Generate PR creation summary
-      id: pr-summary
-      run: |
-        summary="Created $(echo '${{ steps.create-prs.outputs.created-prs }}' | jq length) pull requests for dependency updates."
-        echo "::set-output name=pr-creation-summary::$summary"
+              createdPRs.push(pr.html_url);
+            }
+          }
 
-    - name: Debug - PR creation summary
-      run: |
-        echo "PR creation summary: ${{ steps.pr-summary.outputs.pr-creation-summary }}"
+          core.setOutput('created-prs', JSON.stringify(createdPRs));
+          core.setOutput('pr-creation-summary', `Created ${createdPRs.length} pull requests for dependency updates.`);
+        } catch (error) {
+          core.setFailed(`Error creating update PRs: ${error.message}`);
+        }
+      }
+
+      createUpdatePRs();

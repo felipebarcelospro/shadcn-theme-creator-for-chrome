@@ -1,10 +1,9 @@
-name: Setup Issue Labels
-
-description: Creates or updates issue labels in the repository
+name: 'Setup Issue Labels'
+description: 'Creates or updates issue labels in the repository'
 
 inputs:
   github-token:
-    description: 'GitHub token for authentication'
+    description: 'GitHub token for API access'
     required: true
   labels:
     description: 'JSON array of label objects to create or update'
@@ -13,15 +12,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
-  - name: Setup Node.js
-    uses: actions/setup-node@v3
-    with:
-      node-version: '20'
-
-  - name: Install dependencies
-    shell: bash
-    run: |
-      npm install @octokit/rest
+  - name: Checkout repository
+    uses: actions/checkout@v3
 
   - name: Create or update labels
     shell: bash
@@ -29,49 +21,24 @@ runs:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       LABELS: ${{ inputs.labels }}
     run: |
-      node -e '
-      const { Octokit } = require("@octokit/rest");
-      const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-      const labels = JSON.parse(process.env.LABELS);
+      labels=$(echo "$LABELS" | jq -c '.[]')
 
-      async function setupLabels() {
-        for (const label of labels) {
-          try {
-            await octokit.issues.getLabel({
-              owner: process.env.GITHUB_REPOSITORY.split("/")[0],
-              repo: process.env.GITHUB_REPOSITORY.split("/")[1],
-              name: label.name
-            });
+      while IFS= read -r label; do
+        name=$(echo "$label" | jq -r '.name')
+        color=$(echo "$label" | jq -r '.color')
+        description=$(echo "$label" | jq -r '.description')
 
-            // Label exists, update it
-            await octokit.issues.updateLabel({
-              owner: process.env.GITHUB_REPOSITORY.split("/")[0],
-              repo: process.env.GITHUB_REPOSITORY.split("/")[1],
-              name: label.name,
-              color: label.color,
-              description: label.description
-            });
-            console.log(`Updated label: ${label.name}`);
-          } catch (error) {
-            if (error.status === 404) {
-              // Label doesn't exist, create it
-              await octokit.issues.createLabel({
-                owner: process.env.GITHUB_REPOSITORY.split("/")[0],
-                repo: process.env.GITHUB_REPOSITORY.split("/")[1],
-                name: label.name,
-                color: label.color,
-                description: label.description
-              });
-              console.log(`Created label: ${label.name}`);
-            } else {
-              console.error(`Error processing label ${label.name}:`, error);
-            }
-          }
-        }
-      }
-
-      setupLabels().catch(console.error);
-      '
+        # Check if label exists
+        if gh label list | grep -q "$name"; then
+          # Update existing label
+          gh label edit "$name" --color "$color" --description "$description"
+          echo "Updated label: $name"
+        else
+          # Create new label
+          gh label create "$name" --color "$color" --description "$description"
+          echo "Created label: $name"
+        fi
+      done <<< "$labels"
 
 outputs:
   labels-updated:

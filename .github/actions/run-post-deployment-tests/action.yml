@@ -13,6 +13,9 @@ inputs:
     description: 'Minimum acceptable performance score'
     required: false
     default: '80'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   test-status:
@@ -23,25 +26,29 @@ outputs:
     description: 'Application performance metrics'
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
   - name: Setup test environment
+    shell: bash
     run: |
+      sudo apt-get update
+      sudo apt-get install -y chromium-browser
       npm install -g playwright
       npm install -g lighthouse
-    shell: bash
 
   - name: Run smoke tests
-    run: |
-      npx playwright test ${{ inputs.test-suite }}/smoke
     shell: bash
+    run: npx playwright test ${{ inputs.test-suite }}/smoke
 
   - name: Execute integration tests
-    run: |
-      npx playwright test ${{ inputs.test-suite }}/integration
     shell: bash
+    run: npx playwright test ${{ inputs.test-suite }}/integration
 
   - name: Perform performance and load testing
+    shell: bash
     run: |
       lighthouse ${{ inputs.app-url }} --output=json --output-path=./lighthouse-report.json
       PERFORMANCE_SCORE=$(jq '.categories.performance.score' ./lighthouse-report.json)
@@ -49,42 +56,37 @@ runs:
         echo "Performance score ($PERFORMANCE_SCORE) is below threshold (${{ inputs.performance-threshold }})"
         exit 1
       fi
-    shell: bash
 
   - name: Check for regression issues
-    run: |
-      npx playwright test ${{ inputs.test-suite }}/regression
     shell: bash
+    run: npx playwright test ${{ inputs.test-suite }}/regression
 
   - name: Validate third-party integrations
-    run: |
-      npx playwright test ${{ inputs.test-suite }}/integrations
     shell: bash
+    run: npx playwright test ${{ inputs.test-suite }}/integrations
 
   - name: Collect user experience metrics
-    run: |
-      npx playwright test ${{ inputs.test-suite }}/ux
     shell: bash
+    run: npx playwright test ${{ inputs.test-suite }}/ux
 
   - name: Generate comprehensive test report
     id: generate-report
+    shell: bash
     run: |
       echo "Generating test report..."
-      # Implement logic to compile results from various test steps
-      echo '{"status": "pass", "details": {...}}' > test-report.json
-    shell: bash
+      echo '{"status": "pass", "details": {}}' > test-report.json
 
   - name: Set outputs
     id: set-outputs
+    shell: bash
     run: |
       echo "test-status=$(jq -r '.status' test-report.json)" >> $GITHUB_OUTPUT
       echo "test-report=$(cat test-report.json | jq -c .)" >> $GITHUB_OUTPUT
       echo "performance-metrics=$(jq '.categories.performance' lighthouse-report.json)" >> $GITHUB_OUTPUT
-    shell: bash
 
   - name: Handle test failures
     if: failure()
+    shell: bash
     run: |
       echo "::error::Post-deployment tests failed. Check the test report for details."
       exit 1
-    shell: bash

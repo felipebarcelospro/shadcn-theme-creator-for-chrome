@@ -2,6 +2,9 @@ name: 'Rollback Deployment'
 description: 'Rolls back a deployment if verification fails or critical issues are detected'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   app-name:
     description: 'Name of the application to rollback'
     required: true
@@ -32,26 +35,22 @@ outputs:
 runs:
   using: "composite"
   steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
   - name: Install dependencies
     shell: bash
     run: |
       sudo apt-get update
       sudo apt-get install -y jq curl
 
-  - name: Parse deployment configuration
-    id: parse-config
-    uses: actions/github-script@v6
-    with:
-      script: |
-        const config = JSON.parse('${{ inputs.deployment-config }}');
-        return config;
-
   - name: Rollback deployment
     id: rollback
     uses: ./.github/actions/deploy-app
     with:
+      github-token: ${{ inputs.github-token }}
       package-name: ${{ inputs.app-name }}
-      artifacts-path: ${{ fromJson(steps.parse-config.outputs.result).artifacts_path }}
+      artifacts-path: ${{ fromJson(inputs.deployment-config).artifacts_path }}
       deployment-type: ${{ inputs.deployment-type }}
       deployment-config: ${{ inputs.deployment-config }}
 
@@ -59,6 +58,7 @@ runs:
     id: verify-rollback
     uses: ./.github/actions/verify-deployment
     with:
+      github-token: ${{ inputs.github-token }}
       app-name: ${{ inputs.app-name }}
       environment: ${{ inputs.environment }}
       verification-url: ${{ steps.rollback.outputs.deployed-url }}
@@ -66,6 +66,7 @@ runs:
   - name: Monitor site health after rollback
     uses: ./.github/actions/monitor-site-health
     with:
+      github-token: ${{ inputs.github-token }}
       urls: ${{ steps.rollback.outputs.deployed-url }}
 
   - name: Set outputs

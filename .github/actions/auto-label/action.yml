@@ -8,6 +8,9 @@ inputs:
   item-number:
     description: 'Number of the issue or PR'
     required: true
+  github-token:
+    description: 'GitHub token'
+    required: true
 
 outputs:
   applied-labels:
@@ -29,7 +32,7 @@ runs:
     id: parse-rules
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const config = {
           auto_labeling: {
@@ -49,7 +52,7 @@ runs:
     id: fetch-content
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const itemType = '${{ inputs.item-type }}';
@@ -76,10 +79,10 @@ runs:
     id: apply-labels
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
-        const rules = ${{ steps.parse-rules.outputs.result }};
-        const content = ${{ steps.fetch-content.outputs.result }};
+        const rules = ${{ toJson(steps.parse-rules.outputs.result) }};
+        const content = ${{ toJson(steps.fetch-content.outputs.result) }};
         const labelsToApply = rules.filter(rule => new RegExp(rule.pattern, 'i').test(content)).map(rule => rule.label);
 
         const { owner, repo } = context.repo;
@@ -98,8 +101,8 @@ runs:
   - name: Set outputs
     id: set-outputs
     run: |
-      echo "applied-labels=${{ steps.apply-labels.outputs.result }}" >> $GITHUB_OUTPUT
-      echo "labeling-summary=Applied labels: ${{ steps.apply-labels.outputs.result }}" >> $GITHUB_OUTPUT
+      echo "applied-labels=${{ toJson(steps.apply-labels.outputs.result) }}" >> $GITHUB_OUTPUT
+      echo "labeling-summary=Applied labels: ${{ toJson(steps.apply-labels.outputs.result) }}" >> $GITHUB_OUTPUT
     shell: bash
 
   - name: Error handling
@@ -109,4 +112,3 @@ runs:
       echo "applied-labels=[]" >> $GITHUB_OUTPUT
       echo "labeling-summary=Auto-labeling failed due to an error" >> $GITHUB_OUTPUT
     shell: bash
-

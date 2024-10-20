@@ -2,6 +2,9 @@ name: 'Send Webhook'
 description: 'Sends a webhook to a specified URL with custom payload'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   webhook-url:
     description: 'URL to send the webhook to'
     required: true
@@ -22,15 +25,22 @@ outputs:
 runs:
   using: "composite"
   steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
   - name: Send webhook
+    id: send-webhook
     shell: bash
     run: |
-      response=$(curl -X POST -H "Content-Type: application/json" -H "$CUSTOM_HEADERS" -d "$PAYLOAD" -w "\n%{http_code}" "$WEBHOOK_URL")
+      response=$(curl -X POST -H "Content-Type: application/json" -H "Authorization: token ${{ inputs.github-token }}" -H "${{ inputs.custom-headers }}" -d '${{ inputs.payload }}' -w "\n%{http_code}" "${{ inputs.webhook-url }}")
       status_code=$(echo "$response" | tail -n1)
       response_body=$(echo "$response" | sed '$d')
       echo "status-code=$status_code" >> $GITHUB_OUTPUT
       echo "response-body=$response_body" >> $GITHUB_OUTPUT
-    env:
-      WEBHOOK_URL: ${{ inputs.webhook-url }}
-      PAYLOAD: ${{ inputs.payload }}
-      CUSTOM_HEADERS: ${{ inputs.custom-headers }}
+
+  - name: Set outputs
+    id: set-outputs
+    shell: bash
+    run: |
+      echo "status-code=${{ steps.send-webhook.outputs.status-code }}" >> $GITHUB_OUTPUT
+      echo "response-body=${{ steps.send-webhook.outputs.response-body }}" >> $GITHUB_OUTPUT

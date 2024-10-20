@@ -2,6 +2,9 @@ name: 'Generate Metrics'
 description: 'Generates and reports key project metrics for development insights'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   time-range:
     description: 'Time range for metrics calculation (e.g., "7 days", "1 month")'
     required: true
@@ -38,7 +41,7 @@ runs:
     id: fetch-data
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { owner, repo } = context.repo;
         const timeRange = '${{ inputs.time-range }}';
@@ -56,7 +59,7 @@ runs:
     id: calculate-metrics
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const { prs, issues, commits } = ${{ steps.fetch-data.outputs.result }};
 
@@ -95,7 +98,7 @@ runs:
     id: generate-visualizations
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         // Placeholder for visualization data generation
         const visualizationData = {
@@ -109,7 +112,7 @@ runs:
     id: compile-report
     uses: actions/github-script@v6
     with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+      github-token: ${{ inputs.github-token }}
       script: |
         const metrics = ${{ steps.calculate-metrics.outputs.result }};
         const codeAnalysis = ${{ steps.code-analysis.outputs.result }};

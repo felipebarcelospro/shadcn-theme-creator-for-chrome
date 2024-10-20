@@ -12,6 +12,9 @@ inputs:
     description: 'Working directory for installation'
     required: false
     default: '.'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   installation-status:
@@ -24,12 +27,16 @@ outputs:
 runs:
   using: 'composite'
   steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
   - name: Setup Node.js
     uses: actions/setup-node@v3
     with:
       node-version: '20'
 
   - name: Cache dependencies
+    id: cache
     uses: actions/cache@v3
     with:
       path: |
@@ -71,3 +78,38 @@ runs:
       echo "installation-status=success" >> $GITHUB_OUTPUT
       echo "installed-packages=${{ steps.get-packages.outputs.installed-packages }}" >> $GITHUB_OUTPUT
       echo "cache-hit=${{ steps.cache.outputs.cache-hit }}" >> $GITHUB_OUTPUT
+
+  - name: Assign reviewers
+    id: assign
+    shell: node
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+    run: |
+      const github = require('@actions/github');
+      const core = require('@actions/core');
+
+      async function assignReviewers() {
+        const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+        const { owner, repo } = github.context.repo;
+
+        try {
+          // Your reviewer assignment logic here
+          // This is a placeholder and should be replaced with actual logic
+          const assignedReviewers = ['reviewer1', 'reviewer2'];
+
+          // Assign reviewers
+          await octokit.rest.pulls.requestReviewers({
+            owner,
+            repo,
+            pull_number: github.context.issue.number,
+            reviewers: assignedReviewers,
+          });
+
+          core.setOutput('assigned-reviewers', assignedReviewers.join(', '));
+          core.setOutput('assignment-reasoning', 'Assigned based on project requirements');
+        } catch (error) {
+          core.setFailed(`Error assigning reviewers: ${error.message}`);
+        }
+      }
+
+      assignReviewers();

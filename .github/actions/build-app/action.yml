@@ -13,6 +13,9 @@ inputs:
     description: 'Build environment (e.g., production, staging)'
     required: false
     default: 'production'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   build-status:
@@ -30,7 +33,7 @@ runs:
   - name: Setup Node.js
     uses: actions/setup-node@v3
     with:
-      node-version: '16'
+      node-version: '20'
 
   - name: Detect package manager and install dependencies
     shell: bash
@@ -62,13 +65,13 @@ runs:
     run: |
       mkdir -p artifacts
       tar -czf artifacts/build.tar.gz -C ${{ inputs.working-directory }}/build .
-      echo "::set-output name=build-artifacts::$(pwd)/artifacts/build.tar.gz"
+      echo "build-artifacts=$(pwd)/artifacts/build.tar.gz" >> $GITHUB_OUTPUT
 
   - name: Generate build report and performance metrics
     shell: bash
     run: |
       echo '{"buildTime": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"}' > metrics.json
-      echo "::set-output name=performance-metrics::$(cat metrics.json)"
+      echo "performance-metrics=$(cat metrics.json)" >> $GITHUB_OUTPUT
 
   - name: Cache build artifacts
     uses: actions/cache@v3
@@ -79,12 +82,12 @@ runs:
   - name: Set outputs
     shell: bash
     run: |
-      echo "::set-output name=build-status::success"
-      echo "::set-output name=build-logs::$(pwd)/build.log"
+      echo "build-status=success" >> $GITHUB_OUTPUT
+      echo "build-logs=$(pwd)/build.log" >> $GITHUB_OUTPUT
 
   - name: Error handling
     if: failure()
     shell: bash
     run: |
-      echo "::set-output name=build-status::failure"
+      echo "build-status=failure" >> $GITHUB_OUTPUT
       echo "Build failed. Check logs for details."

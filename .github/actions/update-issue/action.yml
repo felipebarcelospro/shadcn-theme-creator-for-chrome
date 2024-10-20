@@ -2,6 +2,9 @@ name: 'Update Issue'
 description: 'Updates an existing GitHub issue with new content'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   issue-number:
     description: 'The number of the issue to update'
     required: true
@@ -34,51 +37,33 @@ runs:
 
   - name: Update issue
     id: update-issue
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const { owner, repo } = context.repo;
-        const issueNumber = '${{ inputs.issue-number }}';
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      ISSUE_NUMBER: ${{ inputs.issue-number }}
+      COMMENT_BODY: ${{ inputs.comment-body }}
+      UPDATE_BODY: ${{ inputs.update-body }}
+      BODY_UPDATE: ${{ inputs.body-update }}
+    run: |
+      if [ -n "$COMMENT_BODY" ]; then
+        gh issue comment $ISSUE_NUMBER --body "$COMMENT_BODY"
+        echo "Comment added successfully"
+      fi
 
-        try {
-          if ('${{ inputs.comment-body }}') {
-            await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number: issueNumber,
-              body: '${{ inputs.comment-body }}'
-            });
-            console.log('Comment added successfully');
-          }
+      if [ "$UPDATE_BODY" = "true" ] && [ -n "$BODY_UPDATE" ]; then
+        CURRENT_BODY=$(gh issue view $ISSUE_NUMBER --json body --jq .body)
+        NEW_BODY="${CURRENT_BODY}
 
-          if ('${{ inputs.update-body }}' === 'true' && '${{ inputs.body-update }}') {
-            const { data: issue } = await github.rest.issues.get({
-              owner,
-              repo,
-              issue_number: issueNumber
-            });
+      $BODY_UPDATE"
+        gh issue edit $ISSUE_NUMBER --body "$NEW_BODY"
+        echo "Issue body updated successfully"
+      fi
 
-            await github.rest.issues.update({
-              owner,
-              repo,
-              issue_number: issueNumber,
-              body: `${issue.body}\n\n${{ inputs.body-update }}`
-            });
-            console.log('Issue body updated successfully');
-          }
-
-          core.setOutput('update-status', 'success');
-        } catch (error) {
-          console.error('Error updating issue:', error);
-          core.setOutput('update-status', 'failure');
-          core.setFailed('Failed to update issue');
-        }
+      echo "update-status=success" >> $GITHUB_OUTPUT
 
   - name: Error handling
     if: failure()
+    shell: bash
     run: |
       echo "An error occurred during the issue update process"
       echo "update-status=failure" >> $GITHUB_OUTPUT
-    shell: bash
-

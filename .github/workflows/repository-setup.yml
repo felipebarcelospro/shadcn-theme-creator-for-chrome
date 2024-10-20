@@ -47,6 +47,7 @@ jobs:
         with:
           branch-name: ${{ fromJson(steps.setup-context.outputs.config-data).version_control.main_branches[0] }}
           base-branch: 'main'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate Content
         id: generate-content
@@ -57,6 +58,7 @@ jobs:
           template-path: .github/templates/repository_setup_template.md
           tone: ${{ fromJson(steps.setup-context.outputs.config-data).documentation.tone }}
           max-length: ${{ fromJson(steps.setup-context.outputs.config-data).documentation.max_length }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Branch Protection Rules
         id: setup-branch-protection
@@ -81,6 +83,7 @@ jobs:
           discussion-title: "Welcome to the Repository"
           discussion-content: ${{ steps.generate-content.outputs.generated-content }}
           category: ${{ fromJson(steps.setup-context.outputs.config-data).community.discussion_categories[0] }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Issue Labels
         id: setup-issue-labels
@@ -130,6 +133,7 @@ jobs:
         with:
           commit-message: "chore: initial repository setup"
           files: 'CONTRIBUTING.md CODE_OF_CONDUCT.md README.md CHANGELOG.md .github/dependabot.yml CODEOWNERS'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Pull Request
         id: create-pull-request
@@ -146,6 +150,7 @@ jobs:
             - feat: add CHANGELOG.md
             - chore: configure Dependabot
             - chore: add CODEOWNERS file
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Notification
         id: send-notification
@@ -156,11 +161,16 @@ jobs:
             {
               "setup-details": ${{ toJson(steps) }}
             }
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Mark repository as configured
         id: mark-configured
         run: |
           echo '{"configured": true}' > .github/repository-config.json
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
           git add .github/repository-config.json
           git commit -m "chore: mark repository as configured"
           git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

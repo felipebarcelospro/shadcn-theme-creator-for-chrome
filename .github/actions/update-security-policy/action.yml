@@ -2,6 +2,9 @@ name: 'Update Security Policy'
 description: 'Updates the repository security policy based on security analysis results'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   security-report:
     description: 'JSON string containing the security analysis report'
     required: true
@@ -12,105 +15,65 @@ inputs:
 outputs:
   policy-updated:
     description: 'Boolean indicating whether the policy was updated'
-    value: ${{ steps.update-policy.outputs.policy-updated }}
   update-summary:
     description: 'Summary of updates made to the security policy'
-    value: ${{ steps.update-policy.outputs.update-summary }}
 
 runs:
   using: 'composite'
   steps:
   - name: Checkout repository
-    uses: actions/checkout@v4
-
-  - name: Setup Node.js
-    uses: actions/setup-node@v4
-    with:
-      node-version: '20'
-
-  - name: Install dependencies
-    run: npm install @actions/core @actions/github js-yaml
-    shell: bash
+    uses: actions/checkout@v3
 
   - name: Parse security report and AI analysis
     id: parse-inputs
-    run: |
-      echo "SECURITY_REPORT<<EOF" >> $GITHUB_ENV
-      echo '${{ inputs.security-report }}' >> $GITHUB_ENV
-      echo "EOF" >> $GITHUB_ENV
-
-      echo "AI_ANALYSIS<<EOF" >> $GITHUB_ENV
-      echo '${{ inputs.ai-analysis }}' >> $GITHUB_ENV
-      echo "EOF" >> $GITHUB_ENV
     shell: bash
+    run: |
+      echo "${{ inputs.security-report }}" > security_report.json
+      echo "${{ inputs.ai-analysis }}" > ai_analysis.txt
 
   - name: Update security policy
     id: update-policy
-    run: |
-      const core = require('@actions/core');
-      const github = require('@actions/github');
-      const yaml = require('js-yaml');
-      const fs = require('fs');
-
-      const securityReport = JSON.parse(process.env.SECURITY_REPORT);
-      const aiAnalysis = process.env.AI_ANALYSIS;
-
-      const policyPath = '.github/SECURITY.md';
-      let policyContent = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, 'utf8') : '';
-
-      // Update policy based on security report and AI analysis
-      const updateSummary = [];
-
-      // Example: Update supported versions
-      const supportedVersions = securityReport.supportedVersions || [];
-      if (supportedVersions.length > 0) {
-        policyContent = policyContent.replace(
-          /## Supported Versions[\s\S]*?(?=##|$)/,
-          `## Supported Versions\n\nThe following versions are currently supported with security updates:\n\n${supportedVersions.map(v => `- ${v}`).join('\n')}\n\n`
-        );
-        updateSummary.push('Updated supported versions');
-      }
-
-      // Example: Update reporting process based on AI analysis
-      if (aiAnalysis.includes('reporting process')) {
-        const reportingSection = aiAnalysis.match(/Reporting Process:[\s\S]*?(?=\n\n|$)/);
-        if (reportingSection) {
-          policyContent = policyContent.replace(
-            /## Reporting a Vulnerability[\s\S]*?(?=##|$)/,
-            `## Reporting a Vulnerability\n\n${reportingSection[0]}\n\n`
-          );
-          updateSummary.push('Updated vulnerability reporting process');
-        }
-      }
-
-      // Write updated policy
-      fs.writeFileSync(policyPath, policyContent);
-
-      const policyUpdated = updateSummary.length > 0;
-      core.setOutput('policy-updated', policyUpdated);
-      core.setOutput('update-summary', updateSummary.join(', '));
-
-      if (policyUpdated) {
-        console.log('Security policy updated successfully.');
-      } else {
-        console.log('No updates were necessary for the security policy.');
-      }
     shell: bash
+    run: |
+      POLICY_PATH='.github/SECURITY.md'
+      POLICY_UPDATED=false
+      UPDATE_SUMMARY=""
+
+      # Update supported versions
+      SUPPORTED_VERSIONS=$(jq -r '.supportedVersions | join("\n- ")' security_report.json)
+      if [ ! -z "$SUPPORTED_VERSIONS" ]; then
+        sed -i '/## Supported Versions/,/##/c\## Supported Versions\n\nThe following versions are currently supported with security updates:\n\n- '"$SUPPORTED_VERSIONS"'\n\n##' $POLICY_PATH
+        POLICY_UPDATED=true
+        UPDATE_SUMMARY="Updated supported versions"
+      fi
+
+      # Update reporting process based on AI analysis
+      REPORTING_PROCESS=$(sed -n '/Reporting Process:/,/^$/p' ai_analysis.txt)
+      if [ ! -z "$REPORTING_PROCESS" ]; then
+        sed -i '/## Reporting a Vulnerability/,/##/c\## Reporting a Vulnerability\n\n'"$REPORTING_PROCESS"'\n\n##' $POLICY_PATH
+        POLICY_UPDATED=true
+        UPDATE_SUMMARY="$UPDATE_SUMMARY, Updated vulnerability reporting process"
+      fi
+
+      echo "policy-updated=$POLICY_UPDATED" >> $GITHUB_OUTPUT
+      echo "update-summary=$UPDATE_SUMMARY" >> $GITHUB_OUTPUT
 
   - name: Commit changes
     if: steps.update-policy.outputs.policy-updated == 'true'
+    shell: bash
     run: |
       git config --local user.email "action@github.com"
       git config --local user.name "GitHub Action"
       git add .github/SECURITY.md
       git commit -m "Update security policy based on latest analysis"
       git push
-    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
 
   - name: Error handling
     if: failure()
+    shell: bash
     run: |
       echo "An error occurred while updating the security policy."
       echo "policy-updated=false" >> $GITHUB_OUTPUT
       echo "update-summary=Failed to update security policy due to an error" >> $GITHUB_OUTPUT
-    shell: bash

@@ -25,12 +25,14 @@ jobs:
         uses: ./.github/actions/check-site-availability
         with:
           urls: ${{ steps.setup-context.outputs.github_pages_urls }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Measure Performance
         id: measure-performance
         uses: ./.github/actions/measure-site-performance
         with:
           urls: ${{ steps.setup-context.outputs.github_pages_urls }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Analyze Results
         id: analyze-results
@@ -38,6 +40,7 @@ jobs:
         with:
           availability-status: ${{ steps.check-availability.outputs.availability_status }}
           performance-metrics: ${{ steps.measure-performance.outputs.performance_metrics }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Issues (if needed)
         id: create-issues
@@ -47,6 +50,7 @@ jobs:
           issue-type: ${{ steps.analyze-results.outputs.issue_type }}
           issue-details: ${{ steps.analyze-results.outputs.issue_details }}
           issue-template: .github/templates/issue_auto_generated_template.md
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Notifications
         id: send-notifications
@@ -58,6 +62,7 @@ jobs:
               "analysis-report": ${{ steps.analyze-results.outputs.analysis_report }},
               "issue-url": "${{ steps.create-issues.outputs.issue_url }}"
             }
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Webhook
         id: send-webhook
@@ -69,6 +74,7 @@ jobs:
               "performance-data": ${{ steps.measure-performance.outputs.performance_metrics }},
               "availability-data": ${{ steps.check-availability.outputs.availability_status }}
             }
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Monitoring Failure Issue
         id: create-monitoring-failure-issue
@@ -78,3 +84,4 @@ jobs:
           issue-title: "Performance Monitoring Failed"
           issue-body: "The performance and availability monitoring workflow encountered an error. Manual check required."
           labels: '["high-priority", "monitoring-error"]'
+          github-token: ${{ secrets.GITHUB_TOKEN }}

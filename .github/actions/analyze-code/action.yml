@@ -9,6 +9,9 @@ inputs:
   previous-results:
     description: 'Path to previous analysis results for comparison'
     required: false
+  github-token:
+    description: 'GitHub token for authentication'
+    required: true
 
 outputs:
   quality-report:

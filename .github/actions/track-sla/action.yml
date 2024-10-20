@@ -2,6 +2,9 @@ name: 'Track SLA'
 description: 'Automatically tracks and enforces Service Level Agreements (SLAs) for issues and PRs'
 
 inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
   item-type:
     description: 'Type of item to track SLA (issue/pr)'
     required: true
@@ -24,128 +27,88 @@ outputs:
 runs:
   using: 'composite'
   steps:
-  - name: Debug inputs
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
+  - name: Setup Python
+    uses: actions/setup-python@v4
+    with:
+      python-version: '3.x'
+
+  - name: Install dependencies
     shell: bash
     run: |
-      echo "Debug: Input values"
-      echo "item-type: ${{ inputs.item-type }}"
-      echo "item-number: ${{ inputs.item-number }}"
-      echo "sla-timeframe: ${{ inputs.sla-timeframe }}"
-      echo "warning-threshold: ${{ inputs.warning-threshold }}"
+      python -m pip install --upgrade pip
+      pip install PyGithub
 
-  - name: Fetch item details
-    id: fetch-item
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const { owner, repo } = context.repo;
-        const itemType = '${{ inputs.item-type }}';
-        const itemNumber = '${{ inputs.item-number }}';
-        let item;
-        if (itemType === 'issue') {
-          const { data: issue } = await github.rest.issues.get({
-            owner,
-            repo,
-            issue_number: itemNumber
-          });
-          item = issue;
-        } else if (itemType === 'pr') {
-          const { data: pr } = await github.rest.pulls.get({
-            owner,
-            repo,
-            pull_number: itemNumber
-          });
-          item = pr;
-        }
-        return item;
-
-  - name: Calculate SLA status
-    id: calculate-sla
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const item = ${{ steps.fetch-item.outputs.result }};
-        const createdAt = new Date(item.created_at);
-        const now = new Date();
-        const elapsedTime = (now - createdAt) / (1000 * 60); // in minutes
-
-        const slaTimeframe = parseInt('${{ inputs.sla-timeframe }}');
-        const warningThreshold = parseInt('${{ inputs.warning-threshold }}');
-
-        let slaStatus = 'within SLA';
-        let timeRemaining = slaTimeframe - elapsedTime;
-
-        if (timeRemaining <= 0) {
-          slaStatus = 'breached';
-          timeRemaining = 0;
-        } else if (timeRemaining <= warningThreshold) {
-          slaStatus = 'at risk';
-        }
-
-        return { slaStatus, timeRemaining: Math.round(timeRemaining) };
-
-  - name: Update item with SLA info
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const { owner, repo } = context.repo;
-        const itemType = '${{ inputs.item-type }}';
-        const itemNumber = '${{ inputs.item-number }}';
-        const { slaStatus, timeRemaining } = ${{ steps.calculate-sla.outputs.result }};
-
-        const slaInfo = `
-        ## SLA Status
-        - Current status: ${slaStatus}
-        - Time remaining: ${timeRemaining} minutes
-        `;
-
-        if (itemType === 'issue') {
-          await github.rest.issues.update({
-            owner,
-            repo,
-            issue_number: itemNumber,
-            body: slaInfo
-          });
-        } else if (itemType === 'pr') {
-          await github.rest.pulls.update({
-            owner,
-            repo,
-            pull_number: itemNumber,
-            body: slaInfo
-          });
-        }
-
-  - name: Apply SLA labels
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      script: |
-        const { owner, repo } = context.repo;
-        const itemNumber = '${{ inputs.item-number }}';
-        const { slaStatus } = ${{ steps.calculate-sla.outputs.result }};
-
-        const labelMap = {
-          'within SLA': 'SLA: On Track',
-          'at risk': 'SLA: At Risk',
-          'breached': 'SLA: Breached'
-        };
-
-        await github.rest.issues.addLabels({
-          owner,
-          repo,
-          issue_number: itemNumber,
-          labels: [labelMap[slaStatus]]
-        });
-
-  - name: Set outputs
-    id: set-outputs
-    shell: bash
+  - name: Track SLA
+    id: track-sla
+    shell: python
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      ITEM_TYPE: ${{ inputs.item-type }}
+      ITEM_NUMBER: ${{ inputs.item-number }}
+      SLA_TIMEFRAME: ${{ inputs.sla-timeframe }}
+      WARNING_THRESHOLD: ${{ inputs.warning-threshold }}
     run: |
-      echo "sla-status=${{ fromJson(steps.calculate-sla.outputs.result).slaStatus }}" >> $GITHUB_OUTPUT
-      echo "time-remaining=${{ fromJson(steps.calculate-sla.outputs.result).timeRemaining }}" >> $GITHUB_OUTPUT
+      import os
+      import sys
+      from github import Github
+      from datetime import datetime, timezone
+
+      def calculate_sla(created_at, sla_timeframe, warning_threshold):
+          now = datetime.now(timezone.utc)
+          elapsed_time = (now - created_at).total_seconds() / 60  # in minutes
+          time_remaining = sla_timeframe - elapsed_time
+
+          if time_remaining <= 0:
+              return 'breached', 0
+          elif time_remaining <= warning_threshold:
+              return 'at risk', round(time_remaining)
+          else:
+              return 'within SLA', round(time_remaining)
+
+      try:
+          g = Github(os.environ['GITHUB_TOKEN'])
+          repo = g.get_repo(os.environ['GITHUB_REPOSITORY'])
+
+          item_type = os.environ['ITEM_TYPE']
+          item_number = int(os.environ['ITEM_NUMBER'])
+          sla_timeframe = int(os.environ['SLA_TIMEFRAME'])
+          warning_threshold = int(os.environ['WARNING_THRESHOLD'])
+
+          if item_type == 'issue':
+              item = repo.get_issue(item_number)
+          elif item_type == 'pr':
+              item = repo.get_pull(item_number)
+          else:
+              raise ValueError(f"Invalid item type: {item_type}")
+
+          sla_status, time_remaining = calculate_sla(item.created_at, sla_timeframe, warning_threshold)
+
+          sla_info = f"""
+          ## SLA Status
+          - Current status: {sla_status}
+          - Time remaining: {time_remaining} minutes
+          """
+
+          item.edit(body=sla_info)
+
+          label_map = {
+              'within SLA': 'SLA: On Track',
+              'at risk': 'SLA: At Risk',
+              'breached': 'SLA: Breached'
+          }
+          item.add_to_labels(label_map[sla_status])
+
+          print(f"::set-output name=sla-status::{sla_status}")
+          print(f"::set-output name=time-remaining::{time_remaining}")
+
+      except Exception as e:
+          print(f"Error: {str(e)}", file=sys.stderr)
+          print("::set-output name=sla-status::error")
+          print("::set-output name=time-remaining::0")
+          sys.exit(1)
 
   - name: Error handling
     if: failure()

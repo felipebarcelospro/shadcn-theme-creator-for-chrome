@@ -9,60 +9,89 @@ inputs:
   current_version:
     description: 'Current version number (optional)'
     required: false
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   new_version:
     description: 'The new version number'
-    value: ${{ steps.calculate-version.outputs.new_version }}
   previous_version:
     description: 'The previous version number'
-    value: ${{ steps.get-previous-version.outputs.previous_version }}
 
 runs:
   using: 'composite'
   steps:
-  - name: Get previous version
-    id: get-previous-version
+  - name: Checkout repository
+    uses: actions/checkout@v3
+
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '20'
+
+  - name: Install dependencies
     shell: bash
+    run: npm install @actions/github @actions/core
+
+  - name: Get previous version and calculate new version
+    id: version-calc
+    shell: node
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      RELEASE_TYPE: ${{ inputs.release_type }}
+      CURRENT_VERSION: ${{ inputs.current_version }}
     run: |
-      if [ -n "${{ inputs.current_version }}" ]; then
-        echo "previous_version=${{ inputs.current_version }}" >> $GITHUB_OUTPUT
-      else
-        previous_version=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
-        echo "previous_version=${previous_version#v}" >> $GITHUB_OUTPUT
-      fi
+      const github = require('@actions/github');
+      const core = require('@actions/core');
 
-  - name: Calculate new version
-    id: calculate-version
-    shell: bash
-    run: |
-      previous_version="${{ steps.get-previous-version.outputs.previous_version }}"
-      IFS='.' read -ra version_parts <<< "$previous_version"
-      major=${version_parts[0]}
-      minor=${version_parts[1]}
-      patch=${version_parts[2]}
+      async function getVersions() {
+        const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+        const { owner, repo } = github.context.repo;
 
-      case "${{ inputs.release_type }}" in
-        major)
-          new_version="$((major + 1)).0.0"
-          ;;
-        minor)
-          new_version="${major}.$((minor + 1)).0"
-          ;;
-        patch)
-          new_version="${major}.${minor}.$((patch + 1))"
-          ;;
-        *)
-          echo "Invalid release type: ${{ inputs.release_type }}"
-          exit 1
-          ;;
-      esac
+        try {
+          let previousVersion = process.env.CURRENT_VERSION;
+          if (!previousVersion) {
+            const { data: latestRelease } = await octokit.rest.repos.getLatestRelease({
+              owner,
+              repo,
+            });
+            previousVersion = latestRelease.tag_name.replace('v', '');
+          }
 
-      echo "new_version=${new_version}" >> $GITHUB_OUTPUT
+          const [major, minor, patch] = previousVersion.split('.').map(Number);
+          let newVersion;
+
+          switch (process.env.RELEASE_TYPE) {
+            case 'major':
+              newVersion = `${major + 1}.0.0`;
+              break;
+            case 'minor':
+              newVersion = `${major}.${minor + 1}.0`;
+              break;
+            case 'patch':
+              newVersion = `${major}.${minor}.${patch + 1}`;
+              break;
+            default:
+              throw new Error(`Invalid release type: ${process.env.RELEASE_TYPE}`);
+          }
+
+          core.setOutput('previous_version', previousVersion);
+          core.setOutput('new_version', newVersion);
+
+          console.log(`Previous version: ${previousVersion}`);
+          console.log(`New version: ${newVersion}`);
+          console.log(`Release type: ${process.env.RELEASE_TYPE}`);
+        } catch (error) {
+          core.setFailed(`Error calculating version: ${error.message}`);
+        }
+      }
+
+      getVersions();
 
   - name: Debug output
     shell: bash
     run: |
-      echo "Previous version: ${{ steps.get-previous-version.outputs.previous_version }}"
-      echo "New version: ${{ steps.calculate-version.outputs.new_version }}"
+      echo "Previous version: ${{ steps.version-calc.outputs.previous_version }}"
+      echo "New version: ${{ steps.version-calc.outputs.new_version }}"
       echo "Release type: ${{ inputs.release_type }}"

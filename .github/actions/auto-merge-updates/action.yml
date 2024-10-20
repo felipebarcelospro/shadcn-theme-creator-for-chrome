@@ -8,6 +8,9 @@ inputs:
   auto-merge-settings:
     description: 'Path to the auto-merge settings configuration file'
     required: true
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
 
 outputs:
   merge-status:
@@ -16,76 +19,74 @@ outputs:
     description: 'Details of the merged pull request'
 
 runs:
-  using: 'node20'
-  main: 'index.js'
+  using: 'composite'
+  steps:
+  - name: Debug - Input values
+    shell: bash
+    run: |
+      echo "PR details: ${{ inputs.pr-details }}"
+      echo "Auto-merge settings: ${{ inputs.auto-merge-settings }}"
 
-jobs:
-  auto-merge:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+  - name: Load auto-merge configuration
+    id: load-config
+    shell: bash
+    run: |
+      config=$(cat ${{ inputs.auto-merge-settings }})
+      echo "config=$config" >> $GITHUB_OUTPUT
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
+  - name: Debug - Loaded configuration
+    shell: bash
+    run: |
+      echo "Loaded configuration: ${{ steps.load-config.outputs.config }}"
 
-    - name: Debug - Input values
-      run: |
-        echo "PR details: ${{ inputs.pr-details }}"
-        echo "Auto-merge settings: ${{ inputs.auto-merge-settings }}"
+  - name: Validate PR against auto-merge criteria
+    id: validate-pr
+    shell: bash
+    run: |
+      pr_details='${{ inputs.pr-details }}'
+      config='${{ steps.load-config.outputs.config }}'
 
-    - name: Load auto-merge configuration
-      id: load-config
-      run: |
-        config=$(cat ${{ inputs.auto-merge-settings }})
-        echo "::set-output name=config::$config"
+      # Implement validation logic here
+      # This is a placeholder implementation
+      if [[ $pr_details == *"dependency update"* ]]; then
+        echo "can-merge=true" >> $GITHUB_OUTPUT
+      else
+        echo "can-merge=false" >> $GITHUB_OUTPUT
+      fi
 
-    - name: Debug - Loaded configuration
-      run: |
-        echo "Loaded configuration: ${{ steps.load-config.outputs.config }}"
+  - name: Debug - Validation result
+    shell: bash
+    run: |
+      echo "Can merge: ${{ steps.validate-pr.outputs.can-merge }}"
 
-    - name: Validate PR against auto-merge criteria
-      id: validate-pr
-      run: |
-        pr_details='${{ inputs.pr-details }}'
-        config='${{ steps.load-config.outputs.config }}'
+  - name: Merge PR
+    if: steps.validate-pr.outputs.can-merge == 'true'
+    id: merge-pr
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+    run: |
+      pr_number=$(echo '${{ inputs.pr-details }}' | jq -r .number)
+      gh pr merge $pr_number --auto --merge
+      echo "merge-status=success" >> $GITHUB_OUTPUT
+      echo "merged-pr-details=${{ inputs.pr-details }}" >> $GITHUB_OUTPUT
 
-        # Implement validation logic here
-        # This is a placeholder implementation
-        if [[ $pr_details == *"dependency update"* ]]; then
-          echo "::set-output name=can-merge::true"
-        else
-          echo "::set-output name=can-merge::false"
-        fi
+  - name: Debug - Merge result
+    if: steps.validate-pr.outputs.can-merge == 'true'
+    shell: bash
+    run: |
+      echo "Merge status: ${{ steps.merge-pr.outputs.merge-status }}"
+      echo "Merged PR details: ${{ steps.merge-pr.outputs.merged-pr-details }}"
 
-    - name: Debug - Validation result
-      run: |
-        echo "Can merge: ${{ steps.validate-pr.outputs.can-merge }}"
+  - name: Set merge status for non-mergeable PR
+    if: steps.validate-pr.outputs.can-merge != 'true'
+    shell: bash
+    run: |
+      echo "merge-status=skipped" >> $GITHUB_OUTPUT
+      echo "merged-pr-details=null" >> $GITHUB_OUTPUT
 
-    - name: Merge PR
-      if: steps.validate-pr.outputs.can-merge == 'true'
-      id: merge-pr
-      run: |
-        pr_number=$(echo '${{ inputs.pr-details }}' | jq -r .number)
-        gh pr merge $pr_number --auto --merge
-        echo "::set-output name=merge-status::success"
-        echo "::set-output name=merged-pr-details::${{ inputs.pr-details }}"
-
-    - name: Debug - Merge result
-      if: steps.validate-pr.outputs.can-merge == 'true'
-      run: |
-        echo "Merge status: ${{ steps.merge-pr.outputs.merge-status }}"
-        echo "Merged PR details: ${{ steps.merge-pr.outputs.merged-pr-details }}"
-
-    - name: Set merge status for non-mergeable PR
-      if: steps.validate-pr.outputs.can-merge != 'true'
-      run: |
-        echo "::set-output name=merge-status::skipped"
-        echo "::set-output name=merged-pr-details::null"
-
-    - name: Debug - Final outputs
-      run: |
-        echo "Final merge status: ${{ steps.merge-pr.outputs.merge-status || 'skipped' }}"
-        echo "Final merged PR details: ${{ steps.merge-pr.outputs.merged-pr-details || 'null' }}"
+  - name: Debug - Final outputs
+    shell: bash
+    run: |
+      echo "Final merge status: ${{ steps.merge-pr.outputs.merge-status || 'skipped' }}"
+      echo "Final merged PR details: ${{ steps.merge-pr.outputs.merged-pr-details || 'null' }}"
