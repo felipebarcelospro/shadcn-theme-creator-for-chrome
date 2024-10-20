@@ -22,91 +22,67 @@ runs:
   using: "composite"
   steps:
   - name: Load and parse config.yml
-    id: config
-    uses: actions/github-script@v7
-    with:
-      github-token: ${{ inputs.github-token }}
-      script: |
-        const fs = require('fs');
-        const yaml = require('js-yaml');
-
-        const CONFIG_PATH = '.github/config.yml';
-
-        try {
-          if (!fs.existsSync(CONFIG_PATH)) {
-            core.setFailed('config.yml is missing');
-            return;
-          }
-
-          const configContent = fs.readFileSync(CONFIG_PATH, 'utf8');
-          const config = yaml.load(configContent);
-
-          core.setOutput('config-data', JSON.stringify(config));
-        } catch (error) {
-          core.setFailed(`Error loading or parsing config.yml: ${error.message}`);
-        }
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+    run: |
+      CONFIG_PATH='.github/config.yml'
+      if [ ! -f "$CONFIG_PATH" ]; then
+        echo "::error::config.yml is missing"
+        exit 1
+      fi
+      CONFIG_DATA=$(yq eval -o=json "$CONFIG_PATH")
+      echo "config-data<<EOF" >> $GITHUB_OUTPUT
+      echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
+      echo "Debug: Config data loaded and parsed"
 
   - name: Detect package manager
-    id: detect-package-manager
     shell: bash
     run: |
-      CONFIG_DATA='${{ steps.config.outputs.config-data }}'
       PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.tools[] | select(. == "npm" or . == "yarn" or . == "pnpm")')
-
       if [ -z "$PACKAGE_MANAGER" ]; then
         echo "::error::No supported package manager found in config.yml"
         exit 1
       fi
-
       echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
+      echo "Debug: Package manager detected: $PACKAGE_MANAGER"
 
   - name: Install dependencies
-    uses: ./.github/actions/install-dependencies
-    with:
-      package-manager: ${{ steps.detect-package-manager.outputs.package-manager }}
-      cache-key: ${{ runner.OS }}-${{ steps.detect-package-manager.outputs.package-manager }}-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml') }}
-      github-token: ${{ inputs.github-token }}
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+    run: |
+      ./.github/actions/install-dependencies.sh "$PACKAGE_MANAGER" "${{ runner.OS }}-$PACKAGE_MANAGER-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml') }}" "$GITHUB_TOKEN"
+      echo "Debug: Dependencies installed"
 
   - name: Fetch repository metadata
-    id: repo-metadata
-    uses: actions/github-script@v7
-    with:
-      github-token: ${{ inputs.github-token }}
-      script: |
-        const { owner, repo } = context.repo;
-        try {
-          const repoData = await github.rest.repos.get({ owner, repo });
-          return repoData.data;
-        } catch (error) {
-          core.setFailed(`Failed to fetch repository metadata: ${error.message}`);
-        }
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+    run: |
+      REPO_METADATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+        "https://api.github.com/repos/${{ github.repository }}")
+      echo "Debug: Repository metadata fetched"
 
   - name: Set up environment variables
-    id: set-env-vars
     shell: bash
     run: |
-      CONFIG_DATA='${{ steps.config.outputs.config-data }}'
-
-      echo "REPO_NAME=${{ github.repository }}" >> $GITHUB_ENV
-      echo "REPO_OWNER=${{ github.repository_owner }}" >> $GITHUB_ENV
-      echo "GITHUB_SHA=${{ github.sha }}" >> $GITHUB_ENV
-      echo "GITHUB_REF=${{ github.ref }}" >> $GITHUB_ENV
-      echo "PACKAGE_MANAGER=${{ steps.detect-package-manager.outputs.package-manager }}" >> $GITHUB_ENV
-
-      REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')
-      MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches | @json')
-
-      echo "REPO_TYPE=$REPO_TYPE" >> $GITHUB_ENV
-      echo "MAIN_BRANCHES=$MAIN_BRANCHES" >> $GITHUB_ENV
-
+      {
+        echo "REPO_NAME=${{ github.repository }}"
+        echo "REPO_OWNER=${{ github.repository_owner }}"
+        echo "GITHUB_SHA=${{ github.sha }}"
+        echo "GITHUB_REF=${{ github.ref }}"
+        echo "PACKAGE_MANAGER=$PACKAGE_MANAGER"
+        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')"
+        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches | @json')"
+      } >> $GITHUB_ENV
       echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
+      echo "Debug: Environment variables set"
 
   - name: Validate repository settings
     shell: bash
     run: |
-      REPO_METADATA='${{ steps.repo-metadata.outputs.result }}'
-      CONFIG_DATA='${{ steps.config.outputs.config-data }}'
-
       HAS_ISSUES=$(echo "$REPO_METADATA" | jq -r '.has_issues')
       HAS_PROJECTS=$(echo "$REPO_METADATA" | jq -r '.has_projects')
       AUTO_LABELING=$(echo "$CONFIG_DATA" | jq -r '.issue_management.auto_label.enabled')
@@ -119,6 +95,7 @@ runs:
       if [ "$HAS_PROJECTS" = "false" ] && [ "$REPO_TYPE" = "monorepo" ]; then
         echo "::warning::Projects are not enabled for this repository, but it is configured as a monorepo"
       fi
+      echo "Debug: Repository settings validated"
 
   - name: Determine current branch and commit information
     shell: bash
@@ -127,21 +104,19 @@ runs:
       CURRENT_COMMIT=$GITHUB_SHA
       echo "CURRENT_BRANCH=$CURRENT_BRANCH" >> $GITHUB_ENV
       echo "CURRENT_COMMIT=$CURRENT_COMMIT" >> $GITHUB_ENV
+      echo "Debug: Current branch and commit information determined"
 
   - name: Set repository context
-    id: repo-context
     shell: bash
     run: |
-      REPO_METADATA='${{ steps.repo-metadata.outputs.result }}'
-      CONFIG_DATA='${{ steps.config.outputs.config-data }}'
       CONTEXT=$(jq -n \
         --argjson repoMetadata "$REPO_METADATA" \
         --argjson config "$CONFIG_DATA" \
         --arg branch "$CURRENT_BRANCH" \
         --arg commit "$CURRENT_COMMIT" \
         --arg repoType "$REPO_TYPE" \
-        --argjson mainBranches "$MAIN_BRANCHES" \
-        --arg packageManager "${{ steps.detect-package-manager.outputs.package-manager }}" \
+        --argjson mainBranches "$(echo "$CONFIG_DATA" | jq '.repository.version_control.main_branches')" \
+        --arg packageManager "$PACKAGE_MANAGER" \
         '{
           repoMetadata: $repoMetadata,
           config: $config,
@@ -154,12 +129,14 @@ runs:
       echo "repository-context<<EOF" >> $GITHUB_OUTPUT
       echo "$CONTEXT" >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
+      echo "Debug: Repository context set"
 
   - name: Output results
     shell: bash
     run: |
-      echo "Repository context: ${{ steps.repo-context.outputs.repository-context }}"
-      echo "Configuration data: ${{ steps.config.outputs.config-data }}"
-      echo "Environment variables: ${{ steps.set-env-vars.outputs.environment-variables }}"
-      echo "Package manager: ${{ steps.detect-package-manager.outputs.package-manager }}"
+      echo "Repository context: $CONTEXT"
+      echo "Configuration data: $CONFIG_DATA"
+      echo "Environment variables set"
+      echo "Package manager: $PACKAGE_MANAGER"
       echo "Setup context and prerequisites completed successfully"
+      echo "Debug: Results outputted"

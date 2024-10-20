@@ -23,37 +23,24 @@ runs:
       fi
 
   - name: Validate config
-    uses: actions/github-script@v7
-    with:
-      github-token: ${{ inputs.github-token }}
-      script: |
-        const fs = require('fs');
-        const yaml = require('js-yaml');
+    shell: bash
+    run: |
+      CONFIG_PATH='.github/config.yml'
 
-        const CONFIG_PATH = '.github/config.yml';
+      if [ ! -f "$CONFIG_PATH" ]; then
+        echo "::error::config.yml file not found in .github directory"
+        echo "config-validation-status=false" >> $GITHUB_OUTPUT
+        exit 1
+      fi
 
-        try {
-          if (!fs.existsSync(CONFIG_PATH)) {
-            core.setFailed('config.yml file not found in .github directory');
-            core.setOutput('config-validation-status', 'false');
-            return;
-          }
+      REQUIRED_KEYS=("repository" "issue_management" "pr_management" "release_management" "security_dependency_management" "metrics_generation" "packages" "plugins")
 
-          const configContent = fs.readFileSync(CONFIG_PATH, 'utf8');
-          const config = yaml.load(configContent);
+      for key in "${REQUIRED_KEYS[@]}"; do
+        if ! grep -q "^$key:" "$CONFIG_PATH"; then
+          echo "::error::Required key '$key' not found in config.yml"
+          echo "config-validation-status=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+      done
 
-          const requiredKeys = ['repository', 'issue_management', 'pr_management', 'release_management', 'security_dependency_management', 'metrics_generation', 'packages', 'plugins'];
-
-          for (const key of requiredKeys) {
-            if (!(key in config)) {
-              core.setFailed(`Required key '${key}' not found in config.yml`);
-              core.setOutput('config-validation-status', 'false');
-              return;
-            }
-          }
-
-          core.setOutput('config-validation-status', 'true');
-        } catch (error) {
-          core.setFailed(`Error validating config: ${error.message}`);
-          core.setOutput('config-validation-status', 'false');
-        }
+      echo "config-validation-status=true" >> $GITHUB_OUTPUT
