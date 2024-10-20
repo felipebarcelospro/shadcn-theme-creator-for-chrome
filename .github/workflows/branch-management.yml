@@ -76,7 +76,7 @@ jobs:
           url: https://api.groq.com/openai/v1/chat/completions
           method: POST
           headers: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
-          payload: |
+          payload: >
             {
               "model": "llama-3.1-70b-versatile",
               "messages": [
