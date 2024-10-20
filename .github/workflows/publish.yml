@@ -14,6 +14,12 @@ permissions:
   pull-requests: write
   issues: write
 
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   check_project_changes:
     runs-on: ubuntu-latest
@@ -72,33 +78,55 @@ jobs:
       NEXT_PUBLIC_PLUNK_API_KEY: ${{ secrets.NEXT_PUBLIC_PLUNK_API_KEY }}
       NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID }}
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Detect package manager
+        id: detect-package-manager
+        run: |
+          if [ -f "${{ github.workspace }}/yarn.lock" ]; then
+            echo "manager=yarn" >> $GITHUB_OUTPUT
+            echo "command=install" >> $GITHUB_OUTPUT
+            echo "runner=yarn" >> $GITHUB_OUTPUT
+            exit 0
+          elif [ -f "${{ github.workspace }}/package.json" ]; then
+            echo "manager=npm" >> $GITHUB_OUTPUT
+            echo "command=ci" >> $GITHUB_OUTPUT
+            echo "runner=npx --no-install" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "Unable to determine package manager"
+            exit 1
+          fi
+
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: "lts/*"
+          cache: ${{ steps.detect-package-manager.outputs.manager }}
 
-      - name: Cache Dependencies
-        uses: actions/cache@v3
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Restore cache
+        uses: actions/cache@v4
         with:
-          path: ~/.yarn
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          path: |
+            .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}-
 
-      - name: Install Dependencies
-        run: yarn install --frozen-lockfile
+      - name: Install dependencies
+        run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
 
-      - name: Build Web
-        run: yarn turbo run build --filter=web...
+      - name: Build with Next.js
+        run: ${{ steps.detect-package-manager.outputs.runner }} next build
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: web-build
-          path: ./apps/web/out
+          path: ./out
 
   build_chrome_extension:
     runs-on: ubuntu-latest
@@ -192,25 +220,19 @@ jobs:
           echo "$changelog" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-  release_web:
-    needs: prepare_release
+  deploy_web:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    needs: [prepare_release, build_web]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Download Web Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: web-build
-          path: web-build
-
       - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
-        with:
-          artifact_name: web-build
 
       - name: Update package.json for Web
         run: |
