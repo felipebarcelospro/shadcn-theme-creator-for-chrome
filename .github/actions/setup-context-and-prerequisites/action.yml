@@ -40,15 +40,18 @@ runs:
   - name: Detect package manager
     shell: bash
     run: |
-      if [ -f "package-lock.json" ]; then
-        PACKAGE_MANAGER="npm"
-      elif [ -f "yarn.lock" ]; then
-        PACKAGE_MANAGER="yarn"
-      elif [ -f "pnpm-lock.yaml" ]; then
-        PACKAGE_MANAGER="pnpm"
-      else
-        echo "::error::No supported package manager lock file found in the repository root"
-        exit 1
+      PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager')
+      if [ -z "$PACKAGE_MANAGER" ] || [ "$PACKAGE_MANAGER" = "null" ]; then
+        if [ -f "package-lock.json" ]; then
+          PACKAGE_MANAGER="npm"
+        elif [ -f "yarn.lock" ]; then
+          PACKAGE_MANAGER="yarn"
+        elif [ -f "pnpm-lock.yaml" ]; then
+          PACKAGE_MANAGER="pnpm"
+        else
+          echo "::error::No supported package manager lock file found in the repository root"
+          exit 1
+        fi
       fi
       echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
       echo "Debug: Package manager detected: $PACKAGE_MANAGER"
@@ -58,6 +61,11 @@ runs:
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
+      if [ -z "$PACKAGE_MANAGER" ]; then
+        echo "::error::Package manager not detected"
+        exit 1
+      fi
+
       if [ "$PACKAGE_MANAGER" = "npm" ]; then
         npm ci
       elif [ "$PACKAGE_MANAGER" = "yarn" ]; then

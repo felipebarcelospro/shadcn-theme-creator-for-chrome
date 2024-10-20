@@ -181,10 +181,10 @@ metrics_generation:
 packages:
   global_settings:
     ci_cd:
+      package_manager: yarn
       tools:
       - GitHub Actions
       - Turbo
-      - yarn
     security_checks:
       enabled: true
       tools:
