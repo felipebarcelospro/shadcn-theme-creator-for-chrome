@@ -13,8 +13,13 @@ outputs:
 runs:
   using: 'composite'
   steps:
+  - name: Install yq
+    shell: bash
+    run: |
+      sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+
   - name: Check config.yml existence
-    shell: bash -l {0}
+    shell: bash
     run: |
       if [ ! -f ".github/config.yml" ]; then
         echo "config-validation-status=false" >> $GITHUB_OUTPUT
@@ -23,17 +28,23 @@ runs:
       fi
 
   - name: Validate YAML structure
-    shell: bash -l {0}
+    shell: bash
     run: |
       if ! yq eval '.github/config.yml' > /dev/null 2>&1; then
         echo "config-validation-status=false" >> $GITHUB_OUTPUT
         echo "::error::config.yml is not a valid YAML file"
         exit 1
-      else
-        echo "config-validation-status=true" >> $GITHUB_OUTPUT
       fi
 
-  - name: Install yq
-    shell: bash -l {0}
+  - name: Validate config structure
+    shell: bash
     run: |
-      sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+      required_keys=("repository" "issue_management" "pr_management" "release_management" "security_dependency_management" "metrics_generation" "packages" "plugins")
+      for key in "${required_keys[@]}"; do
+        if ! yq eval ".$key" .github/config.yml > /dev/null 2>&1; then
+          echo "config-validation-status=false" >> $GITHUB_OUTPUT
+          echo "::error::Required key '$key' not found in config.yml"
+          exit 1
+        fi
+      done
+      echo "config-validation-status=true" >> $GITHUB_OUTPUT
