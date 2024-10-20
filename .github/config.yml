@@ -184,10 +184,11 @@ packages:
       tools:
       - GitHub Actions
       - Turbo
+      - yarn
     security_checks:
       enabled: true
       tools:
-      - npm audit
+      - yarn audit
       schedule: "0 0 * * 0" # Weekly on Sunday
       fail_on: high
     performance_monitoring:

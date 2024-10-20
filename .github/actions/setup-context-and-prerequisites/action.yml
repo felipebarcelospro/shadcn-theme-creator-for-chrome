@@ -76,6 +76,9 @@ runs:
         echo "PACKAGE_MANAGER=$PACKAGE_MANAGER"
         echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')"
         echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches | @json')"
+        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes | @json')"
+        echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy | @json')"
+        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches | @json')"
       } >> $GITHUB_ENV
       echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
       echo "Debug: Environment variables set"
@@ -116,6 +119,9 @@ runs:
         --arg commit "$CURRENT_COMMIT" \
         --arg repoType "$REPO_TYPE" \
         --argjson mainBranches "$(echo "$CONFIG_DATA" | jq '.repository.version_control.main_branches')" \
+        --argjson branchPrefixes "$(echo "$CONFIG_DATA" | jq '.repository.version_control.branch_prefixes')" \
+        --argjson mergeStrategy "$(echo "$CONFIG_DATA" | jq '.repository.version_control.merge_strategy')" \
+        --argjson protectedBranches "$(echo "$CONFIG_DATA" | jq '.repository.version_control.protected_branches')" \
         --arg packageManager "$PACKAGE_MANAGER" \
         '{
           repoMetadata: $repoMetadata,
@@ -124,6 +130,9 @@ runs:
           commit: $commit,
           repoType: $repoType,
           mainBranches: $mainBranches,
+          branchPrefixes: $branchPrefixes,
+          mergeStrategy: $mergeStrategy,
+          protectedBranches: $protectedBranches,
           packageManager: $packageManager
         }')
       echo "repository-context<<EOF" >> $GITHUB_OUTPUT
