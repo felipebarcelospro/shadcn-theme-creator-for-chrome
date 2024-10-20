@@ -21,7 +21,8 @@ permissions:
 
 jobs:
   process_branch:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -71,17 +72,17 @@ jobs:
       - name: Generate PR Content
         if: env.NO_COMMITS == 'false'
         id: pr_content
-        uses: Satak/webrequest-action@v1.5.0
+        uses: fjogeleit/http-request-action@v1
         with:
-          url: https://api.groq.com/openai/v1/chat/completions
-          method: POST
-          headers: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
-          payload: >
+          url: 'https://api.groq.com/openai/v1/chat/completions'
+          method: 'POST'
+          customHeaders: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
+          data: >
             {
               "model": "llama-3.1-70b-versatile",
               "messages": [
                 {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
-                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: ${{ env.BRANCH_NAME }}, Commits: ${{ toJson(toJson(github.event.commits)) }}"}
+                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: ${{ env.BRANCH_NAME }}, Commits: ${{ toJson(github.event.commits) }}"}
               ],
               "temperature": 0.4,
               "response_format": {"type": "json_object"}
@@ -90,7 +91,7 @@ jobs:
       - name: Parse PR Content
         if: env.NO_COMMITS == 'false'
         run: |
-          pr_data='${{ steps.pr_content.outputs.output }}'
+          pr_data='${{ steps.pr_content.outputs.response }}'
           pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
           pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
 
@@ -168,7 +169,8 @@ jobs:
 
   check_open_branches:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -201,12 +203,12 @@ jobs:
               creator=$(git log -1 --format='%an' origin/$branch)
               commits=$(git log --pretty=format:'%H' origin/develop..$branch | jq -R -s -c 'split("\n")[:-1]')
               
-              # Generate PR content using Web Request Action
-              pr_content=$(Satak/webrequest-action@v1.5.0 \
+              # Generate PR content using HTTP Request Action
+              pr_content=$(fjogeleit/http-request-action@v1 \
                 --url https://api.groq.com/openai/v1/chat/completions \
                 --method POST \
-                --headers '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}' \
-                --payload '{
+                --customHeaders '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}' \
+                --data '{
                   "model": "llama-3.1-70b-versatile",
                   "messages": [
                     {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
@@ -216,8 +218,8 @@ jobs:
                   "response_format": {"type": "json_object"}
                 }')
               
-              pr_title=$(echo "$pr_content" | jq -r '.data.choices[0].message.content | fromjson | .title // empty')
-              pr_body=$(echo "$pr_content" | jq -r '.data.choices[0].message.content | fromjson | .body // empty')
+              pr_title=$(echo "$pr_content" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+              pr_body=$(echo "$pr_content" | jq -r '.choices[0].message.content | fromjson | .body // empty')
               
               if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
                 echo "Error: Generated PR content is null or empty. Skipping PR creation for $branch."
@@ -234,12 +236,12 @@ jobs:
                 echo "Branch $branch has new commits. Updating PR #$pr_number."
                 commits=$(git log --pretty=format:'%H' origin/develop..$branch | jq -R -s -c 'split("\n")[:-1]')
                 
-                # Update PR content using Web Request Action
-                pr_content=$(Satak/webrequest-action@v1.5.0 \
+                # Update PR content using HTTP Request Action
+                pr_content=$(fjogeleit/http-request-action@v1 \
                   --url https://api.groq.com/openai/v1/chat/completions \
                   --method POST \
-                  --headers '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}' \
-                  --payload '{
+                  --customHeaders '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}' \
+                  --data '{
                     "model": "llama-3.1-70b-versatile",
                     "messages": [
                       {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
@@ -249,8 +251,8 @@ jobs:
                     "response_format": {"type": "json_object"}
                   }')
                 
-                pr_title=$(echo "$pr_content" | jq -r '.data.choices[0].message.content | fromjson | .title // empty')
-                pr_body=$(echo "$pr_content" | jq -r '.data.choices[0].message.content | fromjson | .body // empty')
+                pr_title=$(echo "$pr_content" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+                pr_body=$(echo "$pr_content" | jq -r '.choices[0].message.content | fromjson | .body // empty')
                 
                 if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
                   echo "Error: Generated PR content is null or empty. Skipping PR update for $branch."
