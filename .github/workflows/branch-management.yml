@@ -81,7 +81,7 @@ jobs:
               "model": "llama-3.1-70b-versatile",
               "messages": [
                 {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
-                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: ${{ env.BRANCH_NAME }}, Commits: ${{ toJson(github.event.commits) }}"}
+                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: ${{ env.BRANCH_NAME }}, Commits: ${{ toJson(toJson(github.event.commits)) }}"}
               ],
               "temperature": 0.4,
               "response_format": {"type": "json_object"}
@@ -91,8 +91,8 @@ jobs:
         if: env.NO_COMMITS == 'false'
         run: |
           pr_data='${{ steps.pr_content.outputs.output }}'
-          pr_title=$(echo "$pr_data" | jq -r '.data.choices[0].message.content | fromjson | .title // empty')
-          pr_body=$(echo "$pr_data" | jq -r '.data.choices[0].message.content | fromjson | .body // empty')
+          pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+          pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
 
           if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
             echo "Error: Generated PR content is null or empty. Retrying with a different prompt."
