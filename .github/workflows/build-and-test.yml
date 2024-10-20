@@ -21,7 +21,11 @@ jobs:
       - name: Check for Changes
         id: check
         run: |
-          changes=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '^(apps/chrome-extension|packages|apps/web)/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            changes=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '^(apps/chrome-extension|packages|apps/web)/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+          else
+            changes=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '^(apps/chrome-extension|packages|apps/web)/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+          fi
           echo "changes=$changes" >> $GITHUB_OUTPUT
           echo "Detected changes: $changes"
 
