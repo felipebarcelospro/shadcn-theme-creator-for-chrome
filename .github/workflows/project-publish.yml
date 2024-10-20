@@ -1,4 +1,4 @@
-name: Publish
+name: Project Publish
 
 on:
   push:
@@ -19,7 +19,56 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check_prerequisites:
+    runs-on: ubuntu-latest
+    outputs:
+      groq_api_key_valid: ${{ steps.validate_groq_api_key.outputs.is_valid }}
+    steps:
+      - name: Validate GROQ API Key
+        id: validate_groq_api_key
+        run: |
+          if [ -n "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "is_valid=true" >> $GITHUB_OUTPUT
+            echo "GROQ_API_KEY is set and not empty"
+          else
+            echo "is_valid=false" >> $GITHUB_OUTPUT
+            echo "Error: GROQ_API_KEY is not set or empty"
+          fi
+
+  setup:
+    needs: check_prerequisites
+    if: needs.check_prerequisites.outputs.groq_api_key_valid == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Generate Cache Key
+        id: cache-key
+        run: echo "key=${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}" >> $GITHUB_OUTPUT
+
+      - name: Cache Turbo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            .turbo
+            node_modules/.cache/turbo
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+
   check_project_changes:
+    needs: setup
     runs-on: ubuntu-latest
     outputs:
       changes: ${{ steps.check.outputs.changes }}
@@ -37,29 +86,16 @@ jobs:
 
   build_packages:
     runs-on: ubuntu-latest
-    needs: check_project_changes
+    needs: [setup, check_project_changes]
     if: contains(fromJson(needs.check_project_changes.outputs.changes), 'all') || contains(fromJson(needs.check_project_changes.outputs.changes), 'packages')
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node.js and Dependencies
+        uses: ./.github/actions/setup-node-and-deps
         with:
-          node-version: 'lts/*'
-
-      - name: Cache Turbo dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            .turbo
-            node_modules/.cache/turbo
-          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-
-      - name: Install Dependencies
-        run: yarn install --frozen-lockfile
+          cache-key: ${{ needs.setup.outputs.cache-key }}
 
       - name: Build Packages
         run: yarn turbo run build --filter=./packages/*
@@ -72,7 +108,7 @@ jobs:
 
   build_web:
     runs-on: ubuntu-latest
-    needs: check_project_changes
+    needs: [setup, check_project_changes]
     if: contains(fromJson(needs.check_project_changes.outputs.changes), 'all') || contains(fromJson(needs.check_project_changes.outputs.changes), 'web')
     env:
       NEXT_PUBLIC_PLUNK_API_KEY: ${{ secrets.NEXT_PUBLIC_PLUNK_API_KEY }}
@@ -81,23 +117,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node.js and Dependencies
+        uses: ./.github/actions/setup-node-and-deps
         with:
-          node-version: 'lts/*'
-
-      - name: Cache Turbo dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            .turbo
-            node_modules/.cache/turbo
-          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
+          cache-key: ${{ needs.setup.outputs.cache-key }}
 
       - name: Build Web
         run: yarn turbo run build --filter=web...
@@ -109,29 +132,16 @@ jobs:
 
   build_chrome_extension:
     runs-on: ubuntu-latest
-    needs: check_project_changes
+    needs: [setup, check_project_changes]
     if: contains(fromJson(needs.check_project_changes.outputs.changes), 'all') || contains(fromJson(needs.check_project_changes.outputs.changes), 'chrome-extension')
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node.js and Dependencies
+        uses: ./.github/actions/setup-node-and-deps
         with:
-          node-version: 'lts/*'
-
-      - name: Cache Turbo dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            .turbo
-            node_modules/.cache/turbo
-          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-
-      - name: Install Dependencies
-        run: yarn install --frozen-lockfile
+          cache-key: ${{ needs.setup.outputs.cache-key }}
 
       - name: Build Chrome Extension
         run: yarn turbo run build --filter=chrome-extension...
@@ -171,6 +181,31 @@ jobs:
           new_version=$(echo $current_version | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
           echo "new_version=$new_version" >> $GITHUB_OUTPUT
 
+      - name: Prepare Changelog Request Data
+        run: |
+          commits_json=$(echo '${{ toJson(github.event.commits) }}' | jq -c '.')
+          request_data=$(jq -n \
+            --arg model "llama-3.1-70b-versatile" \
+            --arg system_content "You are an AI assistant tasked with creating detailed and user-friendly changelogs. Respond in JSON format with a key 'changelog'." \
+            --arg user_content "Create a detailed and user-friendly changelog for the following commits: $commits_json" \
+            '{
+              model: $model,
+              messages: [
+                {role: "system", content: $system_content},
+                {role: "user", content: $user_content}
+              ],
+              temperature: 0.3,
+              response_format: {type: "json_object"}
+            }')
+          echo "REQUEST_DATA<<EOF" >> $GITHUB_ENV
+          echo "$request_data" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Debug Changelog Request Data
+        run: |
+          echo "Request Data:"
+          echo "$REQUEST_DATA" | jq .
+
       - name: Generate Changelog
         id: changelog
         uses: fjogeleit/http-request-action@v1
@@ -178,16 +213,7 @@ jobs:
           url: 'https://api.groq.com/openai/v1/chat/completions'
           method: 'POST'
           customHeaders: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
-          data: |
-            {
-              "model": "llama-3.1-70b-versatile",
-              "messages": [
-                {"role": "system", "content": "You are an AI assistant tasked with creating detailed and user-friendly changelogs. Respond in JSON format with a key 'changelog'."},
-                {"role": "user", "content": "Create a detailed and user-friendly changelog for the following commits: ${{ github.event.commits }}"}
-              ],
-              "temperature": 0.3,
-              "response_format": {"type": "json_object"}
-            }
+          data: ${{ env.REQUEST_DATA }}
 
       - name: Parse Changelog
         run: |

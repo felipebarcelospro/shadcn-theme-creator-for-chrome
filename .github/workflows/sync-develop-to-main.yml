@@ -1,0 +1,176 @@
+name: Sync Develop to Main
+
+on:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  check_prerequisites:
+    runs-on: ubuntu-latest
+    outputs:
+      groq_api_key_valid: ${{ steps.validate_groq_api_key.outputs.is_valid }}
+    steps:
+      - name: Validate GROQ API Key
+        id: validate_groq_api_key
+        run: |
+          if [ -n "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "is_valid=true" >> $GITHUB_OUTPUT
+            echo "GROQ_API_KEY is set and not empty"
+          else
+            echo "is_valid=false" >> $GITHUB_OUTPUT
+            echo "Error: GROQ_API_KEY is not set or empty"
+          fi
+
+  update_pr:
+    needs: check_prerequisites
+    if: needs.check_prerequisites.outputs.groq_api_key_valid == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch All Branches
+        run: git fetch --all
+
+      - name: Prepare PR Content Request Data
+        run: |
+          commits_json=$(echo '${{ toJson(github.event.commits) }}' | jq -c '.')
+          request_data=$(jq -n \
+            --arg model "llama-3.1-70b-versatile" \
+            --arg system_content "You are an AI assistant tasked with creating pull request titles and descriptions following GitFlow best practices. The PR is for merging 'develop' into 'main'. Respond in JSON format with keys 'title' and 'body'." \
+            --arg user_content "Create a pull request title and description for merging develop into main with the following commits: $commits_json. Follow GitFlow best practices and include a summary of changes, any breaking changes, and instructions for testing if applicable." \
+            '{
+              model: $model,
+              messages: [
+                {role: "system", content: $system_content},
+                {role: "user", content: $user_content}
+              ],
+              temperature: 0.4,
+              response_format: {type: "json_object"}
+            }')
+          echo "REQUEST_DATA<<EOF" >> $GITHUB_ENV
+          echo "$request_data" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Debug PR Content Request Data
+        run: |
+          echo "Request Data:"
+          echo "$REQUEST_DATA" | jq .
+
+      - name: Generate PR Content
+        id: pr_content
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: 'https://api.groq.com/openai/v1/chat/completions'
+          method: 'POST'
+          customHeaders: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
+          data: ${{ env.REQUEST_DATA }}
+
+      - name: Parse PR Content
+        run: |
+          pr_data='${{ steps.pr_content.outputs.response }}'
+          pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+          pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
+
+          if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
+            echo "Error: Generated PR content is null or empty. Exiting."
+            exit 1
+          fi
+
+          echo "PR_TITLE=$(echo "$pr_title" | sed 's/"/\\"/g')" >> $GITHUB_ENV
+          echo "PR_BODY<<EOF" >> $GITHUB_ENV
+          echo "$pr_body" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Create or Update Pull Request
+        run: |
+          set -e
+          echo "Processing PR from develop to main"
+          
+          existing_pr=$(gh pr list --head develop --base main --json number --jq '.[0].number')
+          
+          if [ -z "$existing_pr" ]; then
+            echo "Creating new PR from develop to main"
+            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base main --head develop || {
+              echo "Failed to create PR. This might be due to no new commits or other issues."
+              exit 0
+            }
+          else
+            echo "Updating existing PR #$existing_pr from develop to main"
+            gh pr edit "$existing_pr" --title "$PR_TITLE" --body "$PR_BODY"
+          fi
+
+      - name: Prepare Link Related Issues Request Data
+        run: |
+          issues=$(gh issue list --search "develop" --json number,title)
+          request_data=$(jq -n \
+            --arg model "llama-3.1-70b-versatile" \
+            --arg system_content "You are an AI assistant tasked with updating pull request descriptions with related issues." \
+            --arg user_content "Update the following pull request body with the related issues: $issues" \
+            --arg current_body "$PR_BODY" \
+            '{
+              model: $model,
+              messages: [
+                {role: "system", content: $system_content},
+                {role: "user", content: "Current PR body:\n" + $current_body + "\n\nRelated issues:\n" + $user_content}
+              ],
+              temperature: 0.4,
+              response_format: {type: "json_object"}
+            }')
+          echo "LINK_ISSUES_REQUEST_DATA<<EOF" >> $GITHUB_ENV
+          echo "$request_data" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Debug Link Related Issues Request Data
+        run: |
+          echo "Link Related Issues Request Data:"
+          echo "$LINK_ISSUES_REQUEST_DATA" | jq .
+
+      - name: Link Related Issues
+        run: |
+          issues=$(gh issue list --search "develop" --json number,title)
+          if [ -n "$issues" ]; then
+            echo "Linking related issues to PR"
+            pr_number=$(gh pr list --head develop --base main --json number --jq '.[0].number')
+            
+            # Generate updated body with AI
+            updated_body_response=$(curl -s -X POST \
+              -H "Authorization: Bearer $GROQ_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$LINK_ISSUES_REQUEST_DATA" \
+              https://api.groq.com/openai/v1/chat/completions)
+            
+            updated_body=$(echo "$updated_body_response" | jq -r '.choices[0].message.content | fromjson | .body // empty')
+            
+            if [ -n "$updated_body" ]; then
+              gh pr edit "$pr_number" --body "$updated_body"
+            else
+              echo "Error: Failed to generate updated PR body with related issues."
+            fi
+            
+            echo "$issues" | jq -r '.[]' | while read -r issue; do
+              number=$(echo "$issue" | jq -r '.number')
+              gh issue comment "$number" --body "This issue is addressed in PR #$pr_number"
+            done
+          fi
+
+      - name: Debug Information
+        run: |
+          echo "Debugging Information:"
+          echo "PR Title: $PR_TITLE"
+          echo "PR Body: $PR_BODY"
+          echo "Existing PR: $existing_pr"
