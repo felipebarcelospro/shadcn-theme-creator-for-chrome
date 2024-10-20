@@ -83,9 +83,21 @@ jobs:
           pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body // empty')
 
           if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
-            echo "Error: Generated PR content is null or empty. Using default values."
-            pr_title="WIP: Changes for $BRANCH_NAME"
-            pr_body="This is a placeholder body for the pull request."
+            echo "Error: Generated PR content is null or empty. Retrying with a different prompt."
+            pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
+              -H "Authorization: Bearer $GROQ_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "model": "llama-3.1-70b-versatile",
+                "messages": [
+                  {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
+                  {"role": "user", "content": "Create a detailed pull request title and description summarizing the changes for the branch '\''$BRANCH_NAME'\''. If no specific changes are provided, create a general description of potential updates."}
+                ],
+                "temperature": 0.7,
+                "response_format": {"type": "json_object"}
+              }')
+            pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title // empty')
+            pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body // empty')
           fi
 
           echo "PR_TITLE=$pr_title" >> $GITHUB_ENV
@@ -108,40 +120,6 @@ jobs:
           existing_pr=$(gh pr list --head "$BRANCH_NAME" --base develop --json number --jq '.[0].number')
 
           if [ -n "$existing_pr" ]; then
-            echo "Checking existing PR #$existing_pr"
-            pr_info=$(gh pr view $existing_pr --json title,body)
-            pr_title=$(echo $pr_info | jq -r '.title')
-            pr_body=$(echo $pr_info | jq -r '.body')
-
-            if [ "$pr_title" = "null" ] || [ "$pr_body" = "null" ]; then
-              echo "Regenerating PR content for existing PR #$existing_pr"
-              commits=$(git log --format=%B origin/develop..$BRANCH_NAME)
-              pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
-                -H "Authorization: Bearer $GROQ_API_KEY" \
-                -H "Content-Type: application/json" \
-                -d '{
-                  "model": "llama-3.1-70b-versatile",
-                  "messages": [
-                    {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
-                    {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '\''$BRANCH_NAME'\'', Commits: '\''$commits'\''"}
-                  ],
-                  "temperature": 0.7,
-                  "response_format": {"type": "json_object"}
-                }') || { echo "Error: Failed to generate PR content"; exit 1; }
-              
-              PR_TITLE=$(echo $pr_data | jq -r '.choices[0].message.content.title // empty')
-              PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body // empty')
-
-              if [ -z "$PR_TITLE" ] || [ -z "$PR_BODY" ]; then
-                echo "Error: Generated PR content is null or empty. Using default values."
-                PR_TITLE="WIP: Changes for $BRANCH_NAME"
-                PR_BODY="This is a placeholder body for the pull request."
-              fi
-            else
-              PR_TITLE="$pr_title"
-              PR_BODY="$pr_body"
-            fi
-
             echo "Updating existing PR #$existing_pr for $BRANCH_NAME"
             gh pr edit $existing_pr --title "$PR_TITLE" --body "$PR_BODY"
           else
@@ -161,8 +139,11 @@ jobs:
           if [ -n "$issues" ]; then
             echo "Linking related issues to PR"
             pr_number=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number')
-            echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"' >> $PR_BODY
-            gh pr edit $pr_number --body "$PR_BODY"
+            updated_body="$PR_BODY
+
+Related Issues:
+$(echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"')"
+            gh pr edit $pr_number --body "$updated_body"
             echo "$issues" | jq -r '.[]' | while read -r issue; do
               number=$(echo $issue | jq -r '.number')
               gh issue comment $number --body "This issue is addressed in PR #$pr_number"
@@ -224,6 +205,23 @@ jobs:
                   }') || { echo "Error: Failed to generate PR content"; exit 1; }
                 pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title')
                 pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body')
+                if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
+                  echo "Error: Generated PR content is null or empty. Retrying with a different prompt."
+                  pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
+                    -H "Authorization: Bearer $GROQ_API_KEY" \
+                    -H "Content-Type: application/json" \
+                    -d '{
+                      "model": "llama-3.1-70b-versatile",
+                      "messages": [
+                        {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
+                        {"role": "user", "content": "Create a detailed pull request title and description summarizing the changes for the branch '\''$branch'\''. If no specific changes are provided, create a general description of potential updates."}
+                      ],
+                      "temperature": 0.7,
+                      "response_format": {"type": "json_object"}
+                    }')
+                  pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title')
+                  pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body')
+                fi
                 gh pr edit $pr_number --title "$pr_title" --body "$pr_body"
               fi
             fi
