@@ -110,6 +110,12 @@ jobs:
             exit 1
           fi
 
+      - name: Get Branch Creator
+        id: branch_creator
+        run: |
+          creator=$(git log -1 --format='%an' origin/$BRANCH_NAME)
+          echo "BRANCH_CREATOR=$creator" >> $GITHUB_ENV
+
       - name: Create or Update Pull Request
         if: env.NO_COMMITS == 'false'
         env:
@@ -124,7 +130,7 @@ jobs:
             gh pr edit $existing_pr --title "$PR_TITLE" --body "$PR_BODY"
           else
             echo "Creating new PR for $BRANCH_NAME"
-            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "$BRANCH_NAME" || {
+            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "$BRANCH_NAME" --author "$BRANCH_CREATOR" || {
               echo "Failed to create PR. This might be due to no new commits or other issues."
               exit 0
             }
@@ -157,6 +163,7 @@ jobs:
           echo "PR Title: $PR_TITLE"
           echo "PR Body: $PR_BODY"
           echo "Existing PR: $existing_pr"
+          echo "Branch Creator: $BRANCH_CREATOR"
 
   check_open_branches:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -182,6 +189,7 @@ jobs:
             if [ "$pr_exists" -eq 0 ]; then
               echo "Processing branch without PR: $branch"
               git checkout $branch
+              creator=$(git log -1 --format='%an' origin/$branch)
               ./.github/workflows/branch-management.yml
             else
               pr_number=$(gh pr list --head "$branch" --base develop --json number --jq '.[0].number')
