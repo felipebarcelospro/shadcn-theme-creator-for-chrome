@@ -13,23 +13,32 @@ outputs:
     description: 'Parsed configuration data'
   environment-variables:
     description: 'Set environment variables'
+  package-manager:
+    description: 'Detected package manager'
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
-
-  - name: Setup Node.js
-    uses: actions/setup-node@v4
-    with:
-      node-version: '20'
+  - name: Detect package manager
+    id: detect-package-manager
+    shell: bash
+    run: |
+      if [ -f "package-lock.json" ]; then
+        echo "package-manager=npm" >> $GITHUB_OUTPUT
+      elif [ -f "yarn.lock" ]; then
+        echo "package-manager=yarn" >> $GITHUB_OUTPUT
+      elif [ -f "pnpm-lock.yaml" ]; then
+        echo "package-manager=pnpm" >> $GITHUB_OUTPUT
+      else
+        echo "::error::No package manager lock file found"
+        exit 1
+      fi
 
   - name: Install dependencies
     uses: ./.github/actions/install-dependencies
     with:
-      package-manager: npm
-      cache-key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
+      package-manager: ${{ steps.detect-package-manager.outputs.package-manager }}
+      cache-key: ${{ runner.OS }}-${{ steps.detect-package-manager.outputs.package-manager }}-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml') }}
       github-token: ${{ inputs.github-token }}
 
   - name: Fetch repository metadata
@@ -66,6 +75,7 @@ runs:
       echo "REPO_OWNER=${{ github.repository_owner }}" >> $GITHUB_ENV
       echo "GITHUB_SHA=${{ github.sha }}" >> $GITHUB_ENV
       echo "GITHUB_REF=${{ github.ref }}" >> $GITHUB_ENV
+      echo "PACKAGE_MANAGER=${{ steps.detect-package-manager.outputs.package-manager }}" >> $GITHUB_ENV
 
       CONFIG_DATA='${{ steps.config.outputs.config-data }}'
       REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')
@@ -116,13 +126,15 @@ runs:
         --arg commit "$CURRENT_COMMIT" \
         --arg repoType "$REPO_TYPE" \
         --argjson mainBranches "$MAIN_BRANCHES" \
+        --arg packageManager "${{ steps.detect-package-manager.outputs.package-manager }}" \
         '{
           repoMetadata: $repoMetadata,
           config: $config,
           branch: $branch,
           commit: $commit,
           repoType: $repoType,
-          mainBranches: $mainBranches
+          mainBranches: $mainBranches,
+          packageManager: $packageManager
         }'
       )
       echo "repository-context=$CONTEXT" >> $GITHUB_OUTPUT
@@ -133,4 +145,5 @@ runs:
       echo "Repository context: ${{ steps.repo-context.outputs.repository-context }}"
       echo "Configuration data: ${{ steps.config.outputs.config-data }}"
       echo "Environment variables: ${{ steps.set-env-vars.outputs.environment-variables }}"
+      echo "Package manager: ${{ steps.detect-package-manager.outputs.package-manager }}"
       echo "Setup context and prerequisites completed successfully"
