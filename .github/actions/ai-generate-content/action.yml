@@ -45,7 +45,7 @@ runs:
 
   - name: Install dependencies
     run: npm ci
-    shell: bash -l {0}
+    shell: bash
 
   - name: Prepare AI prompt
     id: prepare-prompt
@@ -65,7 +65,7 @@ runs:
       echo "PROMPT<<EOF" >> $GITHUB_ENV
       echo "$prompt" >> $GITHUB_ENV
       echo "EOF" >> $GITHUB_ENV
-    shell: bash -l {0}
+    shell: bash
 
   - name: Load template
     id: load-template
@@ -75,7 +75,7 @@ runs:
       echo "TEMPLATE<<EOF" >> $GITHUB_ENV
       echo "$template" >> $GITHUB_ENV
       echo "EOF" >> $GITHUB_ENV
-    shell: bash -l {0}
+    shell: bash
 
   - name: Generate content
     id: generate-content
@@ -111,7 +111,7 @@ runs:
       echo "GENERATION_METADATA<<EOF" >> $GITHUB_OUTPUT
       echo "$metadata" >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
-    shell: bash -l {0}
+    shell: bash
 
   - name: Debug - Generated content
     run: |
@@ -119,4 +119,4 @@ runs:
       echo "${{ steps.generate-content.outputs.GENERATED_CONTENT }}"
       echo "Generation metadata:"
       echo "${{ steps.generate-content.outputs.GENERATION_METADATA }}"
-    shell: bash -l {0}
+    shell: bash

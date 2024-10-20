@@ -5,6 +5,7 @@ inputs:
   github-token:
     description: 'GitHub token for API access'
     required: true
+    shell: bash
 
 outputs:
   repository-context:
@@ -25,10 +26,18 @@ runs:
     with:
       node-version: '20'
 
+  - name: Cache dependencies
+    uses: actions/cache@v3
+    with:
+      path: ~/.npm
+      key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
+      restore-keys: |
+        ${{ runner.OS }}-node-
+
   - name: Install dependencies
-    shell: bash -l {0}
+    shell: bash
     run: |
-      npm install @actions/github @actions/core @octokit/rest js-yaml
+      npm ci
 
   - name: Fetch repository metadata
     id: repo-metadata
@@ -46,111 +55,87 @@ runs:
 
   - name: Load and parse config.yml
     id: config
-    shell: node
+    shell: bash
     run: |
-      const fs = require('fs');
-      const yaml = require('js-yaml');
-      const core = require('@actions/core');
-
-      const configPath = '.github/config.yml';
-      try {
-        if (!fs.existsSync(configPath)) {
-          throw new Error('config.yml is missing');
-        }
-        const configData = yaml.load(fs.readFileSync(configPath, 'utf8'));
-        core.setOutput('config-data', JSON.stringify(configData));
-      } catch (error) {
-        core.setFailed(`Failed to load or parse config.yml: ${error.message}`);
-      }
+      CONFIG_PATH='.github/config.yml'
+      if [ ! -f "$CONFIG_PATH" ]; then
+        echo "::error::config.yml is missing"
+        exit 1
+      fi
+      CONFIG_DATA=$(yq eval -o=json "$CONFIG_PATH")
+      echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
 
   - name: Set up environment variables
     id: set-env-vars
-    shell: node
+    shell: bash
     run: |
-      const core = require('@actions/core');
-      const github = require('@actions/github');
+      echo "REPO_NAME=${{ github.repository }}" >> $GITHUB_ENV
+      echo "REPO_OWNER=${{ github.repository_owner }}" >> $GITHUB_ENV
+      echo "GITHUB_SHA=${{ github.sha }}" >> $GITHUB_ENV
+      echo "GITHUB_REF=${{ github.ref }}" >> $GITHUB_ENV
 
-      try {
-        core.exportVariable('REPO_NAME', github.context.repo.repo);
-        core.exportVariable('REPO_OWNER', github.context.repo.owner);
-        core.exportVariable('GITHUB_SHA', github.context.sha);
-        core.exportVariable('GITHUB_REF', github.context.ref);
+      CONFIG_DATA='${{ steps.config.outputs.config-data }}'
+      REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')
+      MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.version_control.main_branches')
 
-        const config = JSON.parse(process.env.CONFIG_DATA);
-        core.exportVariable('REPO_TYPE', config.repository.type);
-        core.exportVariable('MAIN_BRANCHES', JSON.stringify(config.version_control.main_branches));
+      echo "REPO_TYPE=$REPO_TYPE" >> $GITHUB_ENV
+      echo "MAIN_BRANCHES=$MAIN_BRANCHES" >> $GITHUB_ENV
 
-        core.setOutput('environment-variables', 'Environment variables set');
-      } catch (error) {
-        core.setFailed(`Failed to set environment variables: ${error.message}`);
-      }
-    env:
-      CONFIG_DATA: ${{ steps.config.outputs.config-data }}
+      echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
 
   - name: Validate repository settings
-    shell: node
+    shell: bash
     run: |
-      const core = require('@actions/core');
+      REPO_METADATA='${{ steps.repo-metadata.outputs.result }}'
+      CONFIG_DATA='${{ steps.config.outputs.config-data }}'
 
-      try {
-        const repoData = JSON.parse(process.env.REPO_METADATA);
-        const config = JSON.parse(process.env.CONFIG_DATA);
+      HAS_ISSUES=$(echo "$REPO_METADATA" | jq -r '.has_issues')
+      HAS_PROJECTS=$(echo "$REPO_METADATA" | jq -r '.has_projects')
+      AUTO_LABELING=$(echo "$CONFIG_DATA" | jq -r '.issue_management.auto_labeling.enabled')
+      REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')
 
-        if (!repoData.has_issues && config.issue_management.auto_labeling.enabled) {
-          core.warning('Issues are not enabled for this repository, but issue management is configured');
-        }
-        if (!repoData.has_projects && config.repository.type === 'monorepo') {
-          core.warning('Projects are not enabled for this repository, but it is configured as a monorepo');
-        }
-      } catch (error) {
-        core.setFailed(`Failed to validate repository settings: ${error.message}`);
-      }
-    env:
-      REPO_METADATA: ${{ steps.repo-metadata.outputs.result }}
-      CONFIG_DATA: ${{ steps.config.outputs.config-data }}
+      if [ "$HAS_ISSUES" = "false" ] && [ "$AUTO_LABELING" = "true" ]; then
+        echo "::warning::Issues are not enabled for this repository, but issue management is configured"
+      fi
+
+      if [ "$HAS_PROJECTS" = "false" ] && [ "$REPO_TYPE" = "monorepo" ]; then
+        echo "::warning::Projects are not enabled for this repository, but it is configured as a monorepo"
+      fi
 
   - name: Determine current branch and commit information
-    shell: node
+    shell: bash
     run: |
-      const core = require('@actions/core');
-      const github = require('@actions/github');
-
-      try {
-        const branch = github.context.ref.replace('refs/heads/', '');
-        const commit = github.context.sha;
-        core.exportVariable('CURRENT_BRANCH', branch);
-        core.exportVariable('CURRENT_COMMIT', commit);
-      } catch (error) {
-        core.setFailed(`Failed to determine branch and commit information: ${error.message}`);
-      }
+      CURRENT_BRANCH=${GITHUB_REF#refs/heads/}
+      CURRENT_COMMIT=$GITHUB_SHA
+      echo "CURRENT_BRANCH=$CURRENT_BRANCH" >> $GITHUB_ENV
+      echo "CURRENT_COMMIT=$CURRENT_COMMIT" >> $GITHUB_ENV
 
   - name: Create repository context
     id: repo-context
-    shell: node
+    shell: bash
     run: |
-      const core = require('@actions/core');
-
-      try {
-        const repoData = JSON.parse(process.env.REPO_METADATA);
-        const configData = JSON.parse(process.env.CONFIG_DATA);
-        const context = {
-          repoMetadata: repoData,
-          config: configData,
-          branch: process.env.CURRENT_BRANCH,
-          commit: process.env.CURRENT_COMMIT,
-          repoType: process.env.REPO_TYPE,
-          mainBranches: JSON.parse(process.env.MAIN_BRANCHES)
-        };
-        core.setOutput('repository-context', JSON.stringify(context));
-      } catch (error) {
-        core.setFailed(`Failed to create repository context: ${error.message}`);
-      }
-    env:
-      REPO_METADATA: ${{ steps.repo-metadata.outputs.result }}
-      CONFIG_DATA: ${{ steps.config.outputs.config-data }}
+      REPO_METADATA='${{ steps.repo-metadata.outputs.result }}'
+      CONFIG_DATA='${{ steps.config.outputs.config-data }}'
+      CONTEXT=$(jq -n \
+        --argjson repoMetadata "$REPO_METADATA" \
+        --argjson config "$CONFIG_DATA" \
+        --arg branch "$CURRENT_BRANCH" \
+        --arg commit "$CURRENT_COMMIT" \
+        --arg repoType "$REPO_TYPE" \
+        --argjson mainBranches "$MAIN_BRANCHES" \
+        '{
+          repoMetadata: $repoMetadata,
+          config: $config,
+          branch: $branch,
+          commit: $commit,
+          repoType: $repoType,
+          mainBranches: $mainBranches
+        }'
+      )
+      echo "repository-context=$CONTEXT" >> $GITHUB_OUTPUT
 
   - name: Output results
-    shell: bash -l {0}
+    shell: bash
     run: |
       echo "Repository context: ${{ steps.repo-context.outputs.repository-context }}"
       echo "Configuration data: ${{ steps.config.outputs.config-data }}"
