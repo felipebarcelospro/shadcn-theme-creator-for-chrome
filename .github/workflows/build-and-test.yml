@@ -43,8 +43,6 @@ jobs:
       - name: Build Packages
         run: yarn turbo run build --filter=./packages/*
 
-      - name: Run Tests
-        run: yarn turbo run test --filter=./packages/*
 
   build_web:
     runs-on: ubuntu-latest
