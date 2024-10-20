@@ -139,14 +139,14 @@ jobs:
           if [ -n "$issues" ]; then
             echo "Linking related issues to PR"
             pr_number=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number')
-            updated_body="$PR_BODY
+            updated_body="${PR_BODY}
 
 Related Issues:
 $(echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"')"
-            gh pr edit $pr_number --body "$updated_body"
+            gh pr edit "$pr_number" --body "$updated_body"
             echo "$issues" | jq -r '.[]' | while read -r issue; do
-              number=$(echo $issue | jq -r '.number')
-              gh issue comment $number --body "This issue is addressed in PR #$pr_number"
+              number=$(echo "$issue" | jq -r '.number')
+              gh issue comment "$number" --body "This issue is addressed in PR #$pr_number"
             done
           fi
 
