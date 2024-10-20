@@ -28,7 +28,7 @@ export function RepoStats({ repoInfo }: RepoStatsProps) {
 
 function StatItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | string }) {
   return (
-    <div className="flex items-center space-x-2 bg-secondary p-4 rounded-md">
+    <div className="flex items-center space-x-2 border p-4 rounded-md">
       <span className="bg-primary/10 text-primary p-2 rounded-md">
         {icon}
       </span>

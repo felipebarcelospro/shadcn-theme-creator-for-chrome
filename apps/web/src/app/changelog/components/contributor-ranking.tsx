@@ -41,25 +41,18 @@ function ContributorItem({ rank, contributor }: { rank: number; contributor: Con
 
   return (
     <div 
-      className="flex items-center space-x-2 border-b border-gray-200 pb-4 cursor-pointer group relative"
+      className="flex items-center space-x-2 border p-2 px-4 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md cursor-pointer group relative"
       onClick={handleClick}
       title={`View ${contributor.login}'s contributions to this project`}
     >
-      <div className="relative">
+      <div className="relative bg-primary rounded-full overflow-hidden">
         <Image
           src={contributor.avatarUrl}
           alt={contributor.login}
           width={32}
           height={32}
-          className="rounded-full transition-opacity group-hover:opacity-70"
+          className="rounded-full transition-opacity group-hover:opacity-70 "
         />
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-white">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <line x1="10" y1="14" x2="21" y2="3"></line>
-          </svg>
-        </div>
       </div>
       <div className="flex-grow">
         <p className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 transition-colors">{contributor.login}</p>

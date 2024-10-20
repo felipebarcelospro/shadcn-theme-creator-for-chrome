@@ -1,0 +1,265 @@
+name: Branch Management
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Run daily at midnight UTC
+  push:
+    branches:
+      - 'feature/**'
+      - 'release/**'
+      - 'hotfix/**'
+      - 'chore/**'
+      - 'fix/**'
+  workflow_dispatch:  # Allow manual triggering
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  process_branch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set branch name
+        id: set_branch
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+          else
+            echo "BRANCH_NAME=" >> $GITHUB_ENV
+          fi
+
+      - name: Fetch develop branch
+        run: git fetch origin develop
+
+      - name: Check for Commits
+        id: check_commits
+        run: |
+          if [[ -n "$BRANCH_NAME" ]]; then
+            commits=$(git log --oneline origin/develop..$BRANCH_NAME 2>/dev/null || echo "")
+            if [[ -z "$commits" ]]; then
+              echo "NO_COMMITS=true" >> $GITHUB_ENV
+              echo "Branch $BRANCH_NAME is synchronized with develop"
+            else
+              echo "NO_COMMITS=false" >> $GITHUB_ENV
+              echo "Found commits in $BRANCH_NAME:"
+              echo "$commits"
+            fi
+          else
+            echo "NO_COMMITS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Validate GROQ API Key
+        run: |
+          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "Error: GROQ_API_KEY is not set or empty"
+            exit 1
+          fi
+          echo "GROQ_API_KEY is set and not empty"
+
+      - name: Generate PR Content
+        if: env.NO_COMMITS == 'false'
+        id: pr_content
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: 'https://api.groq.com/openai/v1/chat/completions'
+          method: 'POST'
+          customHeaders: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
+          data: |
+            {
+              "model": "llama-3.1-70b-versatile",
+              "messages": [
+                {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
+                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: ${{ env.BRANCH_NAME }}, Commits: ${{ github.event.commits }}"}
+              ],
+              "temperature": 0.4,
+              "response_format": {"type": "json_object"}
+            }
+
+      - name: Parse PR Content
+        if: env.NO_COMMITS == 'false'
+        run: |
+          pr_data='${{ steps.pr_content.outputs.response }}'
+          pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+          pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
+
+          if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
+            echo "Error: Generated PR content is null or empty. Retrying with a different prompt."
+            exit 1
+          fi
+
+          echo "PR_TITLE=$(echo "$pr_title" | sed 's/"/\\"/g')" >> $GITHUB_ENV
+          echo "PR_BODY<<EOF" >> $GITHUB_ENV
+          echo "$pr_body" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Validate PR Content
+        run: |
+          if [ -z "$PR_TITLE" ] || [ -z "$PR_BODY" ]; then
+            echo "Error: PR content is invalid. Please check API response."
+            exit 1
+          fi
+
+      - name: Get Branch Creator
+        id: branch_creator
+        run: |
+          if [[ -n "$BRANCH_NAME" ]]; then
+            creator=$(git log -1 --format='%an' origin/$BRANCH_NAME)
+            echo "BRANCH_CREATOR=$creator" >> $GITHUB_ENV
+          else
+            echo "BRANCH_CREATOR=Unknown" >> $GITHUB_ENV
+          fi
+
+      - name: Create or Update Pull Request
+        if: env.NO_COMMITS == 'false'
+        run: |
+          set -e
+          echo "Processing PR for branch: $BRANCH_NAME"
+          existing_pr=$(gh pr list --head "$BRANCH_NAME" --base develop --json number --jq '.[0].number')
+
+          if [ -n "$existing_pr" ]; then
+            echo "Updating existing PR #$existing_pr for $BRANCH_NAME"
+            gh pr edit $existing_pr --title "$PR_TITLE" --body "$PR_BODY"
+          else
+            echo "Creating new PR for $BRANCH_NAME"
+            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "$BRANCH_NAME" --author "$BRANCH_CREATOR" || {
+              echo "Failed to create PR. This might be due to no new commits or other issues."
+              exit 0
+            }
+          fi
+
+      - name: Link Related Issues
+        if: env.NO_COMMITS == 'false'
+        run: |
+          issues=$(gh issue list --search "$BRANCH_NAME" --json number,title)
+          if [ -n "$issues" ]; then
+            echo "Linking related issues to PR"
+            pr_number=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number')
+            updated_body="${PR_BODY}
+
+            Related Issues:
+            $(echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"')"
+            gh pr edit "$pr_number" --body "$updated_body"
+            echo "$issues" | jq -r '.[]' | while read -r issue; do
+              number=$(echo "$issue" | jq -r '.number')
+              gh issue comment "$number" --body "This issue is addressed in PR #$pr_number"
+            done
+          fi
+
+      - name: Debug Information
+        run: |
+          echo "Debugging Information:"
+          echo "Branch Name: $BRANCH_NAME"
+          echo "PR Title: $PR_TITLE"
+          echo "PR Body: $PR_BODY"
+          echo "Existing PR: $existing_pr"
+          echo "Branch Creator: $BRANCH_CREATOR"
+
+  check_open_branches:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate GROQ API Key
+        run: |
+          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "Error: GROQ_API_KEY is not set or empty"
+            exit 1
+          fi
+          echo "GROQ_API_KEY is set and not empty"
+
+      - name: Check for Open Branches without PRs
+        run: |
+          set -e
+          echo "Fetching all branches..."
+          git fetch --all
+          echo "Checking for branches without PRs..."
+          branches=$(git branch -r | grep -vE 'origin/(develop|main)' | grep -E 'origin/(feature|release|hotfix|chore|fix)/' | sed 's/origin\///')
+          for branch in $branches; do
+            pr_exists=$(gh pr list --head "$branch" --base develop --json number --jq 'length')
+            if [ "$pr_exists" -eq 0 ]; then
+              echo "Processing branch without PR: $branch"
+              git checkout $branch
+              creator=$(git log -1 --format='%an' origin/$branch)
+              commits=$(git log --pretty=format:'%H' origin/develop..$branch | jq -R -s -c 'split("\n")[:-1]')
+              
+              # Generate PR content using HTTP Request Action
+              pr_content=$(fjogeleit/http-request-action@v1 \
+                --url https://api.groq.com/openai/v1/chat/completions \
+                --method POST \
+                --customHeaders '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}' \
+                --data '{
+                  "model": "llama-3.1-70b-versatile",
+                  "messages": [
+                    {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
+                    {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '"$branch"', Commits: '"$commits"'"}
+                  ],
+                  "temperature": 0.4,
+                  "response_format": {"type": "json_object"}
+                }')
+              
+              pr_title=$(echo "$pr_content" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+              pr_body=$(echo "$pr_content" | jq -r '.choices[0].message.content | fromjson | .body // empty')
+              
+              if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
+                echo "Error: Generated PR content is null or empty. Skipping PR creation for $branch."
+                continue
+              fi
+              
+              gh pr create --title "$pr_title" --body "$pr_body" --base develop --head "$branch" --author "$creator"
+            else
+              pr_number=$(gh pr list --head "$branch" --base develop --json number --jq '.[0].number')
+              echo "PR #$pr_number exists for branch $branch. Checking for updates."
+              branch_commits=$(git log origin/develop..$branch --oneline | wc -l)
+              pr_commits=$(gh pr view $pr_number --json commits --jq '.commits | length')
+              if [ "$branch_commits" -gt "$pr_commits" ]; then
+                echo "Branch $branch has new commits. Updating PR #$pr_number."
+                commits=$(git log --pretty=format:'%H' origin/develop..$branch | jq -R -s -c 'split("\n")[:-1]')
+                
+                # Update PR content using HTTP Request Action
+                pr_content=$(fjogeleit/http-request-action@v1 \
+                  --url https://api.groq.com/openai/v1/chat/completions \
+                  --method POST \
+                  --customHeaders '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}' \
+                  --data '{
+                    "model": "llama-3.1-70b-versatile",
+                    "messages": [
+                      {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
+                      {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '"$branch"', Commits: '"$commits"'"}
+                    ],
+                    "temperature": 0.4,
+                    "response_format": {"type": "json_object"}
+                  }')
+                
+                pr_title=$(echo "$pr_content" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+                pr_body=$(echo "$pr_content" | jq -r '.choices[0].message.content | fromjson | .body // empty')
+                
+                if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
+                  echo "Error: Generated PR content is null or empty. Skipping PR update for $branch."
+                  continue
+                fi
+                
+                gh pr edit $pr_number --title "$pr_title" --body "$pr_body"
+              fi
+            fi
+          done

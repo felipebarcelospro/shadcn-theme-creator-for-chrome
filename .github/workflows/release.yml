@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["Build and Test"]
+    types:
+      - completed
+    branches: ["main"]
+
+jobs:
+  prepare_release:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      should_release: ${{ steps.check_changes.outputs.should_release }}
+      new_version: ${{ steps.version.outputs.new_version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Relevant Changes
+        id: check_changes
+        run: |
+          changes=$(git diff --name-only ${{ github.event.workflow_run.head_sha }} ${{ github.sha }})
+          if echo "$changes" | grep -qE "^(apps/web|apps/chrome-extension|packages)/"; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine Version
+        id: version
+        if: steps.check_changes.outputs.should_release == 'true'
+        run: |
+          current_version=$(jq -r '.version' package.json)
+          new_version=$(echo $current_version | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
+          echo "new_version=$new_version" >> $GITHUB_OUTPUT
+
+      - name: Generate Release Notes with AI
+        id: changelog
+        if: steps.check_changes.outputs.should_release == 'true'
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          commits=$(git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%s")
+          changelog_response=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "llama-3.1-70b-versatile",
+              "messages": [
+                {"role": "system", "content": "You are an AI assistant tasked with creating detailed and user-friendly changelogs. Respond in JSON format with a key 'changelog'."},
+                {"role": "user", "content": "Create a detailed and user-friendly changelog for the following commits: \"'"$commits"'\""}
+              ],
+              "temperature": 0.3,
+              "response_format": {"type": "json_object"}
+            }')
+          echo "changelog=$(echo $changelog_response | jq -r '.choices[0].message.content' | jq -r '.changelog')" >> $GITHUB_OUTPUT
+
+  release:
+    needs: prepare_release
+    if: needs.prepare_release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Update package.json
+        run: |
+          jq '.version = "${{ needs.prepare_release.outputs.new_version }}"' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+      - name: Commit Version Update
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add package.json
+          git commit -m "chore: bump version to ${{ needs.prepare_release.outputs.new_version }}"
+          git push
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.prepare_release.outputs.new_version }}
+          name: Release v${{ needs.prepare_release.outputs.new_version }}
+          body: ${{ needs.prepare_release.outputs.changelog }}
+          draft: false
+          prerelease: false
+          token: ${{ github.token }}
+
+      - name: Download Chrome Extension Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: chrome-extension
+          path: releases
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Attach Chrome Extension to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: releases/STC_Beta_*.zip
+          tag_name: v${{ needs.prepare_release.outputs.new_version }}
+          token: ${{ github.token }}

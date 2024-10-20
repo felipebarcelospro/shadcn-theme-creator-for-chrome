@@ -1,5 +1,4 @@
 import { Octokit } from "@octokit/rest";
-import { config } from "@repo/shared/config";
 
 const octokit = new Octokit({
   auth: process.env.GITHUB_TOKEN,
@@ -73,23 +72,7 @@ export async function getContributors(): Promise<Contributor[]> {
     contributions: contributor.contributions,
   }));
 
-  // Add the creator as the first contributor
-  const { developerName, developerImage } = config;
-  const creator: Contributor = {
-    login: developerName,
-    avatarUrl: developerImage,
-    contributions: -1, // Use -1 to indicate creator status
-  };
-
-  // Fetch updated data for the creator
-  try {
-    const { data: creatorData } = await octokit.users.getByUsername({ username: developerName });
-    creator.avatarUrl = creatorData.avatar_url;
-  } catch (error) {
-    console.error(`Failed to fetch updated data for creator: ${error}`);
-  }
-
-  return [creator, ...contributors];
+  return contributors;
 }
 
 /**
