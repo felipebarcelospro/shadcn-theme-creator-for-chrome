@@ -22,12 +22,22 @@ jobs:
         id: check
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            changes=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '^(apps/chrome-extension|packages|apps/web)/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+            base_sha=${{ github.event.pull_request.base.sha }}
+            head_sha=${{ github.event.pull_request.head.sha }}
           else
-            changes=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '^(apps/chrome-extension|packages|apps/web)/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+            base_sha=${{ github.event.before }}
+            head_sha=${{ github.sha }}
           fi
-          echo "changes=$changes" >> $GITHUB_OUTPUT
-          echo "Detected changes: $changes"
+
+          changes=$(git diff --name-only $base_sha $head_sha | grep -E '^(apps/chrome-extension|packages|apps/web)/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+          
+          if [ -z "$changes" ] || [ "$changes" == "[]" ]; then
+            echo "changes=[\"all\"]" >> $GITHUB_OUTPUT
+            echo "Detected changes in all projects"
+          else
+            echo "changes=$changes" >> $GITHUB_OUTPUT
+            echo "Detected changes: $changes"
+          fi
 
   build_packages:
     runs-on: ubuntu-latest
