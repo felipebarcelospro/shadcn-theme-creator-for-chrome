@@ -1,43 +1,3 @@
-# Repository Configuration
-repository:
-  !!merge <<: *repository_config
-
-# Package Management
-packages:
-  !!merge <<: *packages_config
-
-# Pull Request Management
-pr_management:
-  !!merge <<: *pr_management_config
-
-# Issue Management
-issue_management:
-  !!merge <<: *issue_management_config
-
-# Release Management
-release_management:
-  !!merge <<: *release_management_config
-
-# Security and Dependency Management
-security_dependency_management:
-  !!merge <<: *security_dependency_management_config
-
-# Automated Testing
-automated_testing:
-  !!merge <<: *automated_testing_config
-
-# Metrics Generation
-metrics_generation:
-  !!merge <<: *metrics_generation_config
-
-# Cron Jobs
-cron_jobs:
-  !!merge <<: *cron_jobs_config
-
-# Plugins
-plugins:
-  !!merge <<: *plugins_config
-
 # Anchor definitions
 repository_config: &repository_config
   file: ./configs/repository.config.yml
@@ -68,3 +28,34 @@ cron_jobs_config: &cron_jobs_config
 
 plugins_config: &plugins_config
   file: ./configs/plugins.config.yml
+
+# Configuration sections
+repository:
+  !!merge <<: *repository_config
+
+packages:
+  !!merge <<: *packages_config
+
+pr_management:
+  !!merge <<: *pr_management_config
+
+issue_management:
+  !!merge <<: *issue_management_config
+
+release_management:
+  !!merge <<: *release_management_config
+
+security_dependency_management:
+  !!merge <<: *security_dependency_management_config
+
+automated_testing:
+  !!merge <<: *automated_testing_config
+
+metrics_generation:
+  !!merge <<: *metrics_generation_config
+
+cron_jobs:
+  !!merge <<: *cron_jobs_config
+
+plugins:
+  !!merge <<: *plugins_config
