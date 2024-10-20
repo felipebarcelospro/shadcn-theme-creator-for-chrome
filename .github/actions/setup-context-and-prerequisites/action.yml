@@ -23,8 +23,6 @@ runs:
   steps:
   - name: Load and parse config.yml
     shell: bash
-    env:
-      GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
       CONFIG_PATH='.github/config.yml'
       if [ ! -f "$CONFIG_PATH" ]; then
@@ -35,9 +33,9 @@ runs:
       echo "config-data<<EOF" >> $GITHUB_OUTPUT
       echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
-      echo "Debug: Config data loaded and parsed"
 
   - name: Detect package manager
+    id: detect-package-manager
     shell: bash
     run: |
       PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager')
@@ -54,20 +52,13 @@ runs:
         fi
       fi
       echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
-      echo "Debug: Package manager detected: $PACKAGE_MANAGER"
 
   - name: Install dependencies
     shell: bash
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
-      if [ -z "$PACKAGE_MANAGER" ]; then
-        echo "::error::Package manager not detected"
-        exit 1
-      fi
-
-      echo "Debug: Installing dependencies using $PACKAGE_MANAGER"
-      case "$PACKAGE_MANAGER" in
+      case "${{ steps.detect-package-manager.outputs.package-manager }}" in
         npm)
           npm ci
           ;;
@@ -78,23 +69,26 @@ runs:
           pnpm install --frozen-lockfile
           ;;
         *)
-          echo "::error::Unsupported package manager: $PACKAGE_MANAGER"
+          echo "::error::Unsupported package manager: ${{ steps.detect-package-manager.outputs.package-manager }}"
           exit 1
           ;;
       esac
       echo "installation-status=success" >> $GITHUB_OUTPUT
-      echo "Debug: Dependencies installed using $PACKAGE_MANAGER"
 
   - name: Fetch repository metadata
+    id: fetch-repo-metadata
     shell: bash
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
       REPO_METADATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
         "https://api.github.com/repos/${{ github.repository }}")
-      echo "Debug: Repository metadata fetched"
+      echo "repo-metadata<<EOF" >> $GITHUB_OUTPUT
+      echo "$REPO_METADATA" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
   - name: Set up environment variables
+    id: set-env-vars
     shell: bash
     run: |
       {
@@ -102,7 +96,7 @@ runs:
         echo "REPO_OWNER=${{ github.repository_owner }}"
         echo "GITHUB_SHA=${{ github.sha }}"
         echo "GITHUB_REF=${{ github.ref }}"
-        echo "PACKAGE_MANAGER=$PACKAGE_MANAGER"
+        echo "PACKAGE_MANAGER=${{ steps.detect-package-manager.outputs.package-manager }}"
         echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')"
         echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches | @json')"
         echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes | @json')"
@@ -110,13 +104,12 @@ runs:
         echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches | @json')"
       } >> $GITHUB_ENV
       echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
-      echo "Debug: Environment variables set"
 
   - name: Validate repository settings
     shell: bash
     run: |
-      HAS_ISSUES=$(echo "$REPO_METADATA" | jq -r '.has_issues')
-      HAS_PROJECTS=$(echo "$REPO_METADATA" | jq -r '.has_projects')
+      HAS_ISSUES=$(echo "${{ steps.fetch-repo-metadata.outputs.repo-metadata }}" | jq -r '.has_issues')
+      HAS_PROJECTS=$(echo "${{ steps.fetch-repo-metadata.outputs.repo-metadata }}" | jq -r '.has_projects')
       AUTO_LABELING=$(echo "$CONFIG_DATA" | jq -r '.issue_management.auto_label.enabled')
       REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')
 
@@ -127,31 +120,22 @@ runs:
       if [ "$HAS_PROJECTS" = "false" ] && [ "$REPO_TYPE" = "monorepo" ]; then
         echo "::warning::Projects are not enabled for this repository, but it is configured as a monorepo"
       fi
-      echo "Debug: Repository settings validated"
-
-  - name: Determine current branch and commit information
-    shell: bash
-    run: |
-      CURRENT_BRANCH=${GITHUB_REF#refs/heads/}
-      CURRENT_COMMIT=$GITHUB_SHA
-      echo "CURRENT_BRANCH=$CURRENT_BRANCH" >> $GITHUB_ENV
-      echo "CURRENT_COMMIT=$CURRENT_COMMIT" >> $GITHUB_ENV
-      echo "Debug: Current branch and commit information determined"
 
   - name: Set repository context
+    id: set-repo-context
     shell: bash
     run: |
       CONTEXT=$(jq -n \
-        --argjson repoMetadata "$REPO_METADATA" \
+        --argjson repoMetadata "${{ steps.fetch-repo-metadata.outputs.repo-metadata }}" \
         --argjson config "$CONFIG_DATA" \
-        --arg branch "$CURRENT_BRANCH" \
-        --arg commit "$CURRENT_COMMIT" \
+        --arg branch "${GITHUB_REF#refs/heads/}" \
+        --arg commit "$GITHUB_SHA" \
         --arg repoType "$REPO_TYPE" \
         --argjson mainBranches "$(echo "$CONFIG_DATA" | jq '.repository.version_control.main_branches')" \
         --argjson branchPrefixes "$(echo "$CONFIG_DATA" | jq '.repository.version_control.branch_prefixes')" \
         --argjson mergeStrategy "$(echo "$CONFIG_DATA" | jq '.repository.version_control.merge_strategy')" \
         --argjson protectedBranches "$(echo "$CONFIG_DATA" | jq '.repository.version_control.protected_branches')" \
-        --arg packageManager "$PACKAGE_MANAGER" \
+        --arg packageManager "${{ steps.detect-package-manager.outputs.package-manager }}" \
         '{
           repoMetadata: $repoMetadata,
           config: $config,
@@ -167,14 +151,13 @@ runs:
       echo "repository-context<<EOF" >> $GITHUB_OUTPUT
       echo "$CONTEXT" >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
-      echo "Debug: Repository context set"
 
   - name: Output results
     shell: bash
     run: |
-      echo "Repository context: $CONTEXT"
+      echo "Repository context: ${{ steps.set-repo-context.outputs.repository-context }}"
       echo "Configuration data: $CONFIG_DATA"
-      echo "Environment variables set"
-      echo "Package manager: $PACKAGE_MANAGER"
+      echo "Environment variables set: ${{ steps.set-env-vars.outputs.environment-variables }}"
+      echo "Package manager: ${{ steps.detect-package-manager.outputs.package-manager }}"
+      echo "Installation status: ${{ steps.install-dependencies.outputs.installation-status }}"
       echo "Setup context and prerequisites completed successfully"
-      echo "Debug: Results outputted"
