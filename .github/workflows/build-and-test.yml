@@ -1,162 +1,138 @@
-name: Branch Management
+name: Build and Test
 
 on:
-  schedule:
-    - cron: '0 0 * * *'  # Run daily at midnight UTC
   push:
-    branches:
-      - 'feature/**'
-      - 'release/**'
-      - 'hotfix/**'
-      - 'chore/**'
-      - 'fix/**'
-  workflow_dispatch:  # Allow manual triggering
-
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-  pull-requests: write
-  issues: write
+    branches: ["main", "develop", "feature/*", "release/*", "hotfix/*", "ci/*", "chore/*"]
+  pull_request:
+    branches: ["main", "develop"]
+  workflow_dispatch:
 
 jobs:
-  process_branch:
+  check_project_changes:
     runs-on: ubuntu-latest
+    outputs:
+      changes: ${{ steps.check.outputs.changes }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set branch name
-        id: set_branch
+      - name: Check for Changes
+        id: check
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
-          else
-            echo "BRANCH_NAME=" >> $GITHUB_ENV
-          fi
+          changes=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '^(apps/chrome-extension|packages|apps/web)/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+          echo "changes=$changes" >> $GITHUB_OUTPUT
+          echo "Detected changes: $changes"
 
-      - name: Fetch develop branch
-        run: git fetch origin develop
-
-      - name: Check for Commits
-        id: check_commits
-        run: |
-          if [[ -n "$BRANCH_NAME" ]]; then
-            commits=$(git log --oneline origin/develop..$BRANCH_NAME 2>/dev/null || echo "")
-            if [[ -z "$commits" ]]; then
-              echo "NO_COMMITS=true" >> $GITHUB_ENV
-              echo "Branch $BRANCH_NAME is synchronized with develop"
-            else
-              echo "NO_COMMITS=false" >> $GITHUB_ENV
-              echo "Found commits in $BRANCH_NAME:"
-              echo "$commits"
-            fi
-          else
-            echo "NO_COMMITS=false" >> $GITHUB_ENV
-
-      - name: Generate PR Content
-        if: env.NO_COMMITS == 'false'
-        id: pr_content
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: |
-          set -e
-          echo "Generating PR content for branch: $BRANCH_NAME"
-          commits=$(git log --format=%B origin/develop..$BRANCH_NAME)
-          pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
-            -H "Authorization: Bearer $GROQ_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "model": "llama-3.1-70b-versatile",
-              "messages": [
-                {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
-                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '$BRANCH_NAME', Commits: '$commits'"}
-              ],
-              "temperature": 0.7,
-              "response_format": {"type": "json_object"}
-            }')
-          echo "PR_TITLE=$(echo $pr_data | jq -r '.choices[0].message.content.title')" >> $GITHUB_ENV
-          echo "PR_BODY=$(echo $pr_data | jq -r '.choices[0].message.content.body')" >> $GITHUB_ENV
-
-      - name: Validate PR Content
-        run: |
-          if [ -z "$PR_TITLE" ] || [ -z "$PR_BODY" ]; then
-            echo "Error: Generated PR content is null. Please check API response."
-            exit 1
-          fi
-
-      - name: Create or Update Pull Request
-        if: env.NO_COMMITS == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          echo "Processing PR for branch: $BRANCH_NAME"
-          existing_pr=$(gh pr list --head "$BRANCH_NAME" --base develop --json number --jq '.[0].number')
-          if [ -z "$PR_TITLE" ] || [ -z "$PR_BODY" ]; then
-            PR_TITLE="WIP: Changes for $BRANCH_NAME"
-            PR_BODY="This is a placeholder body for the pull request."
-          fi
-          if [ -z "$existing_pr" ]; then
-            echo "Creating new PR for $BRANCH_NAME"
-            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "$BRANCH_NAME" || {
-              echo "Failed to create PR. This might be due to no new commits or other issues."
-              exit 0
-            }
-          else
-            echo "Updating existing PR #$existing_pr for $BRANCH_NAME"
-            gh pr edit "$existing_pr" --title "$PR_TITLE" --body "$PR_BODY"
-          fi
-
-      - name: Link Related Issues
-        if: env.NO_COMMITS == 'false'
-        run: |
-          issues=$(gh issue list --search "$BRANCH_NAME" --json number,title)
-          if [ -n "$issues" ]; then
-            echo "Linking related issues to PR"
-            pr_number=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number')
-            echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"' >> $PR_BODY
-            gh pr edit $pr_number --body "$PR_BODY"
-            echo "$issues" | jq -r '.[]' | while read -r issue; do
-              number=$(echo $issue | jq -r '.number')
-              gh issue comment $number --body "This issue is addressed in PR #$pr_number"
-            done
-          fi
-
-      - name: Debug Information
-        run: |
-          echo "Debugging Information:"
-          echo "Branch Name: $BRANCH_NAME"
-          echo "PR Title: $PR_TITLE"
-          echo "PR Body: $PR_BODY"
-          echo "Existing PR: $existing_pr"
-
-  check_open_branches:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+  build_packages:
     runs-on: ubuntu-latest
+    needs: check_project_changes
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'packages')
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Check for Open Branches without PRs
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Build Packages
+        run: yarn turbo run build --filter=./packages/*
+
+      - name: Run Tests
+        run: yarn turbo run test --filter=./packages/*
+
+  build_web:
+    runs-on: ubuntu-latest
+    needs: [check_project_changes, build_packages]
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'web')
+    env:
+      NEXT_PUBLIC_PLUNK_API_KEY: ${{ secrets.NEXT_PUBLIC_PLUNK_API_KEY }}
+      NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Build Web App
+        run: yarn turbo run build --filter=web...
+
+      - name: Upload Web Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./apps/web/out
+
+  build_extension:
+    runs-on: ubuntu-latest
+    needs: [check_project_changes, build_packages]
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'chrome-extension')
+    env:
+      NEXT_PUBLIC_PLUNK_API_KEY: ${{ secrets.NEXT_PUBLIC_PLUNK_API_KEY }}
+      NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Build Chrome Extension
+        run: yarn turbo run build --filter=chrome-extension...
+
+      - name: Determine Version Bump
+        id: determine_version
         run: |
-          set -e
-          echo "Fetching all branches..."
-          git fetch --all
-          echo "Checking for branches without PRs..."
-          branches=$(git branch -r | grep -vE 'origin/(develop|main)' | grep -E 'origin/(feature|release|hotfix|chore|fix)/' | sed 's/origin\///')
-          for branch in $branches; do
-            pr_exists=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:$branch&base=develop&state=open" | jq length)
-            if [ "$pr_exists" -eq 0 ]; then
-              echo "Processing branch without PR: $branch"
-              git checkout $branch
-              ./.github/workflows/branch-management.yml
-            fi
-          done
+          branch=${GITHUB_REF#refs/heads/}
+          if [[ "$branch" == release/* ]]; then
+            bump="minor"
+          elif [[ "$branch" == hotfix/* ]]; then
+            bump="patch"
+          else
+            bump="patch"
+          fi
+          current_version=$(jq -r '.version' apps/chrome-extension/package.json)
+          new_version=$(echo $current_version | awk -F. -v bump="$bump" '{if(bump=="patch") $3++; else if(bump=="minor") {$2++; $3=0} else {$1++; $2=0; $3=0}} 1' OFS=.)
+          echo "version=$new_version" >> $GITHUB_OUTPUT
+          echo "New version: $new_version"
+
+      - name: Update Version in Files
+        run: |
+          jq --arg version "${{ steps.determine_version.outputs.version }}" '.version = $version' apps/chrome-extension/package.json > tmp.json && mv tmp.json apps/chrome-extension/package.json
+          jq --arg version "${{ steps.determine_version.outputs.version }}" '.version = $version' package.json > tmp.json && mv tmp.json package.json
+
+      - name: Commit Version Update
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add apps/chrome-extension/package.json package.json
+          git commit -m "chore: bump version to ${{ steps.determine_version.outputs.version }}"
+          git push
+
+      - name: Zip Chrome Extension
+        run: |
+          mkdir -p releases
+          cd apps/chrome-extension/dist
+          zip -r ../../../releases/STC_Beta_${{ steps.determine_version.outputs.version }}.zip .
+
+      - name: Upload Chrome Extension Zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension
+          path: releases/STC_Beta_${{ steps.determine_version.outputs.version }}.zip
