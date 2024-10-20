@@ -20,7 +20,8 @@ jobs:
     timeout-minutes: 30
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     outputs:
-      should_release: ${{ steps.check_changes.outputs.should_release }}
+      should_release_web: ${{ steps.check_changes.outputs.should_release_web }}
+      should_release_extension: ${{ steps.check_changes.outputs.should_release_extension }}
       new_version: ${{ steps.version.outputs.new_version }}
       changelog: ${{ steps.changelog.outputs.changelog }}
     env:
@@ -36,31 +37,28 @@ jobs:
         id: check_changes
         run: |
           changes=$(git diff --name-only ${{ github.event.workflow_run.head_sha }} ${{ github.sha }})
-          if echo "$changes" | grep -qE "^(apps/web|apps/chrome-extension|packages)/"; then
-            echo "should_release=true" >> $GITHUB_OUTPUT
+          if echo "$changes" | grep -qE "^(apps/web|packages)/"; then
+            echo "should_release_web=true" >> $GITHUB_OUTPUT
           else
-            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "should_release_web=false" >> $GITHUB_OUTPUT
+          fi
+          if echo "$changes" | grep -qE "^(apps/chrome-extension|packages)/"; then
+            echo "should_release_extension=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release_extension=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Determine Version
         id: version
-        if: steps.check_changes.outputs.should_release == 'true'
+        if: steps.check_changes.outputs.should_release_web == 'true' || steps.check_changes.outputs.should_release_extension == 'true'
         run: |
           current_version=$(jq -r '.version' package.json)
           new_version=$(echo $current_version | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
           echo "new_version=$new_version" >> $GITHUB_OUTPUT
 
-      - name: Validate GROQ API Key
-        run: |
-          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
-            echo "Error: GROQ_API_KEY is not set or empty"
-            exit 1
-          fi
-          echo "GROQ_API_KEY is set and not empty"
-
-      - name: Generate Release Notes with AI
+      - name: Generate Changelog
         id: changelog
-        if: steps.check_changes.outputs.should_release == 'true'
+        if: steps.check_changes.outputs.should_release_web == 'true' || steps.check_changes.outputs.should_release_extension == 'true'
         uses: fjogeleit/http-request-action@v1
         with:
           url: 'https://api.groq.com/openai/v1/chat/completions'
@@ -78,23 +76,21 @@ jobs:
             }
 
       - name: Parse Changelog
-        if: steps.check_changes.outputs.should_release == 'true'
+        if: steps.check_changes.outputs.should_release_web == 'true' || steps.check_changes.outputs.should_release_extension == 'true'
         run: |
           changelog_data='${{ steps.changelog.outputs.response }}'
           changelog=$(echo "$changelog_data" | jq -r '.choices[0].message.content | fromjson | .changelog // empty')
-
           if [ -z "$changelog" ]; then
             echo "Error: Generated changelog is null or empty. Exiting."
             exit 1
           fi
-
           echo "CHANGELOG<<EOF" >> $GITHUB_ENV
           echo "$changelog" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-  release:
+  release_web:
     needs: prepare_release
-    if: needs.prepare_release.outputs.should_release == 'true'
+    if: needs.prepare_release.outputs.should_release_web == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     env:
@@ -103,33 +99,41 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download Web Artifact
+        uses: actions/download-artifact@v4
         with:
-          node-version: 'lts/*'
+          name: github-pages
+          path: web-build
+          run-id: ${{ github.event.workflow_run.id }}
 
-      - name: Update package.json
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages
+
+      - name: Update package.json for Web
         run: |
-          jq '.version = "${{ needs.prepare_release.outputs.new_version }}"' package.json > package.json.tmp
-          mv package.json.tmp package.json
+          jq '.version = "${{ needs.prepare_release.outputs.new_version }}"' apps/web/package.json > apps/web/package.json.tmp
+          mv apps/web/package.json.tmp apps/web/package.json
 
-      - name: Commit Version Update
+      - name: Commit Web Version Update
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add package.json
-          git commit -m "chore: bump version to ${{ needs.prepare_release.outputs.new_version }}"
+          git add apps/web/package.json
+          git commit -m "chore(web): bump version to ${{ needs.prepare_release.outputs.new_version }}"
           git push
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ needs.prepare_release.outputs.new_version }}
-          name: Release v${{ needs.prepare_release.outputs.new_version }}
-          body: ${{ env.CHANGELOG }}
-          draft: false
-          prerelease: false
-          token: ${{ github.token }}
+  release_extension:
+    needs: prepare_release
+    if: needs.prepare_release.outputs.should_release_extension == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Download Chrome Extension Artifact
         uses: actions/download-artifact@v4
@@ -138,9 +142,26 @@ jobs:
           path: releases
           run-id: ${{ github.event.workflow_run.id }}
 
-      - name: Attach Chrome Extension to Release
+      - name: Create GitHub Release for Extension
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: v${{ needs.prepare_release.outputs.new_version }}-extension
+          name: Chrome Extension Release v${{ needs.prepare_release.outputs.new_version }}
+          body: ${{ env.CHANGELOG }}
+          draft: false
+          prerelease: false
           files: releases/STC_Beta_*.zip
-          tag_name: v${{ needs.prepare_release.outputs.new_version }}
           token: ${{ github.token }}
+
+      - name: Update package.json for Extension
+        run: |
+          jq '.version = "${{ needs.prepare_release.outputs.new_version }}"' apps/chrome-extension/package.json > apps/chrome-extension/package.json.tmp
+          mv apps/chrome-extension/package.json.tmp apps/chrome-extension/package.json
+
+      - name: Commit Extension Version Update
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add apps/chrome-extension/package.json
+          git commit -m "chore(extension): bump version to ${{ needs.prepare_release.outputs.new_version }}"
+          git push
