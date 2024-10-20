@@ -199,7 +199,7 @@ jobs:
               echo "Processing branch without PR: $branch"
               git checkout $branch
               creator=$(git log -1 --format='%an' origin/$branch)
-              commits=$(git log --format=%B origin/develop..$branch)
+              commits=$(git log --pretty=format:'%H' origin/develop..$branch | jq -R -s -c 'split("\n")[:-1]')
               
               # Generate PR content using Web Request Action
               pr_content=$(Satak/webrequest-action@v1.5.0 \
@@ -210,7 +210,7 @@ jobs:
                   "model": "llama-3.1-70b-versatile",
                   "messages": [
                     {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
-                    {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '"$branch"'", Commits: '"$commits"'"}
+                    {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '"$branch"', Commits: '"$commits"'"}
                   ],
                   "temperature": 0.4,
                   "response_format": {"type": "json_object"}
@@ -232,7 +232,7 @@ jobs:
               pr_commits=$(gh pr view $pr_number --json commits --jq '.commits | length')
               if [ "$branch_commits" -gt "$pr_commits" ]; then
                 echo "Branch $branch has new commits. Updating PR #$pr_number."
-                commits=$(git log --format=%B origin/develop..$branch)
+                commits=$(git log --pretty=format:'%H' origin/develop..$branch | jq -R -s -c 'split("\n")[:-1]')
                 
                 # Update PR content using Web Request Action
                 pr_content=$(Satak/webrequest-action@v1.5.0 \
@@ -243,7 +243,7 @@ jobs:
                     "model": "llama-3.1-70b-versatile",
                     "messages": [
                       {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '\''title'\'' and '\''body'\''."},
-                      {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '"$branch"'", Commits: '"$commits"'"}
+                      {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '"$branch"', Commits: '"$commits"'"}
                     ],
                     "temperature": 0.4,
                     "response_format": {"type": "json_object"}
