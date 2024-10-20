@@ -88,8 +88,8 @@ jobs:
               "response_format": {"type": "json_object"}
             }')
           
-          pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content.title // empty')
-          pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content.body // empty')
+          pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+          pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
 
           if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
             echo "Error: Generated PR content is null or empty. Retrying with a different prompt."
@@ -105,8 +105,8 @@ jobs:
                 "temperature": 0.4,
                 "response_format": {"type": "json_object"}
               }')
-            pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content.title // empty')
-            pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content.body // empty')
+            pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+            pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
           fi
 
           echo "PR_TITLE=$(echo "$pr_title" | sed 's/"/\\"/g')" >> $GITHUB_ENV
@@ -225,8 +225,8 @@ jobs:
               }
           EOF
               ) || { echo "Error: Failed to generate PR content"; exit 1; }
-              pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content.title // empty')
-              pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content.body // empty')
+              pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+              pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
               if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
                 echo "Error: Generated PR content is null or empty. Retrying with a different prompt."
                 pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
@@ -244,8 +244,8 @@ jobs:
                 }
           EOF
                 )
-                pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content.title // empty')
-                pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content.body // empty')
+                pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+                pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
               fi
               gh pr create --title "$pr_title" --body "$pr_body" --base develop --head "$branch" --author "$creator"
             else
@@ -271,8 +271,8 @@ jobs:
                 }
           EOF
                 ) || { echo "Error: Failed to generate PR content"; exit 1; }
-                pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content.title // empty')
-                pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content.body // empty')
+                pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+                pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
                 if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
                   echo "Error: Generated PR content is null or empty. Retrying with a different prompt."
                   pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
@@ -290,8 +290,8 @@ jobs:
                   }
           EOF
                   )
-                  pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content.title // empty')
-                  pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content.body // empty')
+                  pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
+                  pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
                 fi
                 gh pr edit $pr_number --title "$pr_title" --body "$pr_body"
               fi
