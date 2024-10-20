@@ -16,32 +16,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Check for Changes
         id: check
         run: |
-          changes=()
-          if git diff --quiet HEAD^ HEAD -- apps/chrome-extension; then
-            echo "No changes in chrome-extension."
-          else
-            changes+=("extension")
-          fi
-          if git diff --quiet HEAD^ HEAD -- packages; then
-            echo "No changes in packages."
-          else
-            changes+=("packages")
-          fi
-          if git diff --quiet HEAD^ HEAD -- apps/web; then
-            echo "No changes in web app."
-          else
-            changes+=("web")
-          fi
-          if [ ${#changes[@]} -eq 0 ]; then
-            echo "changes=[]" >> $GITHUB_OUTPUT
-          else
-            echo "changes=[\"${changes[*]}\"]" >> $GITHUB_OUTPUT
-          fi
+          changes=("extension" "packages" "web")
+          echo "changes=[\"${changes[*]}\"]" >> $GITHUB_OUTPUT
           echo "Detected changes: ${changes[*]}"
 
   build_packages:
