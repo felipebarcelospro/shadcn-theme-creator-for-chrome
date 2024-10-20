@@ -55,6 +55,7 @@ jobs:
             fi
           else
             echo "NO_COMMITS=false" >> $GITHUB_ENV
+          fi
 
       - name: Generate PR Content
         if: env.NO_COMMITS == 'false'
@@ -145,6 +146,7 @@ jobs:
       - name: Check for Open Branches without PRs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           set -e
           echo "Fetching all branches..."
@@ -166,8 +168,21 @@ jobs:
               pr_commits=$(gh pr view $pr_number --json commits --jq '.commits | length')
               if [ "$branch_commits" -gt "$pr_commits" ]; then
                 echo "Branch $branch has new commits. Updating PR #$pr_number."
-                pr_title="Updated: Changes for $branch"
-                pr_body="Updated pull request to include the latest changes from the branch."
+                commits=$(git log --format=%B origin/develop..$branch)
+                pr_data=$(curl -X POST https://api.groq.com/openai/v1/chat/completions \
+                  -H "Authorization: Bearer $GROQ_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  -d '{
+                    "model": "llama-3.1-70b-versatile",
+                    "messages": [
+                      {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
+                      {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: '$branch', Commits: '$commits'"}
+                    ],
+                    "temperature": 0.7,
+                    "response_format": {"type": "json_object"}
+                  }')
+                pr_title=$(echo $pr_data | jq -r '.choices[0].message.content.title')
+                pr_body=$(echo $pr_data | jq -r '.choices[0].message.content.body')
                 gh pr edit $pr_number --title "$pr_title" --body "$pr_body"
               fi
             fi
