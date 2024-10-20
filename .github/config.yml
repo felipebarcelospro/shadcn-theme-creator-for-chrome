@@ -1,39 +1,70 @@
 # Repository Configuration
 repository:
-  file: ./configs/repository.config.yml
+  !!merge <<: *repository_config
 
 # Package Management
 packages:
-  file: ./configs/packages.config.yml
+  !!merge <<: *packages_config
 
 # Pull Request Management
 pr_management:
-  file: ./configs/pr_management.config.yml
+  !!merge <<: *pr_management_config
 
 # Issue Management
 issue_management:
-  file: ./configs/issue-management.config.yml
+  !!merge <<: *issue_management_config
 
 # Release Management
 release_management:
-  file: ./configs/release-management.config.yml
+  !!merge <<: *release_management_config
 
 # Security and Dependency Management
 security_dependency_management:
-  file: ./configs/security-dependency-management.config.yml
+  !!merge <<: *security_dependency_management_config
 
 # Automated Testing
 automated_testing:
-  file: ./configs/automated-testing.config.yml
+  !!merge <<: *automated_testing_config
 
 # Metrics Generation
 metrics_generation:
-  file: ./configs/metrics-generation.config.yml
+  !!merge <<: *metrics_generation_config
 
 # Cron Jobs
 cron_jobs:
-  file: ./configs/cron-jobs.config.yml
+  !!merge <<: *cron_jobs_config
 
 # Plugins
 plugins:
+  !!merge <<: *plugins_config
+
+# Anchor definitions
+repository_config: &repository_config
+  file: ./configs/repository.config.yml
+
+packages_config: &packages_config
+  file: ./configs/packages.config.yml
+
+pr_management_config: &pr_management_config
+  file: ./configs/pr_management.config.yml
+
+issue_management_config: &issue_management_config
+  file: ./configs/issue-management.config.yml
+
+release_management_config: &release_management_config
+  file: ./configs/release-management.config.yml
+
+security_dependency_management_config: &security_dependency_management_config
+  file: ./configs/security-dependency-management.config.yml
+
+automated_testing_config: &automated_testing_config
+  file: ./configs/automated-testing.config.yml
+
+metrics_generation_config: &metrics_generation_config
+  file: ./configs/metrics-generation.config.yml
+
+cron_jobs_config: &cron_jobs_config
+  file: ./configs/cron-jobs.config.yml
+
+plugins_config: &plugins_config
   file: ./configs/plugins.config.yml
