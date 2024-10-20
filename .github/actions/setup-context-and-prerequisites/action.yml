@@ -58,8 +58,18 @@ runs:
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
-      ./.github/actions/install-dependencies.sh "$PACKAGE_MANAGER" "${{ runner.OS }}-$PACKAGE_MANAGER-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml') }}" "$GITHUB_TOKEN"
-      echo "Debug: Dependencies installed"
+      if [ "$PACKAGE_MANAGER" = "npm" ]; then
+        npm ci
+      elif [ "$PACKAGE_MANAGER" = "yarn" ]; then
+        yarn install --frozen-lockfile
+      elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then
+        pnpm install --frozen-lockfile
+      else
+        echo "::error::Unsupported package manager: $PACKAGE_MANAGER"
+        exit 1
+      fi
+      echo "installation-status=success" >> $GITHUB_OUTPUT
+      echo "Debug: Dependencies installed using $PACKAGE_MANAGER"
 
   - name: Fetch repository metadata
     shell: bash
