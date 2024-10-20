@@ -1,0 +1,55 @@
+issue_management:
+  default_project_board: "Project Board Name"
+  stale_issue_threshold: 30 # days
+  stale_exempt_labels:
+  - "important"
+  - "bug"
+  auto_label:
+    enabled: true
+    rules:
+    - pattern: '\\bbug\\b'
+      label: 'bug'
+    - pattern: '\\bfeature\\b'
+      label: 'enhancement'
+    - pattern: '\\bdocumentation\\b'
+      label: 'documentation'
+    - pattern: '\\btest\\b'
+      label: 'test'
+    - pattern: '\\bperformance\\b'
+      label: 'performance'
+  auto_assign:
+    enabled: true
+    max_reviewers: 2
+    expertise_map:
+      frontend: ['js', 'ts', 'jsx', 'tsx', 'css', 'html', 'vue', 'svelte']
+      backend: ['py', 'rb', 'java', 'php', 'go', 'rust', 'node', 'csharp']
+      devops: ['yml', 'yaml', 'tf', 'sh', 'docker', 'k8s', 'ansible', 'jenkins']
+      database: ['sql', 'nosql', 'mongodb', 'postgres', 'mysql', 'redis']
+      mobile: ['swift', 'kotlin', 'dart', 'flutter', 'reactnative']
+      ai_ml: ['py', 'jupyter', 'tensorflow', 'pytorch', 'scikit-learn']
+    exclude_labels:
+    - "do-not-review"
+    - "wip"
+  auto_response:
+    enabled: true
+    template_path: .github/templates/issue_response_template.md
+  prioritization:
+    enabled: true
+    rules:
+    - criteria:
+        labels: ['bug', 'critical']
+      priority: high
+    - criteria:
+        labels: ['enhancement']
+      priority: medium
+    - criteria:
+        default: true
+      priority: low
+  milestone_setting:
+    enabled: true
+    title: "Next Release"
+    label_to_match: "ready"
+  sla_tracking:
+    enabled: true
+    timeframe: 1440 # 24 hours in minutes
+    warning_threshold: 120 # 2 hours in minutes

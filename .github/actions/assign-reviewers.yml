@@ -1,0 +1,54 @@
+name: 'Assign Reviewers'
+description: 'Assigns appropriate reviewers to pull requests based on changed files and team expertise'
+
+inputs:
+  pr-number:
+    description: 'Number of the pull request'
+    required: true
+  codeowners-path:
+    description: 'Path to the CODEOWNERS file'
+    required: true
+    default: '.github/CODEOWNERS'
+
+outputs:
+  assigned-reviewers:
+    description: 'List of assigned reviewers'
+  assignment-reasoning:
+    description: 'Explanation of reviewer assignment decisions'
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Debug - Input values
+      run: |
+        echo "PR number: ${{ inputs.pr-number }}"
+        echo "CODEOWNERS path: ${{ inputs.codeowners-path }}"
+
+    - name: Assign reviewers
+      id: assign
+      run: |
+        # Implement reviewer assignment logic here
+        # This is a placeholder implementation
+        assigned_reviewers="@user1, @user2"
+        assignment_reasoning="Assigned based on file changes and expertise"
+
+        echo "::set-output name=assigned-reviewers::$assigned_reviewers"
+        echo "::set-output name=assignment-reasoning::$assignment_reasoning"
+
+    - name: Debug - Assignment result
+      run: |
+        echo "Assigned reviewers: ${{ steps.assign.outputs.assigned-reviewers }}"
+        echo "Assignment reasoning: ${{ steps.assign.outputs.assignment-reasoning }}"

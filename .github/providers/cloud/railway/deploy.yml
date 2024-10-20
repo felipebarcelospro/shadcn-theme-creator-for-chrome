@@ -1,0 +1,110 @@
+name: 'Deploy to Railway'
+description: 'Deploys an application to Railway'
+
+inputs:
+  artifacts-path:
+    description: 'Path to build artifacts'
+    required: true
+  railway-token:
+    description: 'Railway API token'
+    required: true
+  project-id:
+    description: 'Railway project ID'
+    required: false
+
+outputs:
+  deployment-status:
+    description: 'Status of the deployment (success/failure)'
+  deployed-url:
+    description: 'URL of the deployed application'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Install dependencies
+    uses: ./.github/actions/install-dependencies
+    with:
+      package-manager: 'npm'
+      cache-key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+  - name: Debug - Environment Setup
+    shell: bash
+    run: |
+      echo "Debug: Current working directory: $(pwd)"
+      echo "Debug: Listing contents of current directory:"
+      ls -la
+      echo "Debug: Node version: $(node --version)"
+      echo "Debug: NPM version: $(npm --version)"
+
+  - name: Deploy to Railway
+    id: deploy
+    shell: bash
+    env:
+      RAILWAY_TOKEN: ${{ inputs.railway-token }}
+    run: |
+      echo "Debug: Starting Railway deployment process"
+
+      # Install Railway CLI
+      npm install -g @railway/cli
+      echo "Debug: Railway CLI version: $(railway --version)"
+
+      # Authenticate with Railway
+      echo "Debug: Authenticating with Railway"
+      railway login
+      echo "Debug: Authentication completed"
+
+      # Deploy the application
+      echo "Debug: Initiating deployment"
+      if [ -n "${{ inputs.project-id }}" ]; then
+        echo "Debug: Deploying with project ID: ${{ inputs.project-id }}"
+        DEPLOY_OUTPUT=$(railway up --project ${{ inputs.project-id }} --service ${{ inputs.artifacts-path }})
+      else
+        echo "Debug: Deploying without specific project ID"
+        DEPLOY_OUTPUT=$(railway up --service ${{ inputs.artifacts-path }})
+      fi
+
+      # Check deployment status
+      if [ $? -eq 0 ]; then
+        echo "Debug: Deployment command executed successfully"
+        echo "Deployment successful."
+        echo "deployment-status=success" >> $GITHUB_OUTPUT
+        DEPLOYED_URL=$(echo "$DEPLOY_OUTPUT" | grep -oP 'Deployed URL: \K.*')
+        echo "Debug: Extracted Deployed URL: $DEPLOYED_URL"
+        echo "Deployed URL: $DEPLOYED_URL"
+        echo "deployed-url=$DEPLOYED_URL" >> $GITHUB_OUTPUT
+      else
+        echo "Debug: Deployment command failed"
+        echo "Deployment failed."
+        echo "deployment-status=failure" >> $GITHUB_OUTPUT
+        echo "Debug: Full deployment output:"
+        echo "$DEPLOY_OUTPUT"
+        exit 1
+      fi
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Debug: Entering error handling step"
+      echo "Deployment to Railway failed. Check logs for details."
+      echo "deployment-status=failure" >> $GITHUB_OUTPUT
+
+      # Print error logs
+      echo "Debug: Attempting to print error logs"
+      if [ -f "$GITHUB_WORKSPACE/railway-deploy.log" ]; then
+        echo "Error logs:"
+        cat $GITHUB_WORKSPACE/railway-deploy.log
+      else
+        echo "Debug: No log file found at $GITHUB_WORKSPACE/railway-deploy.log"
+        echo "Debug: Listing files in workspace:"
+        ls -R $GITHUB_WORKSPACE
+      fi
+
+  - name: Debug - Final Status
+    if: always()
+    shell: bash
+    run: |
+      echo "Debug: Deployment process completed"
+      echo "Debug: Final status: ${{ job.status }}"
+      echo "Debug: Outputs:"
+      cat $GITHUB_OUTPUT || echo "No output file found"

@@ -1,0 +1,81 @@
+name: 'Update Pull Request'
+description: 'Updates a GitHub pull request with new information, including security checks and code analysis results'
+
+inputs:
+  pr-number:
+    description: 'Pull request number to update'
+    required: true
+  pr-body:
+    description: 'New body content for the pull request'
+    required: true
+  labels:
+    description: 'Labels to apply to the pull request'
+    required: false
+  reviewers:
+    description: 'Reviewers to assign to the pull request'
+    required: false
+  security-report:
+    description: 'Security vulnerability report'
+    required: false
+  code-analysis:
+    description: 'Code analysis results'
+    required: false
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
+jobs:
+  update-pr:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Update Pull Request
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const { owner, repo } = context.repo;
+          const prNumber = parseInt('${{ inputs.pr-number }}');
+          let prBody = `${{ inputs.pr-body }}`;
+          const labels = '${{ inputs.labels }}'.split(',').filter(Boolean);
+          const reviewers = '${{ inputs.reviewers }}'.split(',').filter(Boolean);
+          const securityReport = '${{ inputs.security-report }}';
+          const codeAnalysis = '${{ inputs.code-analysis }}';
+
+          // Append security report and code analysis to PR body if provided
+          if (securityReport) {
+            prBody += '\n\n## Security Report\n' + securityReport;
+          }
+          if (codeAnalysis) {
+            prBody += '\n\n## Code Analysis\n' + codeAnalysis;
+          }
+
+          // Update PR
+          await github.rest.pulls.update({
+            owner,
+            repo,
+            pull_number: prNumber,
+            body: prBody
+          });
+
+          // Add labels if provided
+          if (labels.length > 0) {
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: prNumber,
+              labels: labels
+            });
+          }
+
+          // Request reviewers if provided
+          if (reviewers.length > 0) {
+            await github.rest.pulls.requestReviewers({
+              owner,
+              repo,
+              pull_number: prNumber,
+              reviewers: reviewers
+            });
+          }
+
+          console.log(`Pull request #${prNumber} updated successfully.`);

@@ -1,0 +1,77 @@
+name: 'Bump Version'
+description: 'Bumps version numbers in relevant files and commits changes'
+
+inputs:
+  new_version:
+    description: 'New version number to set'
+    required: true
+  affected_apps:
+    description: 'JSON array of affected app names'
+    required: true
+
+outputs:
+  commit_hash:
+    description: 'Hash of the commit with version bump changes'
+    value: ${{ steps.commit-changes.outputs.commit_hash }}
+  updated_files:
+    description: 'List of files updated with new version'
+    value: ${{ steps.update-versions.outputs.updated_files }}
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '20'
+
+  - name: Update version in package.json files
+    id: update-versions
+    shell: bash
+    run: |
+      affected_apps='${{ inputs.affected_apps }}'
+      new_version='${{ inputs.new_version }}'
+      updated_files=()
+
+      for app in $(echo "${affected_apps}" | jq -r '.[]'); do
+        if [ -f "${app}/package.json" ]; then
+          jq ".version = \"${new_version}\"" "${app}/package.json" > "${app}/package.json.tmp" && mv "${app}/package.json.tmp" "${app}/package.json"
+          updated_files+=("${app}/package.json")
+          echo "Updated version in ${app}/package.json to ${new_version}"
+        fi
+      done
+
+      # Update root package.json if it exists
+      if [ -f "package.json" ]; then
+        jq ".version = \"${new_version}\"" package.json > package.json.tmp && mv package.json.tmp package.json
+        updated_files+=("package.json")
+        echo "Updated version in root package.json to ${new_version}"
+      fi
+
+      echo "updated_files=${updated_files[*]}" >> $GITHUB_OUTPUT
+
+  - name: Update version in other configuration files
+    shell: bash
+    run: |
+      new_version='${{ inputs.new_version }}'
+
+      # Update version in .env files if they exist
+      find . -name ".env" -type f -exec sed -i "s/^VERSION=.*/VERSION=${new_version}/" {} \;
+
+      # Update version in configuration files (e.g., config.yml, app.config.js)
+      find . -name "config.yml" -type f -exec sed -i "s/version:.*/version: ${new_version}/" {} \;
+      find . -name "app.config.js" -type f -exec sed -i "s/version:.*,/version: '${new_version}',/" {} \;
+
+  - name: Commit version bump changes
+    id: commit-changes
+    shell: bash
+    run: |
+      git config user.name "GitHub Actions Bot"
+      git config user.email "<>"
+      git add -A
+      git commit -m "Bump version to ${{ inputs.new_version }}"
+      echo "commit_hash=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+  - name: Push changes
+    shell: bash
+    run: git push origin HEAD

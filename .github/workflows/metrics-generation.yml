@@ -1,0 +1,113 @@
+name: Metrics Generation Workflow
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # Weekly on Monday at 00:00 UTC
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  generate-metrics:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        id: checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Context
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Metrics
+        id: generate-metrics
+        uses: ./.github/actions/generate-metrics
+        with:
+          repository-context: ${{ steps.setup-context.outputs.repository-context }}
+          metrics-to-collect: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.metrics_to_collect }}
+
+      - name: Generate Metrics Report
+        id: generate-metrics-report
+        uses: ./.github/actions/ai-generate-content
+        with:
+          content-type: "metrics_analysis"
+          context-data: |
+            {
+              "metrics-data": ${{ steps.generate-metrics.outputs.metrics-data }},
+              "top-contributors": ${{ steps.generate-metrics.outputs.top-contributors }},
+              "improvement-areas": ${{ steps.generate-metrics.outputs.improvement-areas }}
+            }
+          template-path: .github/templates/performance_metrics_report_template.md
+
+      - name: Create Discussion Post
+        id: create-discussion-post
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.create_discussion_post }}
+        uses: ./.github/actions/create-discussion-post
+        with:
+          discussion-category: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.create_discussion_post.category }}
+          discussion-title: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.create_discussion_post.title }}
+          discussion-content: ${{ steps.generate-metrics-report.outputs.generated-content }}
+
+      - name: Generate Contributor Engagement Content
+        id: generate-contributor-engagement-content
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.contributor_engagement.enabled }}
+        uses: ./.github/actions/ai-generate-content
+        with:
+          content-type: "contributor_engagement"
+          context-data: |
+            {
+              "top-contributors": ${{ steps.generate-metrics.outputs.top-contributors }},
+              "top-contributors-count": ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.contributor_engagement.top_contributors_count }}
+            }
+
+      - name: Send Contributor Engagement Messages
+        id: send-contributor-engagement-messages
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.contributor_engagement.enabled }}
+        uses: ./.github/actions/send-notification
+        with:
+          notification-type: "contributor_engagement"
+          notification-data: ${{ steps.generate-contributor-engagement-content.outputs.generated-content }}
+
+      - name: Send Notification
+        id: send-notification
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.send_notification }}
+        uses: ./.github/actions/send-notification
+        with:
+          notification-type: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.send_notification.type }}
+          notification-data: |
+            {
+              "metrics-report-url": "${{ steps.create-discussion-post.outputs.created-discussion-url }}"
+            }
+
+      - name: Send Webhook
+        id: send-webhook
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.send_webhook }}
+        uses: ./.github/actions/send-webhook
+        with:
+          webhook-type: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.send_webhook.type }}
+          webhook-data: |
+            {
+              "metrics-data": ${{ steps.generate-metrics.outputs.metrics-data }},
+              "metrics-report": ${{ steps.generate-metrics-report.outputs.generated-content }}
+            }
+
+      - name: Generate Improvement Suggestions
+        id: generate-improvement-suggestions
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.improvement_suggestions.enabled }}
+        uses: ./.github/actions/ai-generate-content
+        with:
+          content-type: "improvement_suggestions"
+          context-data: |
+            {
+              "improvement-needs": ${{ steps.generate-metrics.outputs.improvement-areas }}
+            }
+
+      - name: Create Improvement Issues
+        id: create-improvement-issues
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.improvement_suggestions.enabled && fromJson(steps.setup-context.outputs.config-data).metrics_generation.improvement_suggestions.create_issues }}
+        uses: ./.github/actions/create-issues
+        with:
+          issues-data: ${{ steps.generate-improvement-suggestions.outputs.generated-content }}

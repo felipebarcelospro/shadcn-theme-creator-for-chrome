@@ -1,0 +1,59 @@
+name: 'Send Slack Notification'
+description: 'Sends a notification to a Slack channel'
+
+inputs:
+  webhook-url:
+    description: 'Slack Webhook URL'
+    required: true
+  message:
+    description: 'Message to send'
+    required: true
+  username:
+    description: 'Username to display for the bot'
+    required: false
+    default: 'GitHub Actions'
+  icon-emoji:
+    description: 'Emoji to use as the icon for the bot'
+    required: false
+    default: ':robot_face:'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Send Slack Message
+    shell: bash
+    env:
+      WEBHOOK_URL: ${{ inputs.webhook-url }}
+      MESSAGE: ${{ inputs.message }}
+      USERNAME: ${{ inputs.username }}
+      ICON_EMOJI: ${{ inputs.icon-emoji }}
+    run: |
+      echo "Sending Slack notification..."
+      curl -X POST -H 'Content-type: application/json' \
+           --data "{\"text\":\"$MESSAGE\",\"username\":\"$USERNAME\",\"icon_emoji\":\"$ICON_EMOJI\"}" \
+           $WEBHOOK_URL
+
+  - name: Check Notification Status
+    shell: bash
+    run: |
+      if [ $? -eq 0 ]; then
+        echo "Slack notification sent successfully."
+        echo "notification-status=success" >> $GITHUB_OUTPUT
+      else
+        echo "Failed to send Slack notification."
+        echo "notification-status=failure" >> $GITHUB_OUTPUT
+        exit 1
+      fi
+
+  - name: Error Handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Error occurred while sending Slack notification."
+      echo "Please check your webhook URL and message content."
+      echo "notification-status=failure" >> $GITHUB_OUTPUT
+
+outputs:
+  notification-status:
+    description: 'Status of the notification (success/failure)'
+    value: ${{ steps.send-notification.outputs.notification-status }}

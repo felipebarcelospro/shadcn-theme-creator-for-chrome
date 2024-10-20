@@ -1,0 +1,105 @@
+name: 'Clean Up Branch'
+description: 'Automatically cleans up branches that are no longer needed'
+
+inputs:
+  branch-name:
+    description: 'Name of the branch to clean up'
+    required: true
+  force-delete:
+    description: 'Whether to force delete unmerged branches'
+    required: false
+    default: 'false'
+
+outputs:
+  cleanup-status:
+    description: 'Status of the branch cleanup operation'
+  deleted-branch:
+    description: 'Name of the deleted branch (if applicable)'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash
+    run: |
+      echo "Debug: Input values"
+      echo "branch-name: ${{ inputs.branch-name }}"
+      echo "force-delete: ${{ inputs.force-delete }}"
+
+  - name: Check branch status
+    id: check-branch
+    shell: bash
+    run: |
+      git fetch origin
+      if git rev-parse --verify origin/${{ inputs.branch-name }} >/dev/null 2>&1; then
+        echo "branch-exists=true" >> $GITHUB_OUTPUT
+      else
+        echo "branch-exists=false" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Check for open PRs
+    if: steps.check-branch.outputs.branch-exists == 'true'
+    id: check-prs
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const branch = '${{ inputs.branch-name }}';
+        const { data: prs } = await github.rest.pulls.list({
+          owner,
+          repo,
+          head: `${owner}:${branch}`,
+          state: 'open'
+        });
+        return prs.length === 0 ? 'true' : 'false';
+
+  - name: Check if branch is merged
+    if: steps.check-branch.outputs.branch-exists == 'true' && steps.check-prs.outputs.result == 'true'
+    id: check-merged
+    shell: bash
+    run: |
+      if git branch -r --merged origin/main | grep -q "origin/${{ inputs.branch-name }}"; then
+        echo "is-merged=true" >> $GITHUB_OUTPUT
+      else
+        echo "is-merged=false" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Delete branch
+    if: |
+      steps.check-branch.outputs.branch-exists == 'true' &&
+      steps.check-prs.outputs.result == 'true' &&
+      (steps.check-merged.outputs.is-merged == 'true' || inputs.force-delete == 'true')
+    id: delete-branch
+    shell: bash
+    run: |
+      if [[ "${{ inputs.force-delete }}" == "true" ]]; then
+        git push origin --delete ${{ inputs.branch-name }} --force
+      else
+        git push origin --delete ${{ inputs.branch-name }}
+      fi
+      if [ $? -eq 0 ]; then
+        echo "cleanup-status=success" >> $GITHUB_OUTPUT
+        echo "deleted-branch=${{ inputs.branch-name }}" >> $GITHUB_OUTPUT
+      else
+        echo "cleanup-status=failed" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Log deletion action
+    if: steps.delete-branch.outputs.cleanup-status == 'success'
+    shell: bash
+    run: |
+      echo "Branch ${{ inputs.branch-name }} has been deleted successfully" >> cleanup_log.txt
+
+  - name: Set outputs
+    shell: bash
+    run: |
+      echo "cleanup-status=${{ steps.delete-branch.outputs.cleanup-status || 'skipped' }}" >> $GITHUB_OUTPUT
+      echo "deleted-branch=${{ steps.delete-branch.outputs.deleted-branch || 'none' }}" >> $GITHUB_OUTPUT
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "An error occurred during the branch cleanup process"
+      echo "cleanup-status=failed" >> $GITHUB_OUTPUT

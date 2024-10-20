@@ -1,0 +1,166 @@
+name: Repository Setup Workflow
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  check-repository-setup:
+    runs-on: ubuntu-latest
+    outputs:
+      is-configured: ${{ steps.check-config.outputs.is-configured }}
+    steps:
+      - name: Checkout code
+        id: checkout
+        uses: actions/checkout@v3
+
+      - name: Check repository configuration
+        id: check-config
+        run: |
+          if [ -f ".github/repository-config.json" ]; then
+            echo "is-configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "is-configured=false" >> $GITHUB_OUTPUT
+          fi
+
+  repository-setup:
+    needs: check-repository-setup
+    if: needs.check-repository-setup.outputs.is-configured == 'false'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        id: checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Context and Prerequisites
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Git Flow Branches
+        id: create-git-flow-branches
+        uses: ./.github/actions/create-or-update-branch
+        with:
+          branch-name: ${{ fromJson(steps.setup-context.outputs.config-data).version_control.main_branches[0] }}
+          base-branch: 'main'
+
+      - name: Generate Content
+        id: generate-content
+        uses: ./.github/actions/ai-generate-content
+        with:
+          content-type: "repository_docs"
+          context-data: ${{ steps.setup-context.outputs.repository-context }}
+          template-path: .github/templates/repository_setup_template.md
+          tone: ${{ fromJson(steps.setup-context.outputs.config-data).documentation.tone }}
+          max-length: ${{ fromJson(steps.setup-context.outputs.config-data).documentation.max_length }}
+
+      - name: Setup Branch Protection Rules
+        id: setup-branch-protection
+        uses: ./.github/actions/apply-branch-protection
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          branch-patterns: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).version_control.protected_branches) }}
+          protection-rules: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).version_control.branch_protection_rules) }}
+
+      - name: Create Wiki Pages
+        id: create-wiki-pages
+        uses: ./.github/actions/create-wiki-page
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          page-name: "Git Flow Process"
+          page-content: ${{ steps.generate-content.outputs.generated-content }}
+
+      - name: Create Discussion Posts
+        id: create-discussion-posts
+        uses: ./.github/actions/create-discussion-post
+        with:
+          discussion-title: "Welcome to the Repository"
+          discussion-content: ${{ steps.generate-content.outputs.generated-content }}
+          category: ${{ fromJson(steps.setup-context.outputs.config-data).community.discussion_categories[0] }}
+
+      - name: Setup Issue Labels
+        id: setup-issue-labels
+        uses: ./.github/actions/setup-issue-labels
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          labels: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).issue_management.labels) }}
+
+      - name: Setup Project Board
+        id: setup-project-board
+        uses: ./.github/actions/setup-project-board
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          columns: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).project_management.board_columns) }}
+
+      - name: Setup Repository Settings
+        id: setup-repository-settings
+        uses: ./.github/actions/setup-repository-settings
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          has-wiki: ${{ fromJson(steps.setup-context.outputs.config-data).repository.features.wiki }}
+          has-issues: ${{ fromJson(steps.setup-context.outputs.config-data).repository.features.issues }}
+          has-projects: ${{ fromJson(steps.setup-context.outputs.config-data).repository.features.projects }}
+          allow-squash-merge: ${{ fromJson(steps.setup-context.outputs.config-data).repository.merge_strategies.allow_squash_merge }}
+          allow-merge-commit: ${{ fromJson(steps.setup-context.outputs.config-data).repository.merge_strategies.allow_merge_commit }}
+          allow-rebase-merge: ${{ fromJson(steps.setup-context.outputs.config-data).repository.merge_strategies.allow_rebase_merge }}
+          delete-branch-on-merge: ${{ fromJson(steps.setup-context.outputs.config-data).repository.branch_management.delete_head_branches }}
+
+      - name: Setup Dependabot
+        id: setup-dependabot
+        uses: ./.github/actions/setup-dependabot
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ecosystems: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).security.dependency_ecosystems) }}
+          config: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).security.dependabot_config) }}
+
+      - name: Setup CODEOWNERS
+        id: setup-codeowners
+        uses: ./.github/actions/setup-codeowners
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository-admins: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).repository.admins) }}
+
+      - name: Commit Changes
+        id: commit-changes
+        uses: ./.github/actions/commit-changes
+        with:
+          commit-message: "chore: initial repository setup"
+          files: 'CONTRIBUTING.md CODE_OF_CONDUCT.md README.md CHANGELOG.md .github/dependabot.yml CODEOWNERS'
+
+      - name: Create Pull Request
+        id: create-pull-request
+        uses: ./.github/actions/create-or-update-branch
+        with:
+          branch-name: 'initial-setup'
+          base-branch: 'main'
+          commit-changes: |
+            chore: initial repository setup
+            
+            - feat: add CONTRIBUTING.md
+            - feat: add CODE_OF_CONDUCT.md
+            - docs: update README.md
+            - feat: add CHANGELOG.md
+            - chore: configure Dependabot
+            - chore: add CODEOWNERS file
+
+      - name: Send Notification
+        id: send-notification
+        uses: ./.github/actions/send-notification
+        with:
+          notification-type: "setup_completion"
+          notification-data: |
+            {
+              "setup-details": ${{ toJson(steps) }}
+            }
+
+      - name: Mark repository as configured
+        id: mark-configured
+        run: |
+          echo '{"configured": true}' > .github/repository-config.json
+          git add .github/repository-config.json
+          git commit -m "chore: mark repository as configured"
+          git push

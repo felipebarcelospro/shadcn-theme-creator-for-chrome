@@ -1,0 +1,133 @@
+name: 'Deploy to Chrome Web Store'
+description: 'Deploys a Chrome extension to the Chrome Web Store'
+
+inputs:
+  artifacts-path:
+    description: 'Path to the zipped extension file'
+    required: true
+  extension-id:
+    description: 'Chrome extension ID'
+    required: true
+  client-id:
+    description: 'Chrome Web Store API client ID'
+    required: true
+  client-secret:
+    description: 'Chrome Web Store API client secret'
+    required: true
+  refresh-token:
+    description: 'Chrome Web Store API refresh token'
+    required: true
+
+outputs:
+  deployment-status:
+    description: 'Status of the deployment (success/failure)'
+  published-version:
+    description: 'Version number of the published extension'
+  store-url:
+    description: 'URL of the extension in the Chrome Web Store'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Install dependencies
+    uses: ./.github/actions/install-dependencies
+    with:
+      package-manager: 'npm'
+      cache-key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+  - name: Debug - Check inputs
+    shell: bash
+    run: |
+      echo "Debugging inputs:"
+      echo "artifacts-path: ${{ inputs.artifacts-path }}"
+      echo "extension-id: ${{ inputs.extension-id }}"
+      echo "client-id: ${{ inputs.client-id }}"
+      echo "client-secret: ${#CLIENT_SECRET} characters" # Mask the actual secret
+      echo "refresh-token: ${#REFRESH_TOKEN} characters" # Mask the actual token
+
+  - name: Get access token
+    id: get-token
+    shell: bash
+    run: |
+      echo "Requesting access token..."
+      ACCESS_TOKEN=$(curl -s -X POST "https://oauth2.googleapis.com/token" \
+        -d "client_id=${{ inputs.client-id }}" \
+        -d "client_secret=${{ inputs.client-secret }}" \
+        -d "refresh_token=${{ inputs.refresh-token }}" \
+        -d "grant_type=refresh_token" | jq -r '.access_token')
+      echo "::add-mask::$ACCESS_TOKEN"
+      echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
+      echo "Access token obtained: ${#ACCESS_TOKEN} characters"
+
+  - name: Debug - Check access token
+    shell: bash
+    run: |
+      if [ -n "${{ steps.get-token.outputs.access_token }}" ]; then
+        echo "Access token successfully obtained"
+      else
+        echo "Failed to obtain access token"
+        exit 1
+      fi
+
+  - name: Upload to Chrome Web Store
+    id: upload
+    shell: bash
+    run: |
+      echo "Uploading extension to Chrome Web Store..."
+      UPLOAD_RESPONSE=$(curl -s -H "Authorization: Bearer ${{ steps.get-token.outputs.access_token }}" \
+        -H "x-goog-api-version: 2" \
+        -X PUT \
+        -T ${{ inputs.artifacts-path }} \
+        "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${{ inputs.extension-id }}")
+      echo "Upload response: $UPLOAD_RESPONSE"
+      if [[ $UPLOAD_RESPONSE == *"\"uploadState\":\"SUCCESS\""* ]]; then
+        echo "upload_status=success" >> $GITHUB_OUTPUT
+        echo "Extension successfully uploaded"
+      else
+        echo "upload_status=failure" >> $GITHUB_OUTPUT
+        echo "Failed to upload extension"
+        exit 1
+      fi
+
+  - name: Debug - Check upload status
+    shell: bash
+    run: |
+      echo "Upload status: ${{ steps.upload.outputs.upload_status }}"
+
+  - name: Publish to Chrome Web Store
+    id: publish
+    if: steps.upload.outputs.upload_status == 'success'
+    shell: bash
+    run: |
+      echo "Publishing extension to Chrome Web Store..."
+      PUBLISH_RESPONSE=$(curl -s -H "Authorization: Bearer ${{ steps.get-token.outputs.access_token }}" \
+        -H "x-goog-api-version: 2" \
+        -H "Content-Length: 0" \
+        -X POST \
+        "https://www.googleapis.com/chromewebstore/v1.1/items/${{ inputs.extension-id }}/publish")
+      echo "Publish response: $PUBLISH_RESPONSE"
+      if [[ $PUBLISH_RESPONSE == *"\"status\":[\"OK\"]"* ]]; then
+        echo "deployment-status=success" >> $GITHUB_OUTPUT
+        VERSION=$(jq -r '.version' ${{ inputs.artifacts-path }}/manifest.json)
+        echo "published-version=$VERSION" >> $GITHUB_OUTPUT
+        echo "store-url=https://chrome.google.com/webstore/detail/${{ inputs.extension-id }}" >> $GITHUB_OUTPUT
+        echo "Extension successfully published. Version: $VERSION"
+      else
+        echo "deployment-status=failure" >> $GITHUB_OUTPUT
+        echo "Failed to publish extension"
+        exit 1
+      fi
+
+  - name: Debug - Final status
+    shell: bash
+    run: |
+      echo "Deployment status: ${{ steps.publish.outputs.deployment-status }}"
+      echo "Published version: ${{ steps.publish.outputs.published-version }}"
+      echo "Store URL: ${{ steps.publish.outputs.store-url }}"
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Deployment to Chrome Web Store failed. Check logs for details."
+      echo "deployment-status=failure" >> $GITHUB_OUTPUT

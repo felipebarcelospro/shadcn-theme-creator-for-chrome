@@ -1,0 +1,89 @@
+name: 'Deploy to Vercel'
+description: 'Deploys an application to Vercel'
+
+inputs:
+  artifacts-path:
+    description: 'Path to the build artifacts'
+    required: true
+  vercel-token:
+    description: 'Vercel authentication token'
+    required: true
+  vercel-org-id:
+    description: 'Vercel organization ID'
+    required: true
+  vercel-project-id:
+    description: 'Vercel project ID'
+    required: true
+
+outputs:
+  deployment-status:
+    description: 'Status of the deployment (success/failure)'
+  deployed-url:
+    description: 'URL of the deployed application'
+  deployment-logs:
+    description: 'Path to deployment logs'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Install Vercel CLI
+    shell: bash
+    run: |
+      echo "Installing Vercel CLI..."
+      npm install -g vercel
+      echo "Vercel CLI version: $(vercel --version)"
+
+  - name: Debug Environment
+    shell: bash
+    run: |
+      echo "Debugging environment variables:"
+      echo "VERCEL_TOKEN: ${VERCEL_TOKEN:0:5}... (truncated)"
+      echo "VERCEL_ORG_ID: $VERCEL_ORG_ID"
+      echo "VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID"
+      echo "Artifacts path: ${{ inputs.artifacts-path }}"
+      ls -la ${{ inputs.artifacts-path }}
+
+  - name: Deploy to Vercel
+    id: deploy
+    shell: bash
+    env:
+      VERCEL_TOKEN: ${{ inputs.vercel-token }}
+      VERCEL_ORG_ID: ${{ inputs.vercel-org-id }}
+      VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
+    run: |
+      echo "Starting deployment to Vercel..."
+      cd ${{ inputs.artifacts-path }}
+      echo "Current directory: $(pwd)"
+
+      echo "Initiating Vercel deployment..."
+      DEPLOYMENT_OUTPUT=$(vercel deploy --prod --token $VERCEL_TOKEN --scope $VERCEL_ORG_ID --confirm)
+      echo "Raw deployment output:"
+      echo "$DEPLOYMENT_OUTPUT"
+
+      DEPLOYMENT_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oP '(?<=https://).*')
+      echo "Extracted deployment URL: $DEPLOYMENT_URL"
+
+      if [ $? -eq 0 ] && [ ! -z "$DEPLOYMENT_URL" ]; then
+        echo "Deployment successful."
+        echo "deployment-status=success" >> $GITHUB_OUTPUT
+        echo "deployed-url=https://$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+        echo "deployment-logs=vercel-deployment.log" >> $GITHUB_OUTPUT
+        echo "Fetching deployment logs..."
+        vercel logs $DEPLOYMENT_URL --token $VERCEL_TOKEN > vercel-deployment.log
+        echo "Deployment logs saved to vercel-deployment.log"
+      else
+        echo "Deployment failed or URL extraction error."
+        echo "deployment-status=failure" >> $GITHUB_OUTPUT
+        echo "Error details:"
+        echo "$DEPLOYMENT_OUTPUT"
+        exit 1
+      fi
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Deployment to Vercel failed. Check logs for details."
+      echo "deployment-status=failure" >> $GITHUB_OUTPUT
+      echo "Last 50 lines of vercel-deployment.log (if exists):"
+      tail -n 50 vercel-deployment.log || echo "Log file not found"

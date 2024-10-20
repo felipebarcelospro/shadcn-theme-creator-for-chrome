@@ -1,0 +1,53 @@
+name: 'Post PR Comment'
+description: 'Posts informative comments on pull requests'
+
+inputs:
+  pr-number:
+    description: 'Number of the pull request'
+    required: true
+  comment-content:
+    description: 'Content of the comment to post'
+    required: true
+
+outputs:
+  comment-status:
+    description: 'Status of the comment posting operation'
+  comment-url:
+    description: 'URL of the posted comment'
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
+jobs:
+  post-comment:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Debug - Input values
+      run: |
+        echo "PR number: ${{ inputs.pr-number }}"
+        echo "Comment content: ${{ inputs.comment-content }}"
+
+    - name: Post comment
+      id: post
+      run: |
+        # Implement comment posting logic here
+        # This is a placeholder implementation
+        comment_status="success"
+        comment_url="https://github.com/example/repo/pull/${{ inputs.pr-number }}#issuecomment-123456789"
+
+        echo "::set-output name=comment-status::$comment_status"
+        echo "::set-output name=comment-url::$comment_url"
+
+    - name: Debug - Comment posting result
+      run: |
+        echo "Comment status: ${{ steps.post.outputs.comment-status }}"
+        echo "Comment URL: ${{ steps.post.outputs.comment-url }}"

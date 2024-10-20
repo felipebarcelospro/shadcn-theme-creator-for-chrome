@@ -1,0 +1,148 @@
+name: 'Setup Context and Prerequisites'
+description: 'Set up necessary context and prerequisites for the workflow'
+
+inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+
+outputs:
+  repository-context:
+    description: 'JSON object containing repository context'
+  config-data:
+    description: 'Parsed configuration data'
+  environment-variables:
+    description: 'Set environment variables'
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
+steps:
+- name: Checkout repository
+  uses: actions/checkout@v3
+
+- name: Setup Node.js
+  uses: actions/setup-node@v3
+  with:
+    node-version: '20'
+
+- name: Install dependencies
+  run: |
+    npm install @actions/github @actions/core @octokit/rest
+
+- name: Fetch repository metadata
+  id: repo-metadata
+  uses: actions/github-script@v6
+  with:
+    github-token: ${{ inputs.github-token }}
+    script: |
+      const { owner, repo } = context.repo;
+      try {
+        const repoData = await github.rest.repos.get({ owner, repo });
+        return repoData.data;
+      } catch (error) {
+        core.setFailed(`Failed to fetch repository metadata: ${error.message}`);
+      }
+
+- name: Load and parse config.yml
+  id: config
+  run: |
+    const fs = require('fs');
+    const yaml = require('js-yaml');
+    const core = require('@actions/core');
+
+    const configPath = '.github/config.yml';
+    try {
+      if (!fs.existsSync(configPath)) {
+        throw new Error('config.yml is missing');
+      }
+      const configData = yaml.load(fs.readFileSync(configPath, 'utf8'));
+      core.setOutput('config-data', JSON.stringify(configData));
+    } catch (error) {
+      core.setFailed(`Failed to load or parse config.yml: ${error.message}`);
+    }
+
+- name: Set up environment variables
+  id: set-env-vars
+  run: |
+    const core = require('@actions/core');
+    const github = require('@actions/github');
+
+    try {
+      core.exportVariable('REPO_NAME', github.context.repo.repo);
+      core.exportVariable('REPO_OWNER', github.context.repo.owner);
+      core.exportVariable('GITHUB_SHA', github.context.sha);
+      core.exportVariable('GITHUB_REF', github.context.ref);
+
+      const config = JSON.parse('${{ steps.config.outputs.config-data }}');
+      core.exportVariable('REPO_TYPE', config.repository.type);
+      core.exportVariable('MAIN_BRANCHES', JSON.stringify(config.version_control.main_branches));
+
+      core.setOutput('environment-variables', 'Environment variables set');
+    } catch (error) {
+      core.setFailed(`Failed to set environment variables: ${error.message}`);
+    }
+
+- name: Validate repository settings
+  run: |
+    const core = require('@actions/core');
+
+    try {
+      const repoData = JSON.parse('${{ steps.repo-metadata.outputs.result }}');
+      const config = JSON.parse('${{ steps.config.outputs.config-data }}');
+
+      if (!repoData.has_issues && config.issue_management.auto_labeling.enabled) {
+        core.warning('Issues are not enabled for this repository, but issue management is configured');
+      }
+      if (!repoData.has_projects && config.repository.type === 'monorepo') {
+        core.warning('Projects are not enabled for this repository, but it is configured as a monorepo');
+      }
+    } catch (error) {
+      core.setFailed(`Failed to validate repository settings: ${error.message}`);
+    }
+
+- name: Determine current branch and commit information
+  run: |
+    const core = require('@actions/core');
+    const github = require('@actions/github');
+
+    try {
+      const branch = github.context.ref.replace('refs/heads/', '');
+      const commit = github.context.sha;
+      core.exportVariable('CURRENT_BRANCH', branch);
+      core.exportVariable('CURRENT_COMMIT', commit);
+    } catch (error) {
+      core.setFailed(`Failed to determine branch and commit information: ${error.message}`);
+    }
+
+- name: Create repository context
+  id: repo-context
+  run: |
+    const core = require('@actions/core');
+
+    try {
+      const repoData = JSON.parse('${{ steps.repo-metadata.outputs.result }}');
+      const configData = JSON.parse('${{ steps.config.outputs.config-data }}');
+      const context = {
+        repoMetadata: repoData,
+        config: configData,
+        branch: process.env.CURRENT_BRANCH,
+        commit: process.env.CURRENT_COMMIT,
+        repoType: process.env.REPO_TYPE,
+        mainBranches: JSON.parse(process.env.MAIN_BRANCHES)
+      };
+      core.setOutput('repository-context', JSON.stringify(context));
+    } catch (error) {
+      core.setFailed(`Failed to create repository context: ${error.message}`);
+    }
+
+- name: Output results
+  run: |
+    const core = require('@actions/core');
+
+    console.log('Repository context:', '${{ steps.repo-context.outputs.repository-context }}');
+    console.log('Configuration data:', '${{ steps.config.outputs.config-data }}');
+    console.log('Environment variables:', '${{ steps.set-env-vars.outputs.environment-variables }}');
+
+    core.info('Setup context and prerequisites completed successfully');

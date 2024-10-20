@@ -1,0 +1,79 @@
+packages:
+  global_settings:
+    ci_cd:
+      tools:
+      - GitHub Actions
+      - Turbo
+    security_checks:
+      enabled: true
+      tools:
+      - npm audit
+      schedule: "0 0 * * 0" # Weekly on Sunday
+      fail_on: high
+    performance_monitoring:
+      enabled: true
+      check_interval: 15 # minutes
+      metrics_to_collect:
+      - availability
+      - response_time
+      - ttfb
+      - lcp
+      - cls
+      - fid
+      thresholds:
+        availability: 99.9
+        response_time: 1000 # ms
+        ttfb: 200 # ms
+        lcp: 2500 # ms
+        cls: 0.1
+        fid: 100 # ms
+      notification:
+        on_failure:
+          type: slack
+          channel: performance-alerts
+      issue_creation:
+        enabled: true
+        labels:
+        - performance
+        - high-priority
+  package_specific:
+    web:
+      path: apps/web
+      ci_cd:
+        commands:
+          test: turbo run test --filter=web
+          build: turbo run build --filter=web
+          lint: turbo run lint --filter=web
+          dev: turbo run dev --filter=web
+        deployment:
+          type: static
+          config:
+            output_dir: apps/web/out
+            github_pages:
+              branch: gh-pages
+          staging:
+            branch: develop
+            url: https://staging-web.example.com
+          production:
+            branch: main
+            url: https://www.example.com
+        post_deployment_tests:
+          enabled: true
+          url: https://www.example.com/health
+        performance_monitoring:
+          urls_to_monitor:
+          - https://www.example.com
+    chrome-extension:
+      path: apps/chrome-extension
+      ci_cd:
+        commands:
+          test: turbo run test --filter=chrome-extension
+          build: turbo run build --filter=chrome-extension
+          lint: turbo run lint --filter=chrome-extension
+        deployment:
+          type: chrome-web-store
+          config:
+            extension_id: ${{ secrets.CHROME_EXTENSION_ID }}
+            client_id: ${{ secrets.CHROME_CLIENT_ID }}
+            client_secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+            refresh_token: ${{ secrets.CHROME_REFRESH_TOKEN }}

@@ -1,0 +1,98 @@
+name: 'Publish to npm'
+description: 'Publishes a package to npm registry'
+
+inputs:
+  artifacts-path:
+    description: 'Path to build artifacts'
+    required: true
+  npm-token:
+    description: 'npm authentication token'
+    required: true
+  tag:
+    description: 'npm distribution tag (e.g., latest, beta)'
+    required: false
+    default: 'latest'
+
+outputs:
+  deployment-status:
+    description: 'Status of the npm publish (success/failure)'
+  published-version:
+    description: 'Version number of the published package'
+  deployed-url:
+    description: 'URL of the package on npm'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Install dependencies
+    uses: ./.github/actions/install-dependencies
+    with:
+      package-manager: 'npm'
+      cache-key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+  - name: Debug - Environment Info
+    shell: bash
+    run: |
+      echo "Node version: $(node -v)"
+      echo "NPM version: $(npm -v)"
+      echo "Current directory: $(pwd)"
+      echo "Artifacts path: ${{ inputs.artifacts-path }}"
+
+  - name: Publish to npm
+    id: publish
+    shell: bash
+    env:
+      NODE_AUTH_TOKEN: ${{ inputs.npm-token }}
+    run: |
+      cd ${{ inputs.artifacts-path }}
+      echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
+
+      echo "Debug: Contents of package.json"
+      cat package.json
+
+      echo "Debug: NPM configuration"
+      npm config list
+
+      echo "Publishing package to npm..."
+      npm publish --access public --tag ${{ inputs.tag }} --dry-run
+
+      echo "Debug: Dry run output above. Proceeding with actual publish..."
+      npm publish --access public --tag ${{ inputs.tag }}
+
+      if [ $? -eq 0 ]; then
+        echo "Package published successfully."
+        echo "deployment-status=success" >> $GITHUB_OUTPUT
+        VERSION=$(npm view . version)
+        echo "Published version: $VERSION"
+        echo "published-version=$VERSION" >> $GITHUB_OUTPUT
+        PACKAGE_NAME=$(npm view . name)
+        PACKAGE_URL="https://www.npmjs.com/package/${PACKAGE_NAME}"
+        echo "Package URL: $PACKAGE_URL"
+        echo "deployed-url=$PACKAGE_URL" >> $GITHUB_OUTPUT
+      else
+        echo "Package publishing failed."
+        echo "deployment-status=failure" >> $GITHUB_OUTPUT
+        exit 1
+      fi
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Publishing to npm failed. Check logs for details."
+      echo "deployment-status=failure" >> $GITHUB_OUTPUT
+
+      echo "Error logs:"
+      cat npm-debug.log || echo "No npm debug log found."
+
+      echo "Debug: NPM cache"
+      npm cache verify
+
+      echo "Debug: Package.json contents"
+      cat package.json || echo "package.json not found"
+
+      echo "Debug: .npmrc contents (redacted)"
+      sed 's/:[^:]*@/:[REDACTED]@/g' .npmrc || echo ".npmrc not found"
+
+      echo "Debug: Environment variables (redacted)"
+      env | grep -v -i "token" | grep -v -i "key" | grep -v -i "secret"

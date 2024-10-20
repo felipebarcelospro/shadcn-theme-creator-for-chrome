@@ -1,0 +1,99 @@
+name: 'Validate Branch Name'
+description: 'Validates branch names against predefined naming conventions'
+
+inputs:
+  branch-name:
+    description: 'Name of the branch to validate'
+    required: true
+  feature-prefix:
+    description: 'Prefix for feature branches'
+    required: true
+    default: 'feature/'
+  release-prefix:
+    description: 'Prefix for release branches'
+    required: true
+    default: 'release/'
+  hotfix-prefix:
+    description: 'Prefix for hotfix branches'
+    required: true
+    default: 'hotfix/'
+  main-branches:
+    description: 'List of main branches'
+    required: true
+    default: '["main", "develop"]'
+  config-path:
+    description: 'Path to the branch naming configuration file'
+    required: false
+    default: '.github/branch-naming-config.json'
+
+outputs:
+  is-valid:
+    description: 'Boolean indicating if the branch name is valid'
+  validation-message:
+    description: 'Detailed validation message or error explanation'
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Debug - Input values
+      run: |
+        echo "Branch name: ${{ inputs.branch-name }}"
+        echo "Feature prefix: ${{ inputs.feature-prefix }}"
+        echo "Release prefix: ${{ inputs.release-prefix }}"
+        echo "Hotfix prefix: ${{ inputs.hotfix-prefix }}"
+        echo "Main branches: ${{ inputs.main-branches }}"
+        echo "Config path: ${{ inputs.config-path }}"
+
+    - name: Load branch naming configuration
+      id: load-config
+      run: |
+        if [ -f "${{ inputs.config-path }}" ]; then
+          echo "::set-output name=config::$(cat ${{ inputs.config-path }})"
+        else
+          echo "::set-output name=config::{}"
+        fi
+
+    - name: Validate branch name
+      id: validate
+      run: |
+        branch_name="${{ inputs.branch-name }}"
+        config='${{ steps.load-config.outputs.config }}'
+        main_branches='${{ inputs.main-branches }}'
+
+        # Implement validation logic here
+        is_valid=true
+        message="Branch name is valid"
+
+        if [[ " ${main_branches[*]} " =~ " ${branch_name} " ]]; then
+          is_valid=true
+        elif [[ $branch_name == ${{ inputs.feature-prefix }}* ]]; then
+          is_valid=true
+        elif [[ $branch_name == ${{ inputs.release-prefix }}* ]]; then
+          is_valid=true
+        elif [[ $branch_name == ${{ inputs.hotfix-prefix }}* ]]; then
+          is_valid=true
+        else
+          is_valid=false
+          message="Invalid branch name format"
+        fi
+
+        echo "::set-output name=is-valid::$is_valid"
+        echo "::set-output name=validation-message::$message"
+
+    - name: Debug - Validation result
+      run: |
+        echo "Is valid: ${{ steps.validate.outputs.is-valid }}"
+        echo "Validation message: ${{ steps.validate.outputs.validation-message }}"

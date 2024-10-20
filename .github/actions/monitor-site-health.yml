@@ -1,0 +1,78 @@
+name: 'Monitor Site Health'
+description: 'Checks site availability and measures performance'
+
+inputs:
+  urls:
+    description: 'Comma-separated list of URLs to monitor'
+    required: true
+  timeout:
+    description: 'Timeout for each request in seconds'
+    required: false
+    default: '30'
+  max_retries:
+    description: 'Maximum number of retries for each request'
+    required: false
+    default: '3'
+
+outputs:
+  availability-status:
+    description: 'JSON object with availability status for each URL'
+  performance-metrics:
+    description: 'JSON object with performance metrics for each URL'
+
+runs:
+  using: "composite"
+  steps:
+  - name: Install dependencies
+    shell: bash
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y jq curl
+
+  - name: Check site availability and performance
+    shell: bash
+    run: |
+      urls=(${URLS//,/ })
+      availability_status="{}"
+      performance_metrics="{}"
+      for url in "${urls[@]}"; do
+        retries=0
+        while [ $retries -lt $MAX_RETRIES ]; do
+          start_time=$(date +%s%N)
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time $TIMEOUT "$url")
+          end_time=$(date +%s%N)
+          response_time=$((($end_time - $start_time)/1000000))
+
+          if [ "$http_code" = "200" ]; then
+            status="available"
+            break
+          else
+            retries=$((retries+1))
+            if [ $retries -lt $MAX_RETRIES ]; then
+              sleep 5
+            fi
+          fi
+        done
+
+        if [ $retries -eq $MAX_RETRIES ]; then
+          status="unavailable"
+        fi
+
+        availability_status=$(echo $availability_status | jq --arg url "$url" --arg status "$status" '. + {($url): $status}')
+        performance_metrics=$(echo $performance_metrics | jq --arg url "$url" --arg time "$response_time" --arg code "$http_code" '. + {($url): {responseTime: $time, httpCode: $code}}')
+      done
+      echo "availability-status=$availability_status" >> $GITHUB_OUTPUT
+      echo "performance-metrics=$performance_metrics" >> $GITHUB_OUTPUT
+
+    env:
+      URLS: ${{ inputs.urls }}
+      TIMEOUT: ${{ inputs.timeout }}
+      MAX_RETRIES: ${{ inputs.max_retries }}
+
+  - name: Log results
+    shell: bash
+    run: |
+      echo "Availability Status:"
+      echo "${{ steps.check_site.outputs.availability-status }}" | jq '.'
+      echo "Performance Metrics:"
+      echo "${{ steps.check_site.outputs.performance-metrics }}" | jq '.'

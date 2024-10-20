@@ -1,0 +1,126 @@
+name: 'AI Generate Content'
+description: 'Leverages Google AI Studio with Gemini 1.5PRO to automatically generate high-quality content'
+
+inputs:
+  content-type:
+    description: 'Type of content to generate (PR description, issue response, etc.)'
+    required: true
+  context-data:
+    description: 'JSON string containing relevant context data'
+    required: true
+  template-path:
+    description: 'Path to content template file'
+    required: false
+  additional-context:
+    description: 'Additional context or instructions for the AI'
+    required: false
+  tone:
+    description: 'Desired tone of the generated content (formal, casual, technical, etc.)'
+    required: false
+    default: 'neutral'
+  max-length:
+    description: 'Maximum length of the generated content in characters'
+    required: false
+    default: '2000'
+
+outputs:
+  generated-content:
+    description: 'The AI-generated content'
+  generation-metadata:
+    description: 'Metadata about the generation process (model used, confidence score, etc.)'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
+
+  - name: Setup Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: '20'
+
+  - name: Install dependencies
+    run: npm ci
+    shell: bash
+
+  - name: Prepare AI prompt
+    id: prepare-prompt
+    run: |
+      prompt=$(cat << EOF
+      Generate ${INPUT_CONTENT_TYPE} content with the following context:
+      ${INPUT_CONTEXT_DATA}
+
+      Additional instructions:
+      ${INPUT_ADDITIONAL_CONTEXT}
+
+      Please use a ${INPUT_TONE} tone and limit the response to ${INPUT_MAX_LENGTH} characters.
+
+      If a template is provided, use it as a guide for the structure and format of the content.
+      EOF
+      )
+      echo "PROMPT<<EOF" >> $GITHUB_ENV
+      echo "$prompt" >> $GITHUB_ENV
+      echo "EOF" >> $GITHUB_ENV
+    shell: bash
+
+  - name: Load template
+    id: load-template
+    if: inputs.template-path
+    run: |
+      template=$(cat ${{ inputs.template-path }})
+      echo "TEMPLATE<<EOF" >> $GITHUB_ENV
+      echo "$template" >> $GITHUB_ENV
+      echo "EOF" >> $GITHUB_ENV
+    shell: bash
+
+  - name: Generate content
+    id: generate-content
+    run: |
+      response=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent" \
+        -H "Authorization: Bearer ${{ secrets.GOOGLE_AI_API_KEY }}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "'"${PROMPT}"'"
+                }
+              ]
+            }
+          ],
+          "generationConfig": {
+            "temperature": 0.7,
+            "topK": 40,
+            "topP": 0.95,
+            "maxOutputTokens": $((${INPUT_MAX_LENGTH} / 4))
+          }
+        }')
+
+      content=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text')
+      metadata=$(echo "$response" | jq -r '.candidates[0].safetyRatings')
+
+      echo "GENERATED_CONTENT<<EOF" >> $GITHUB_ENV
+      echo "$content" >> $GITHUB_ENV
+      echo "EOF" >> $GITHUB_ENV
+
+      echo "GENERATION_METADATA<<EOF" >> $GITHUB_ENV
+      echo "$metadata" >> $GITHUB_ENV
+      echo "EOF" >> $GITHUB_ENV
+    shell: bash
+
+  - name: Set outputs
+    id: set-outputs
+    run: |
+      echo "generated-content=$GENERATED_CONTENT" >> $GITHUB_OUTPUT
+      echo "generation-metadata=$GENERATION_METADATA" >> $GITHUB_OUTPUT
+    shell: bash
+
+  - name: Debug - Generated content
+    run: |
+      echo "Generated content:"
+      echo "$GENERATED_CONTENT"
+      echo "Generation metadata:"
+      echo "$GENERATION_METADATA"
+    shell: bash

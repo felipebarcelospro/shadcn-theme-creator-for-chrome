@@ -1,0 +1,137 @@
+name: 'Merge Branch'
+description: 'Automates the process of merging branches while following the project''s merge strategy'
+
+inputs:
+  source-branch:
+    description: 'Name of the source branch to merge'
+    required: true
+  target-branch:
+    description: 'Name of the target branch to merge into'
+    required: true
+  merge-strategy:
+    description: 'Merge strategy to use (merge/squash/rebase)'
+    required: false
+    default: 'merge'
+
+outputs:
+  merge-status:
+    description: 'Status of the merge operation'
+  merge-commit-sha:
+    description: 'SHA of the merge commit (if successful)'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash
+    run: |
+      echo "Debug: Input values"
+      echo "source-branch: ${{ inputs.source-branch }}"
+      echo "target-branch: ${{ inputs.target-branch }}"
+      echo "merge-strategy: ${{ inputs.merge-strategy }}"
+
+  - name: Validate branch names
+    uses: ./.github/actions/validate-branch-name
+    with:
+      branch-name: ${{ inputs.source-branch }}
+      prefix: 'feature'
+      type: 'feature'
+      description: 'source-branch'
+      allowed-prefixes: 'feature,bugfix,hotfix'
+      allowed-types: 'feature,bugfix,hotfix'
+      max-length: '100'
+
+  - name: Fetch latest changes
+    shell: bash
+    run: |
+      git fetch origin
+      git checkout ${{ inputs.target-branch }}
+      git pull origin ${{ inputs.target-branch }}
+      git checkout ${{ inputs.source-branch }}
+      git pull origin ${{ inputs.source-branch }}
+
+  - name: Apply merge strategy
+    id: merge
+    shell: bash
+    run: |
+      git checkout ${{ inputs.target-branch }}
+      if [[ "${{ inputs.merge-strategy }}" == "squash" ]]; then
+        git merge --squash ${{ inputs.source-branch }}
+        git commit -m "Squash merge ${{ inputs.source-branch }} into ${{ inputs.target-branch }}"
+      elif [[ "${{ inputs.merge-strategy }}" == "rebase" ]]; then
+        git rebase ${{ inputs.source-branch }}
+      else
+        git merge --no-ff ${{ inputs.source-branch }} -m "Merge ${{ inputs.source-branch }} into ${{ inputs.target-branch }}"
+      fi
+
+      if [ $? -eq 0 ]; then
+        echo "merge-status=success" >> $GITHUB_OUTPUT
+        echo "merge-commit-sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+      else
+        echo "merge-status=conflict" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Handle merge conflicts
+    if: steps.merge.outputs.merge-status == 'conflict'
+    shell: bash
+    run: |
+      echo "Merge conflict detected. Please resolve conflicts manually."
+      git merge --abort
+      echo "merge-status=failed" >> $GITHUB_OUTPUT
+
+  - name: Push merged changes
+    if: steps.merge.outputs.merge-status == 'success'
+    shell: bash
+    run: |
+      git push origin ${{ inputs.target-branch }}
+
+  - name: Verify merge success
+    if: steps.merge.outputs.merge-status == 'success'
+    shell: bash
+    run: |
+      if git branch --contains $(git rev-parse HEAD) | grep -q "${{ inputs.target-branch }}"; then
+        echo "Merge verification successful"
+      else
+        echo "Merge verification failed"
+        echo "merge-status=failed" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Generate merge report
+    shell: bash
+    run: |
+      echo "Merge Report" > merge_report.txt
+      echo "Source Branch: ${{ inputs.source-branch }}" >> merge_report.txt
+      echo "Target Branch: ${{ inputs.target-branch }}" >> merge_report.txt
+      echo "Merge Strategy: ${{ inputs.merge-strategy }}" >> merge_report.txt
+      echo "Merge Status: ${{ steps.merge.outputs.merge-status }}" >> merge_report.txt
+      echo "Merge Commit SHA: ${{ steps.merge.outputs.merge-commit-sha }}" >> merge_report.txt
+      cat merge_report.txt
+
+  - name: Apply branch protection
+    uses: ./.github/actions/apply-branch-protection
+    with:
+      branch-name: ${{ inputs.target-branch }}
+      require-pull-request: true
+      required-approvals: 1
+      enforce-admins: true
+      dismiss-stale-reviews: true
+      require-code-owner-reviews: true
+      restrict-pushes: false
+      require-status-checks: true
+      required-status-checks: 'build,test'
+      require-linear-history: true
+      allow-force-pushes: false
+      allow-deletions: false
+
+  - name: Set outputs
+    shell: bash
+    run: |
+      echo "merge-status=${{ steps.merge.outputs.merge-status }}" >> $GITHUB_OUTPUT
+      echo "merge-commit-sha=${{ steps.merge.outputs.merge-commit-sha }}" >> $GITHUB_OUTPUT
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "An error occurred during the merge process"
+      echo "merge-status=failed" >> $GITHUB_OUTPUT

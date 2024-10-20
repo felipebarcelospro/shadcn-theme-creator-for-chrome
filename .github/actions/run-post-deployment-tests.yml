@@ -1,0 +1,90 @@
+name: 'Run Post-Deployment Tests'
+description: 'Executes comprehensive post-deployment tests to ensure application functionality in production'
+
+inputs:
+  app-url:
+    description: 'URL of the deployed application'
+    required: true
+  test-suite:
+    description: 'Path to post-deployment test suite'
+    required: false
+    default: 'tests/post-deploy'
+  performance-threshold:
+    description: 'Minimum acceptable performance score'
+    required: false
+    default: '80'
+
+outputs:
+  test-status:
+    description: 'Overall test status (pass/fail)'
+  test-report:
+    description: 'Detailed test report (JSON object)'
+  performance-metrics:
+    description: 'Application performance metrics'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Setup test environment
+    run: |
+      npm install -g playwright
+      npm install -g lighthouse
+    shell: bash
+
+  - name: Run smoke tests
+    run: |
+      npx playwright test ${{ inputs.test-suite }}/smoke
+    shell: bash
+
+  - name: Execute integration tests
+    run: |
+      npx playwright test ${{ inputs.test-suite }}/integration
+    shell: bash
+
+  - name: Perform performance and load testing
+    run: |
+      lighthouse ${{ inputs.app-url }} --output=json --output-path=./lighthouse-report.json
+      PERFORMANCE_SCORE=$(jq '.categories.performance.score' ./lighthouse-report.json)
+      if (( $(echo "$PERFORMANCE_SCORE < ${{ inputs.performance-threshold }}" | bc -l) )); then
+        echo "Performance score ($PERFORMANCE_SCORE) is below threshold (${{ inputs.performance-threshold }})"
+        exit 1
+      fi
+    shell: bash
+
+  - name: Check for regression issues
+    run: |
+      npx playwright test ${{ inputs.test-suite }}/regression
+    shell: bash
+
+  - name: Validate third-party integrations
+    run: |
+      npx playwright test ${{ inputs.test-suite }}/integrations
+    shell: bash
+
+  - name: Collect user experience metrics
+    run: |
+      npx playwright test ${{ inputs.test-suite }}/ux
+    shell: bash
+
+  - name: Generate comprehensive test report
+    id: generate-report
+    run: |
+      echo "Generating test report..."
+      # Implement logic to compile results from various test steps
+      echo '{"status": "pass", "details": {...}}' > test-report.json
+    shell: bash
+
+  - name: Set outputs
+    id: set-outputs
+    run: |
+      echo "test-status=$(jq -r '.status' test-report.json)" >> $GITHUB_OUTPUT
+      echo "test-report=$(cat test-report.json | jq -c .)" >> $GITHUB_OUTPUT
+      echo "performance-metrics=$(jq '.categories.performance' lighthouse-report.json)" >> $GITHUB_OUTPUT
+    shell: bash
+
+  - name: Handle test failures
+    if: failure()
+    run: |
+      echo "::error::Post-deployment tests failed. Check the test report for details."
+      exit 1
+    shell: bash

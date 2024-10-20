@@ -1,0 +1,105 @@
+name: 'Deploy to Easypanel'
+description: 'Deploys an application to Easypanel'
+
+inputs:
+  artifacts-path:
+    description: 'Path to build artifacts'
+    required: true
+  easypanel-url:
+    description: 'Easypanel instance URL'
+    required: true
+  api-key:
+    description: 'Easypanel API key'
+    required: true
+  project-id:
+    description: 'Easypanel project ID'
+    required: true
+
+outputs:
+  deployment-status:
+    description: 'Status of the deployment (success/failure)'
+  deployed-url:
+    description: 'URL of the deployed application'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Install dependencies
+    uses: ./.github/actions/install-dependencies
+    with:
+      package-manager: 'npm'
+      cache-key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+  - name: Debug - Environment Info
+    shell: bash
+    run: |
+      echo "Node version: $(node -v)"
+      echo "NPM version: $(npm -v)"
+      echo "Current directory: $(pwd)"
+      echo "Artifacts path: ${{ inputs.artifacts-path }}"
+      ls -la ${{ inputs.artifacts-path }}
+
+  - name: Deploy to Easypanel
+    id: deploy
+    shell: bash
+    run: |
+      # Install Easypanel CLI tool (assuming it exists, adjust as needed)
+      npm install -g easypanel-cli
+      echo "Easypanel CLI version: $(easypanel --version)"
+
+      # Authenticate with Easypanel
+      echo "Authenticating with Easypanel..."
+      if ! easypanel login --url ${{ inputs.easypanel-url }} --api-key ${{ inputs.api-key }}; then
+        echo "Authentication failed. Check Easypanel URL and API key."
+        exit 1
+      fi
+      echo "Authentication successful."
+
+      # Deploy the application
+      echo "Starting deployment..."
+      if ! DEPLOY_OUTPUT=$(easypanel deploy \
+        --project-id ${{ inputs.project-id }} \
+        --artifacts-path ${{ inputs.artifacts-path }} 2>&1); then
+        echo "Deployment failed. Error output:"
+        echo "$DEPLOY_OUTPUT"
+        echo "deployment-status=failure" >> $GITHUB_OUTPUT
+        exit 1
+      fi
+
+      echo "Deployment successful. Full output:"
+      echo "$DEPLOY_OUTPUT"
+      echo "deployment-status=success" >> $GITHUB_OUTPUT
+      DEPLOYED_URL=$(echo "$DEPLOY_OUTPUT" | grep -oP 'Deployed URL: \K.*')
+      echo "Deployed URL: $DEPLOYED_URL"
+      echo "deployed-url=$DEPLOYED_URL" >> $GITHUB_OUTPUT
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Deployment to Easypanel failed. Check logs for details."
+      echo "deployment-status=failure" >> $GITHUB_OUTPUT
+
+      # Print error logs
+      echo "Error logs:"
+      if [ -f "$GITHUB_WORKSPACE/easypanel-deploy.log" ]; then
+        cat $GITHUB_WORKSPACE/easypanel-deploy.log
+      else
+        echo "No log file found at $GITHUB_WORKSPACE/easypanel-deploy.log"
+        echo "Listing files in workspace:"
+        ls -la $GITHUB_WORKSPACE
+      fi
+
+      # Print recent system logs
+      echo "Recent system logs:"
+      journalctl -n 50 --no-pager || echo "Unable to retrieve system logs"
+
+  - name: Debug - Final Status
+    if: always()
+    shell: bash
+    run: |
+      echo "Deployment status: ${{ steps.deploy.outputs.deployment-status }}"
+      echo "Deployed URL: ${{ steps.deploy.outputs.deployed-url }}"
+      echo "GitHub workspace: $GITHUB_WORKSPACE"
+      echo "GitHub event name: $GITHUB_EVENT_NAME"
+      echo "GitHub ref: $GITHUB_REF"

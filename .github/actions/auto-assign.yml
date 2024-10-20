@@ -1,0 +1,159 @@
+name: 'Auto Assign'
+description: 'Automatically assigns team members to issues and PRs based on their expertise and contributions'
+
+inputs:
+  item-type:
+    description: 'Type of item to assign (issue/pr)'
+    required: true
+  item-number:
+    description: 'Number of the issue or PR'
+    required: true
+
+outputs:
+  assigned-members:
+    description: 'List of team members assigned to the item'
+  assignment-summary:
+    description: 'Summary of the assignment operation'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash
+    run: |
+      echo "Debug: Input values"
+      echo "item-type: ${{ inputs.item-type }}"
+      echo "item-number: ${{ inputs.item-number }}"
+
+  - name: Fetch repository contributors and their expertise
+    id: fetch-contributors
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const { data: contributors } = await github.rest.repos.listContributors({ owner, repo });
+
+        const expertiseMap = new Map();
+        const ownerLogin = (await github.rest.repos.get({ owner, repo })).data.owner.login;
+
+        for (const contributor of contributors) {
+          if (contributor.login === ownerLogin) continue; // Skip the owner
+
+          const { data: commits } = await github.rest.repos.listCommits({
+            owner,
+            repo,
+            author: contributor.login,
+            per_page: 100
+          });
+
+          const expertise = commits.reduce((acc, commit) => {
+            const files = commit.files || [];
+            files.forEach(file => {
+              const ext = file.filename.split('.').pop().toLowerCase();
+              if (['js', 'ts', 'jsx', 'tsx'].includes(ext)) acc.frontend = (acc.frontend || 0) + 1;
+              else if (['py', 'rb', 'java', 'php'].includes(ext)) acc.backend = (acc.backend || 0) + 1;
+              else if (['yml', 'yaml', 'tf', 'sh'].includes(ext)) acc.devops = (acc.devops || 0) + 1;
+            });
+            return acc;
+          }, {});
+
+          const primaryExpertise = Object.entries(expertise).sort((a, b) => b[1] - a[1])[0][0];
+          expertiseMap.set(contributor.login, primaryExpertise);
+        }
+
+        return Object.fromEntries(expertiseMap);
+
+  - name: Generate assignment rules
+    id: generate-rules
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const contributorExpertise = ${{ steps.fetch-contributors.outputs.result }};
+        const rules = Object.entries(contributorExpertise).reduce((acc, [contributor, expertise]) => {
+          if (!acc[expertise]) acc[expertise] = { expertise, members: [] };
+          acc[expertise].members.push(contributor);
+          return acc;
+        }, {});
+        return Object.values(rules);
+
+  - name: Fetch item content and labels
+    id: fetch-item
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const itemType = '${{ inputs.item-type }}';
+        const itemNumber = '${{ inputs.item-number }}';
+        let content, labels;
+        if (itemType === 'issue') {
+          const { data: issue } = await github.rest.issues.get({
+            owner,
+            repo,
+            issue_number: itemNumber
+          });
+          content = issue.title + '\n' + issue.body;
+          labels = issue.labels.map(label => label.name);
+        } else if (itemType === 'pr') {
+          const { data: pr } = await github.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: itemNumber
+          });
+          content = pr.title + '\n' + pr.body;
+          labels = pr.labels.map(label => label.name);
+        }
+        return { content, labels };
+
+  - name: Determine assignees
+    id: determine-assignees
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const rules = ${{ steps.generate-rules.outputs.result }};
+        const { content, labels } = ${{ steps.fetch-item.outputs.result }};
+        const potentialAssignees = rules.flatMap(rule => {
+          if (labels.includes(rule.expertise) || content.toLowerCase().includes(rule.expertise)) {
+            return rule.members;
+          }
+          return [];
+        });
+        return potentialAssignees.length > 0 ? potentialAssignees : ['default-assignee'];
+
+  - name: Assign members
+    id: assign-members
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const itemType = '${{ inputs.item-type }}';
+        const itemNumber = '${{ inputs.item-number }}';
+        const assignees = ${{ steps.determine-assignees.outputs.result }};
+
+        await github.rest.issues.addAssignees({
+          owner,
+          repo,
+          issue_number: itemNumber,
+          assignees: assignees
+        });
+
+        return assignees;
+
+  - name: Set outputs
+    id: set-outputs
+    run: |
+      echo "assigned-members=${{ steps.assign-members.outputs.result }}" >> $GITHUB_OUTPUT
+      echo "assignment-summary=Assigned members: ${{ steps.assign-members.outputs.result }}" >> $GITHUB_OUTPUT
+    shell: bash
+
+  - name: Error handling
+    if: failure()
+    run: |
+      echo "An error occurred during the auto-assignment process"
+      echo "assigned-members=[]" >> $GITHUB_OUTPUT
+      echo "assignment-summary=Auto-assignment failed due to an error" >> $GITHUB_OUTPUT
+    shell: bash

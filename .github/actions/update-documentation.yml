@@ -1,0 +1,103 @@
+name: 'Update Documentation'
+description: 'Automatically updates project documentation when code changes'
+
+inputs:
+  docs-directory:
+    description: 'Directory containing documentation files'
+    required: false
+    default: 'docs'
+  api-changes:
+    description: 'Path to API changes file'
+    required: false
+  version:
+    description: 'New version number for documentation'
+    required: false
+
+outputs:
+  update-status:
+    description: 'Documentation update status (updated/no-changes)'
+  changelog:
+    description: 'Path to updated changelog file'
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Debug - Input values
+      run: |
+        echo "Docs directory: ${{ inputs.docs-directory }}"
+        echo "API changes file: ${{ inputs.api-changes }}"
+        echo "Version: ${{ inputs.version }}"
+
+    - name: Analyze code changes
+      id: analyze-changes
+      run: |
+        git diff --name-only ${{ github.event.before }} ${{ github.sha }} > changed_files.txt
+        echo "::set-output name=changed_files::$(cat changed_files.txt)"
+
+    - name: Debug - Changed files
+      run: |
+        echo "Changed files: ${{ steps.analyze-changes.outputs.changed_files }}"
+
+    - name: Update API documentation
+      if: inputs.api-changes
+      run: |
+        # Implement API documentation update logic here
+        echo "Updating API documentation based on ${{ inputs.api-changes }}"
+
+    - name: Update feature documentation
+      run: |
+        # Implement feature documentation update logic here
+        echo "Updating feature documentation"
+
+    - name: Update changelog
+      id: update-changelog
+      run: |
+        # Implement changelog update logic here
+        echo "Updating changelog"
+        echo "::set-output name=changelog_path::CHANGELOG.md"
+
+    - name: Verify documentation links
+      run: |
+        # Implement link verification logic here
+        echo "Verifying documentation links"
+
+    - name: Generate documentation artifacts
+      run: |
+        # Implement artifact generation logic here
+        echo "Generating documentation artifacts"
+
+    - name: Commit documentation changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add ${{ inputs.docs-directory }}
+        git commit -m "Update documentation" || echo "No changes to commit"
+        git push
+
+    - name: Set outputs
+      id: set-outputs
+      run: |
+        if [[ $(git diff --name-only HEAD~1 HEAD) ]]; then
+          echo "::set-output name=update-status::updated"
+        else
+          echo "::set-output name=update-status::no-changes"
+        fi
+        echo "::set-output name=changelog::${{ steps.update-changelog.outputs.changelog_path }}"
+
+    - name: Debug - Final outputs
+      run: |
+        echo "Update status: ${{ steps.set-outputs.outputs.update-status }}"
+        echo "Changelog path: ${{ steps.set-outputs.outputs.changelog }}"

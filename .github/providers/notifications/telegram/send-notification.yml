@@ -1,0 +1,46 @@
+name: 'Send Telegram Notification'
+description: 'Sends a notification to a Telegram chat'
+
+inputs:
+  bot-token:
+    description: 'Telegram Bot Token'
+    required: true
+  chat-id:
+    description: 'Telegram Chat ID'
+    required: true
+  message:
+    description: 'Message to send'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Send Telegram Message
+    shell: bash
+    env:
+      BOT_TOKEN: ${{ inputs.bot-token }}
+      CHAT_ID: ${{ inputs.chat-id }}
+      MESSAGE: ${{ inputs.message }}
+    run: |
+      echo "Sending Telegram notification..."
+      curl -s -X POST https://api.telegram.org/bot${BOT_TOKEN}/sendMessage \
+        -d chat_id=${CHAT_ID} \
+        -d text="${MESSAGE}" \
+        -d parse_mode=HTML
+
+  - name: Check Notification Status
+    shell: bash
+    run: |
+      if [ $? -eq 0 ]; then
+        echo "Telegram notification sent successfully."
+      else
+        echo "Failed to send Telegram notification."
+        exit 1
+      fi
+
+  - name: Error Handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Error occurred while sending Telegram notification."
+      echo "Please check your bot token and chat ID."

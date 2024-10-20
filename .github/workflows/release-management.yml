@@ -1,0 +1,160 @@
+name: Release Management Workflow
+
+on:
+  push:
+    branches:
+      - 'release/*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Type of release (major/minor/patch)'
+        required: true
+        default: 'patch'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      affected_packages: ${{ steps.determine-affected-packages.outputs.affected_apps }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Context
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine Affected Packages
+        id: determine-affected-packages
+        uses: ./.github/actions/determine-affected-packages
+        with:
+          changed_files: ${{ steps.setup-context.outputs.changed_files }}
+          apps_configuration: ${{ steps.setup-context.outputs.apps_configuration }}
+
+  release-management:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: ${{ fromJson(needs.setup.outputs.affected_packages) }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Context
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Version
+        id: get-version
+        uses: ./.github/actions/get-version
+        with:
+          release_type: ${{ github.event.inputs.release_type || 'patch' }}
+
+      - name: Bump Version
+        id: bump-version
+        uses: ./.github/actions/bump-version
+        with:
+          new_version: ${{ steps.get-version.outputs.new_version }}
+          affected_apps: '["${{ matrix.package }}"]'
+
+      - name: Generate Changelog
+        id: generate-changelog
+        uses: ./.github/actions/generate-changelog
+        with:
+          from_tag: ${{ steps.get-version.outputs.previous_version }}
+          to_tag: ${{ steps.get-version.outputs.new_version }}
+
+      - name: Build App
+        id: build-app
+        uses: ./.github/actions/build-app
+        with:
+          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
+          build-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.build }}
+
+      - name: Run Tests
+        id: run-tests
+        uses: ./.github/actions/run-tests
+        with:
+          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
+          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.test }}
+
+      - name: Create Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get-version.outputs.new_version }}
+          release_name: Release ${{ steps.get-version.outputs.new_version }}
+          body: ${{ steps.generate-changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+
+      - name: Generate Release Notes
+        id: generate-release-notes
+        uses: ./.github/actions/ai-generate-content
+        with:
+          content_type: "release_notes"
+          context_data: |
+            {
+              "version": "${{ steps.get-version.outputs.new_version }}",
+              "changelog": "${{ steps.generate-changelog.outputs.changelog }}",
+              "affected_apps": ["${{ matrix.package }}"]
+            }
+          template_path: .github/templates/release_notes_changelog.md
+
+      - name: Deploy App
+        id: deploy-app
+        uses: ./.github/actions/deploy-app
+        with:
+          package-name: ${{ matrix.package }}
+          artifacts-path: ${{ steps.build-app.outputs.artifacts-path }}
+          deployment-type: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.deployment.type }}
+          deployment-config: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.deployment) }}
+
+      - name: Update Project Documentation
+        id: update-documentation
+        uses: ./.github/actions/update-documentation
+        with:
+          affected_apps: '["${{ matrix.package }}"]'
+          new_version: ${{ steps.get-version.outputs.new_version }}
+
+      - name: Create Release PR
+        id: create-release-pr
+        uses: ./.github/actions/create-or-update-pr
+        with:
+          branch_name: "release-${{ steps.get-version.outputs.new_version }}"
+          pr_title: "Release ${{ steps.get-version.outputs.new_version }}"
+          pr_body: ${{ steps.generate-release-notes.outputs.generated_content }}
+          base_branch: "main"
+
+      - name: Send Notifications
+        id: send-notifications
+        uses: ./.github/actions/send-notification
+        with:
+          notification-type: "release"
+          notification-data: |
+            {
+              "version": "${{ steps.get-version.outputs.new_version }}",
+              "affected_apps": ["${{ matrix.package }}"],
+              "release_url": "${{ steps.create-release.outputs.html_url }}"
+            }
+
+      - name: Update Release Branch
+        id: update-release-branch
+        if: success()
+        uses: ./.github/actions/update-release-branch
+        with:
+          release_branch: ${{ github.ref }}
+          main_branch: "main"

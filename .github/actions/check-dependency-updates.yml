@@ -1,0 +1,93 @@
+name: 'Check Dependency Updates'
+description: 'Checks for available updates to project dependencies'
+
+inputs:
+  package-manager-type:
+    description: 'Type of the package manager (e.g., npm, yarn, pip)'
+    required: true
+  current-dependencies:
+    description: 'List of current project dependencies'
+    required: true
+
+outputs:
+  available-updates:
+    description: 'List of available updates'
+  update-report:
+    description: 'Report of updates categorized by major, minor, and patch changes'
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Debug - Input values
+      run: |
+        echo "Package manager type: ${{ inputs.package-manager-type }}"
+        echo "Current dependencies: ${{ inputs.current-dependencies }}"
+
+    - name: Install dependencies
+      run: |
+        if [ "${{ inputs.package-manager-type }}" == "npm" ]; then
+          npm install
+        elif [ "${{ inputs.package-manager-type }}" == "yarn" ]; then
+          yarn install
+        elif [ "${{ inputs.package-manager-type }}" == "pip" ]; then
+          pip install -r requirements.txt
+        else
+          echo "Unsupported package manager"
+          exit 1
+        fi
+
+    - name: Check for updates
+      id: check-updates
+      run: |
+        if [ "${{ inputs.package-manager-type }}" == "npm" ]; then
+          npm outdated --json > updates.json
+        elif [ "${{ inputs.package-manager-type }}" == "yarn" ]; then
+          yarn outdated --json > updates.json
+        elif [ "${{ inputs.package-manager-type }}" == "pip" ]; then
+          pip list --outdated --format=json > updates.json
+        fi
+
+    - name: Debug - Update check results
+      run: cat updates.json
+
+    - name: Parse updates
+      id: parse-updates
+      run: |
+        python3 << EOF
+        import json
+        import os
+
+        with open('updates.json', 'r') as f:
+            updates = json.load(f)
+
+        available_updates = []
+        update_report = {"major": [], "minor": [], "patch": []}
+
+        for package, info in updates.items():
+            current = info['current']
+            latest = info['latest']
+            update_type = 'major' if latest.split('.')[0] > current.split('.')[0] else 'minor' if latest.split('.')[1] > current.split('.')[1] else 'patch'
+            available_updates.append(f"{package}: {current} -> {latest}")
+            update_report[update_type].append(f"{package}: {current} -> {latest}")
+
+        print(f"::set-output name=available-updates::{json.dumps(available_updates)}")
+        print(f"::set-output name=update-report::{json.dumps(update_report)}")
+        EOF
+
+    - name: Debug - Parsed updates
+      run: |
+        echo "Available updates: ${{ steps.parse-updates.outputs.available-updates }}"
+        echo "Update report: ${{ steps.parse-updates.outputs.update-report }}"

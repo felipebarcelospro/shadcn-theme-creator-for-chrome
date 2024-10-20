@@ -1,0 +1,108 @@
+name: Issue Management Workflow
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+  schedule:
+    - cron: '0 1 * * *'  # Daily at 01:00 UTC
+
+jobs:
+  issue-management:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        id: setup-context
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto Label
+        uses: ./.github/actions/auto-label
+        with:
+          item-type: 'issue'
+          item-number: ${{ github.event.issue.number }}
+          labeling-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.auto_labeling.rules }}
+
+      - name: Auto Assign
+        uses: ./.github/actions/auto-assign
+        with:
+          item-type: 'issue'
+          item-number: ${{ github.event.issue.number }}
+          assignment-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.auto_assignment.rules }}
+
+      - name: Generate Auto Response
+        uses: ./.github/actions/ai-generate-content
+        id: generate-auto-response
+        with:
+          content-type: "issue_response"
+          context-data: |
+            {
+              "issue-title": "${{ github.event.issue.title }}",
+              "issue-body": "${{ github.event.issue.body }}"
+            }
+          template-path: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.response_templates.auto_response }}
+
+      - name: Update Issue
+        uses: ./.github/actions/update-issue
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          comment-body: ${{ steps.generate-auto-response.outputs.generated-content }}
+          update-body: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.update_issue_body }}
+          body-update: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.issue_body_update_content }}
+
+      - name: Create Related Project Card
+        uses: ./.github/actions/create-project-card
+        with:
+          item-type: 'issue'
+          item-number: ${{ github.event.issue.number }}
+          project-board-id: ${{ fromJson(steps.setup-context.outputs.config-data).project_management.default_project_board }}
+          column-id: ${{ fromJson(steps.setup-context.outputs.config-data).project_management.default_column }}
+
+      - name: Link Related Issues/PRs
+        uses: ./.github/actions/link-related-items
+        with:
+          item-type: 'issue'
+          item-number: ${{ github.event.issue.number }}
+
+      - name: Prioritize Issue
+        uses: ./.github/actions/prioritize-issue
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          prioritization-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.prioritization.rules }}
+
+      - name: Set Milestone
+        uses: ./.github/actions/set-milestone
+        with:
+          item-type: 'issue'
+          item-number: ${{ github.event.issue.number }}
+          milestone-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.milestone_assignment.rules }}
+
+      - name: Send Notifications
+        uses: ./.github/actions/send-notification
+        with:
+          notification-type: "issue_update"
+          notification-data: |
+            {
+              "issue-url": "${{ github.event.issue.html_url }}",
+              "issue-title": "${{ github.event.issue.title }}",
+              "action": "${{ github.event.action }}"
+            }
+
+      - name: Track SLA
+        uses: ./.github/actions/track-sla
+        with:
+          item-type: 'issue'
+          item-number: ${{ github.event.issue.number }}
+          sla-timeframe: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.sla.timeframe }}
+          warning-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.sla.warning_threshold }}
+
+      - name: Close Stale Issues
+        if: github.event_name == 'schedule'
+        uses: ./.github/actions/close-stale-issues
+        with:
+          stale-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.stale_issues.threshold }}
+          exempt-labels: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.stale_issues.exempt_labels }}

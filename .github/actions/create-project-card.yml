@@ -1,0 +1,100 @@
+name: 'Create Project Card'
+description: 'Automatically creates project cards for new issues and PRs'
+
+inputs:
+  item-type:
+    description: 'Type of item to create a card for (issue/pr)'
+    required: true
+  item-number:
+    description: 'Number of the issue or PR'
+    required: true
+  project-board-id:
+    description: 'ID of the project board to add the card to'
+    required: true
+  column-id:
+    description: 'ID of the column to add the card to'
+    required: false
+
+outputs:
+  card-url:
+    description: 'URL of the created project card'
+  creation-status:
+    description: 'Status of the card creation operation'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash
+    run: |
+      echo "Debug: Input values"
+      echo "item-type: ${{ inputs.item-type }}"
+      echo "item-number: ${{ inputs.item-number }}"
+      echo "project-board-id: ${{ inputs.project-board-id }}"
+      echo "column-id: ${{ inputs.column-id }}"
+
+  - name: Fetch item details
+    id: fetch-item
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const itemType = '${{ inputs.item-type }}';
+        const itemNumber = '${{ inputs.item-number }}';
+        let item;
+        if (itemType === 'issue') {
+          const { data: issue } = await github.rest.issues.get({
+            owner,
+            repo,
+            issue_number: itemNumber
+          });
+          item = issue;
+        } else if (itemType === 'pr') {
+          const { data: pr } = await github.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: itemNumber
+          });
+          item = pr;
+        }
+        return item;
+
+  - name: Create project card
+    id: create-card
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const item = ${{ steps.fetch-item.outputs.result }};
+        const projectBoardId = '${{ inputs.project-board-id }}';
+        const columnId = '${{ inputs.column-id }}';
+
+        try {
+          const { data: card } = await github.rest.projects.createCard({
+            column_id: columnId,
+            content_id: item.id,
+            content_type: '${{ inputs.item-type }}'
+          });
+
+          console.log(`Project card created successfully: ${card.url}`);
+          return { url: card.url, status: 'success' };
+        } catch (error) {
+          console.error(`Error creating project card: ${error.message}`);
+          return { url: null, status: 'failed' };
+        }
+
+  - name: Set outputs
+    id: set-outputs
+    run: |
+      echo "card-url=${{ fromJson(steps.create-card.outputs.result).url }}" >> $GITHUB_OUTPUT
+      echo "creation-status=${{ fromJson(steps.create-card.outputs.result).status }}" >> $GITHUB_OUTPUT
+    shell: bash
+
+  - name: Error handling
+    if: failure()
+    run: |
+      echo "An error occurred during the project card creation process"
+      echo "card-url=" >> $GITHUB_OUTPUT
+      echo "creation-status=failed" >> $GITHUB_OUTPUT
+    shell: bash

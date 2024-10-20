@@ -1,0 +1,79 @@
+name: 'Send Notification'
+description: 'Sends a notification to specified channels based on configuration'
+
+inputs:
+  notification-type:
+    description: 'Type of notification (e.g., release, setup_completion, ci_cd_status)'
+    required: true
+  notification-data:
+    description: 'JSON string containing notification details'
+    required: true
+  config-path:
+    description: 'Path to the configuration file'
+    required: false
+    default: '.github/config.yml'
+
+outputs:
+  notification-sent:
+    description: 'Boolean indicating whether the notification was sent successfully'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Checkout code
+    uses: actions/checkout@v3
+
+  - name: Load configuration
+    id: load-config
+    uses: ./.github/actions/setup-context-and-prerequisites
+    with:
+      config-path: ${{ inputs.config-path }}
+
+  - name: Generate notification content
+    id: generate-content
+    uses: ./.github/actions/ai-generate-content
+    with:
+      content-type: "notification"
+      context-data: ${{ inputs.notification-data }}
+      template-path: ${{ fromJson(steps.load-config.outputs.config).notifications.templates[inputs.notification-type] }}
+      tone: ${{ fromJson(steps.load-config.outputs.config).notifications.tone }}
+      max-length: ${{ fromJson(steps.load-config.outputs.config).notifications.max_length }}
+
+  - name: Send Slack notification
+    if: ${{ contains(fromJson(steps.load-config.outputs.config).notifications.channels, 'slack') }}
+    uses: ./.github/providers/notifications/slack/send-notification
+    with:
+      webhook-url: ${{ fromJson(steps.load-config.outputs.config).notifications.slack.webhook_url }}
+      message: ${{ steps.generate-content.outputs.generated-content }}
+      username: ${{ fromJson(steps.load-config.outputs.config).notifications.slack.username }}
+      icon-emoji: ${{ fromJson(steps.load-config.outputs.config).notifications.slack.icon_emoji }}
+
+  - name: Send Discord notification
+    if: ${{ contains(fromJson(steps.load-config.outputs.config).notifications.channels, 'discord') }}
+    uses: ./.github/providers/notifications/discord/send-notification
+    with:
+      webhook-url: ${{ fromJson(steps.load-config.outputs.config).notifications.discord.webhook_url }}
+      message: ${{ steps.generate-content.outputs.generated-content }}
+      username: ${{ fromJson(steps.load-config.outputs.config).notifications.discord.username }}
+      avatar-url: ${{ fromJson(steps.load-config.outputs.config).notifications.discord.avatar_url }}
+
+  - name: Send Telegram notification
+    if: ${{ contains(fromJson(steps.load-config.outputs.config).notifications.channels, 'telegram') }}
+    uses: ./.github/providers/notifications/telegram/send-notification
+    with:
+      bot-token: ${{ fromJson(steps.load-config.outputs.config).notifications.telegram.bot_token }}
+      chat-id: ${{ fromJson(steps.load-config.outputs.config).notifications.telegram.chat_id }}
+      message: ${{ steps.generate-content.outputs.generated-content }}
+
+  - name: Set output
+    id: set-output
+    shell: bash
+    run: |
+      echo "notification-sent=true" >> $GITHUB_OUTPUT
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Failed to send one or more notifications."
+      echo "notification-sent=false" >> $GITHUB_OUTPUT

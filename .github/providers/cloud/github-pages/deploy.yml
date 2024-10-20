@@ -1,0 +1,87 @@
+name: 'Deploy to GitHub Pages'
+description: 'Deploys a static website to GitHub Pages'
+
+inputs:
+  artifacts-path:
+    description: 'Path to build artifacts'
+    required: true
+  github-token:
+    description: 'GitHub token for authentication'
+    required: true
+  branch:
+    description: 'Branch to deploy to (usually gh-pages)'
+    required: false
+    default: 'gh-pages'
+  commit-message:
+    description: 'Custom commit message for the deployment'
+    required: false
+    default: 'Deploy to GitHub Pages'
+
+outputs:
+  page_url:
+    description: 'URL of the deployed GitHub Pages site'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug - Environment Info
+    shell: bash
+    run: |
+      echo "Debug: Current working directory: $(pwd)"
+      echo "Debug: GitHub workspace: $GITHUB_WORKSPACE"
+      echo "Debug: Node version: $(node -v)"
+      echo "Debug: NPM version: $(npm -v)"
+
+  - name: Install dependencies
+    uses: ./.github/actions/install-dependencies
+    with:
+      package-manager: 'npm'
+      cache-key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+  - name: Debug - List Artifacts
+    shell: bash
+    run: |
+      echo "Debug: Listing contents of artifacts directory:"
+      ls -R ${{ inputs.artifacts-path }}
+
+  - name: Deploy to GitHub Pages
+    id: deployment
+    uses: actions/deploy-pages@v4
+    with:
+      token: ${{ inputs.github-token }}
+      artifact_name: ${{ inputs.artifacts-path }}
+      publish_branch: ${{ inputs.branch }}
+      commit_message: ${{ inputs.commit-message }}
+
+  - name: Debug - Deployment Output
+    shell: bash
+    run: |
+      echo "Debug: Deployment step outputs:"
+      echo "page_url: ${{ steps.deployment.outputs.page_url }}"
+
+  - name: Set outputs
+    id: set-outputs
+    shell: bash
+    run: |
+      echo "page_url=${{ steps.deployment.outputs.page_url }}" >> $GITHUB_OUTPUT
+      echo "Debug: Set page_url output to: ${{ steps.deployment.outputs.page_url }}"
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Deployment to GitHub Pages failed. Check logs for details."
+      echo "page_url=" >> $GITHUB_OUTPUT
+
+      # Print error logs
+      echo "Error logs:"
+      if [ -f "$GITHUB_WORKSPACE/gh-pages-deploy.log" ]; then
+        echo "Debug: Contents of gh-pages-deploy.log:"
+        cat $GITHUB_WORKSPACE/gh-pages-deploy.log
+      else
+        echo "Debug: gh-pages-deploy.log not found. Listing workspace contents:"
+        ls -R $GITHUB_WORKSPACE
+      fi
+
+      echo "Debug: GitHub context:"
+      echo "${{ toJson(github) }}"

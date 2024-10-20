@@ -1,0 +1,10 @@
+automated_testing:
+  package_manager: npm # or yarn, pnpm, etc.
+  unit_test_command: npm run test:unit
+  integration_test_command: npm run test:integration
+  e2e_test_command: npm run test:e2e
+  test_report_format: json
+  notification:
+    on_failure:
+      type: slack
+      channel: ci-alerts

@@ -1,0 +1,112 @@
+name: 'Auto Label'
+description: 'Automatically applies relevant labels to issues and PRs based on their content'
+
+inputs:
+  item-type:
+    description: 'Type of item to label (issue/pr)'
+    required: true
+  item-number:
+    description: 'Number of the issue or PR'
+    required: true
+
+outputs:
+  applied-labels:
+    description: 'List of labels applied to the item'
+  labeling-summary:
+    description: 'Summary of the labeling operation'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash
+    run: |
+      echo "Debug: Input values"
+      echo "item-type: ${{ inputs.item-type }}"
+      echo "item-number: ${{ inputs.item-number }}"
+
+  - name: Parse labeling rules
+    id: parse-rules
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const config = {
+          auto_labeling: {
+            enabled: true,
+            rules: [
+              { pattern: '\\bbug\\b', label: 'bug' },
+              { pattern: '\\bfeature\\b', label: 'enhancement' },
+              { pattern: '\\bdocumentation\\b', label: 'documentation' },
+              { pattern: '\\btest\\b', label: 'test' },
+              { pattern: '\\bperformance\\b', label: 'performance' }
+            ]
+          }
+        };
+        return config.auto_labeling.rules;
+
+  - name: Fetch item content
+    id: fetch-content
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const itemType = '${{ inputs.item-type }}';
+        const itemNumber = '${{ inputs.item-number }}';
+        let content;
+        if (itemType === 'issue') {
+          const { data: issue } = await github.rest.issues.get({
+            owner,
+            repo,
+            issue_number: itemNumber
+          });
+          content = issue.title + '\n' + issue.body;
+        } else if (itemType === 'pr') {
+          const { data: pr } = await github.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: itemNumber
+          });
+          content = pr.title + '\n' + pr.body;
+        }
+        return content;
+
+  - name: Apply labels
+    id: apply-labels
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const rules = ${{ steps.parse-rules.outputs.result }};
+        const content = ${{ steps.fetch-content.outputs.result }};
+        const labelsToApply = rules.filter(rule => new RegExp(rule.pattern, 'i').test(content)).map(rule => rule.label);
+
+        const { owner, repo } = context.repo;
+        const itemType = '${{ inputs.item-type }}';
+        const itemNumber = '${{ inputs.item-number }}';
+
+        await github.rest.issues.addLabels({
+          owner,
+          repo,
+          issue_number: itemNumber,
+          labels: labelsToApply
+        });
+
+        return labelsToApply;
+
+  - name: Set outputs
+    id: set-outputs
+    run: |
+      echo "applied-labels=${{ steps.apply-labels.outputs.result }}" >> $GITHUB_OUTPUT
+      echo "labeling-summary=Applied labels: ${{ steps.apply-labels.outputs.result }}" >> $GITHUB_OUTPUT
+    shell: bash
+
+  - name: Error handling
+    if: failure()
+    run: |
+      echo "An error occurred during the auto-labeling process"
+      echo "applied-labels=[]" >> $GITHUB_OUTPUT
+      echo "labeling-summary=Auto-labeling failed due to an error" >> $GITHUB_OUTPUT
+    shell: bash
+

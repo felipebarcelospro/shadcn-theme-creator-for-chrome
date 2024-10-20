@@ -1,0 +1,105 @@
+name: 'Deploy App'
+description: 'Deploys the application based on the package configuration'
+
+inputs:
+  package-name:
+    description: 'Name of the package to deploy'
+    required: true
+  artifacts-path:
+    description: 'Path to build artifacts'
+    required: true
+  deployment-type:
+    description: 'Type of deployment (e.g., vercel, railway, npm)'
+    required: true
+  deployment-config:
+    description: 'JSON string containing deployment configuration'
+    required: true
+
+outputs:
+  deployment-status:
+    description: 'Overall deployment status (success/failure)'
+  deployed-url:
+    description: 'URL of the deployed application'
+  deployment-logs:
+    description: 'Path to deployment logs'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Parse deployment configuration
+    id: parse-config
+    uses: actions/github-script@v6
+    with:
+      script: |
+        const config = JSON.parse('${{ inputs.deployment-config }}');
+        return config;
+
+  - name: Deploy to Vercel
+    if: ${{ inputs.deployment-type == 'vercel' }}
+    uses: ./.github/providers/vercel/deploy
+    with:
+      artifacts-path: ${{ inputs.artifacts-path }}
+      vercel-token: ${{ secrets.VERCEL_TOKEN }}
+      vercel-org-id: ${{ fromJson(steps.parse-config.outputs.result).team_id }}
+      vercel-project-id: ${{ fromJson(steps.parse-config.outputs.result).project_id }}
+
+  - name: Deploy to Railway
+    if: ${{ inputs.deployment-type == 'railway' }}
+    uses: ./.github/providers/railway/deploy
+    with:
+      artifacts-path: ${{ inputs.artifacts-path }}
+      railway-token: ${{ secrets.RAILWAY_TOKEN }}
+      project-id: ${{ fromJson(steps.parse-config.outputs.result).project_id }}
+
+  - name: Publish to npm
+    if: ${{ inputs.deployment-type == 'npm' }}
+    uses: ./.github/providers/npm/publish
+    with:
+      artifacts-path: ${{ inputs.artifacts-path }}
+      npm-token: ${{ secrets.NPM_TOKEN }}
+      access: ${{ fromJson(steps.parse-config.outputs.result).access }}
+
+  - name: Deploy to GitHub Pages
+    if: ${{ inputs.deployment-type == 'github-pages' }}
+    uses: ./.github/providers/github-pages/deploy
+    with:
+      artifacts-path: ${{ inputs.artifacts-path }}
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      branch: ${{ fromJson(steps.parse-config.outputs.result).branch }}
+
+  - name: Deploy to Docker
+    if: ${{ inputs.deployment-type == 'docker' }}
+    uses: ./.github/providers/docker/deploy
+    with:
+      artifacts-path: ${{ inputs.artifacts-path }}
+      docker-username: ${{ secrets.DOCKER_USERNAME }}
+      docker-password: ${{ secrets.DOCKER_PASSWORD }}
+      registry: ${{ fromJson(steps.parse-config.outputs.result).registry }}
+      image-name: ${{ fromJson(steps.parse-config.outputs.result).image_name }}
+
+  - name: Deploy to Easypanel
+    if: ${{ inputs.deployment-type == 'easypanel' }}
+    uses: ./.github/providers/easypanel/deploy
+    with:
+      artifacts-path: ${{ inputs.artifacts-path }}
+      easypanel-url: ${{ fromJson(steps.parse-config.outputs.result).server_url }}
+      api-key: ${{ secrets.EASYPANEL_API_KEY }}
+      project-id: ${{ fromJson(steps.parse-config.outputs.result).project_id }}
+
+  - name: Deploy to Chrome Web Store
+    if: ${{ inputs.deployment-type == 'chrome-web-store' }}
+    uses: ./.github/providers/chrome-web-store/deploy
+    with:
+      artifacts-path: ${{ inputs.artifacts-path }}
+      extension-id: ${{ fromJson(steps.parse-config.outputs.result).extension_id }}
+      client-id: ${{ fromJson(steps.parse-config.outputs.result).client_id }}
+      client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+      refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+
+  - name: Set outputs
+    id: set-outputs
+    run: |
+      echo "deployment-status=${{ steps.deploy.outputs.deployment-status }}" >> $GITHUB_OUTPUT
+      echo "deployed-url=${{ steps.deploy.outputs.deployed-url }}" >> $GITHUB_OUTPUT
+      echo "deployment-logs=${{ steps.deploy.outputs.deployment-logs }}" >> $GITHUB_OUTPUT
+    shell: bash

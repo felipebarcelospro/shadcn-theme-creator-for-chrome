@@ -1,0 +1,135 @@
+name: 'Cleanup Stale Branches'
+description: 'Automatically identifies and removes stale branches to keep the repository clean and manageable'
+
+inputs:
+  stale-threshold:
+    description: 'Number of days of inactivity to consider a branch stale'
+    required: false
+    default: '30'
+  exclude-branches:
+    description: 'Comma-separated list of branches to exclude from cleanup'
+    required: false
+  dry-run:
+    description: 'Perform a dry run without actually deleting branches'
+    required: false
+    default: 'false'
+
+outputs:
+  cleaned-branches:
+    description: 'List of branches that were deleted'
+  cleanup-summary:
+    description: 'Summary of the cleanup operation'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash
+    run: |
+      echo "Debug: Input values"
+      echo "stale-threshold: ${{ inputs.stale-threshold }}"
+      echo "exclude-branches: ${{ inputs.exclude-branches }}"
+      echo "dry-run: ${{ inputs.dry-run }}"
+
+  - name: Fetch all remote branches
+    shell: bash
+    run: |
+      git fetch --all
+
+  - name: Identify stale branches
+    id: identify-stale
+    shell: bash
+    run: |
+      threshold_date=$(date -d "${{ inputs.stale-threshold }} days ago" +%s)
+      exclude_branches="${{ inputs.exclude-branches }}"
+      IFS=',' read -ra EXCLUDE_ARRAY <<< "$exclude_branches"
+
+      stale_branches=()
+      for branch in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin); do
+        # Skip excluded branches
+        if [[ " ${EXCLUDE_ARRAY[@]} " =~ " ${branch#origin/} " ]]; then
+          continue
+        fi
+
+        # Check last commit date
+        last_commit_date=$(git log -1 --format=%at "$branch")
+        if [ "$last_commit_date" -lt "$threshold_date" ]; then
+          stale_branches+=("$branch")
+        fi
+      done
+
+      echo "stale-branches=${stale_branches[*]}" >> $GITHUB_OUTPUT
+
+  - name: Check for open PRs
+    id: check-prs
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const staleBranches = '${{ steps.identify-stale.outputs.stale-branches }}'.split(' ');
+        const branchesToDelete = [];
+
+        for (const branch of staleBranches) {
+          const { data: prs } = await github.rest.pulls.list({
+            owner,
+            repo,
+            head: `${owner}:${branch.replace('origin/', '')}`,
+            state: 'open'
+          });
+
+          if (prs.length === 0) {
+            branchesToDelete.push(branch);
+          }
+        }
+
+        return branchesToDelete.join(' ');
+
+  - name: Delete stale branches
+    id: delete-branches
+    if: inputs.dry-run != 'true'
+    shell: bash
+    run: |
+      branches_to_delete="${{ steps.check-prs.outputs.result }}"
+      deleted_branches=()
+
+      for branch in $branches_to_delete; do
+        if git push origin --delete "${branch#origin/}"; then
+          deleted_branches+=("$branch")
+        else
+          echo "Failed to delete branch: $branch"
+        fi
+      done
+
+      echo "cleaned-branches=${deleted_branches[*]}" >> $GITHUB_OUTPUT
+
+  - name: Generate cleanup report
+    shell: bash
+    run: |
+      echo "Cleanup Report" > cleanup_report.txt
+      echo "Stale Threshold: ${{ inputs.stale-threshold }} days" >> cleanup_report.txt
+      echo "Excluded Branches: ${{ inputs.exclude-branches }}" >> cleanup_report.txt
+      echo "Dry Run: ${{ inputs.dry-run }}" >> cleanup_report.txt
+      echo "Identified Stale Branches: ${{ steps.identify-stale.outputs.stale-branches }}" >> cleanup_report.txt
+      echo "Branches Eligible for Deletion: ${{ steps.check-prs.outputs.result }}" >> cleanup_report.txt
+      if [[ "${{ inputs.dry-run }}" != "true" ]]; then
+        echo "Deleted Branches: ${{ steps.delete-branches.outputs.cleaned-branches }}" >> cleanup_report.txt
+      fi
+      cat cleanup_report.txt
+
+  - name: Set outputs
+    shell: bash
+    run: |
+      if [[ "${{ inputs.dry-run }}" == "true" ]]; then
+        echo "cleaned-branches=${{ steps.check-prs.outputs.result }}" >> $GITHUB_OUTPUT
+      else
+        echo "cleaned-branches=${{ steps.delete-branches.outputs.cleaned-branches }}" >> $GITHUB_OUTPUT
+      fi
+      echo "cleanup-summary=$(cat cleanup_report.txt)" >> $GITHUB_OUTPUT
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "An error occurred during the stale branch cleanup process"
+      echo "cleanup-summary=Cleanup failed due to an error" >> $GITHUB_OUTPUT

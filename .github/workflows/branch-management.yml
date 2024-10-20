@@ -1,368 +1,112 @@
-name: Branch Management
+name: Branch Management Workflow
 
 on:
-  schedule:
-    - cron: '0 0 * * *'  # Run daily at midnight UTC
   push:
     branches:
-      - 'feature/**'
-      - 'release/**'
-      - 'hotfix/**'
-      - 'chore/**'
-      - 'fix/**'
-  workflow_dispatch:  # Allow manual triggering
-
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-  pull-requests: write
-  issues: write
+      - '**'
+  pull_request:
+    types: [opened, synchronize, closed]
+  schedule:
+    - cron: '0 0 * * *'  # Daily at 00:00 UTC
 
 jobs:
-  process_branch:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+  branch-management:
+    runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout code
+        id: checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Context
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          fetch-depth: 0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set branch name
-        id: set_branch
-        run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
-          else
-            echo "BRANCH_NAME=" >> $GITHUB_ENV
-          fi
-
-      - name: Fetch develop branch
-        run: git fetch origin develop
-
-      - name: Check for Relevant Changes
-        id: check_changes
-        run: |
-          if [[ -n "$BRANCH_NAME" ]]; then
-            # List of directories and files to check for changes
-            relevant_paths=(
-              "src/"
-              "apps/"
-              "packages/"
-              "package.json"
-              "yarn.lock"
-            )
-            
-            changes=""
-            for path in "${relevant_paths[@]}"; do
-              change=$(git diff --name-only origin/develop...$BRANCH_NAME -- $path)
-              if [[ -n "$change" ]]; then
-                changes+="$change"$'\n'
-              fi
-            done
-            
-            if [[ -z "$changes" ]]; then
-              echo "NO_RELEVANT_CHANGES=true" >> $GITHUB_ENV
-              echo "No relevant changes detected in $BRANCH_NAME"
-            else
-              echo "NO_RELEVANT_CHANGES=false" >> $GITHUB_ENV
-              echo "Found relevant changes in $BRANCH_NAME:"
-              echo "$changes"
-            fi
-            
-            # Check for potential conflicts
-            conflicts=$(git merge-tree $(git merge-base origin/develop $BRANCH_NAME) origin/develop $BRANCH_NAME | grep -A3 "^<<<<<<< ")
-            if [[ -n "$conflicts" ]]; then
-              echo "CONFLICTS_DETECTED=true" >> $GITHUB_ENV
-              echo "Warning: Potential conflicts detected between $BRANCH_NAME and develop"
-            else
-              echo "CONFLICTS_DETECTED=false" >> $GITHUB_ENV
-            fi
-          else
-            echo "NO_RELEVANT_CHANGES=false" >> $GITHUB_ENV
-            echo "CONFLICTS_DETECTED=false" >> $GITHUB_ENV
-          fi
-
-      - name: Validate GROQ API Key
-        run: |
-          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
-            echo "Error: GROQ_API_KEY is not set or empty"
-            exit 1
-          fi
-          echo "GROQ_API_KEY is set and not empty"
-
-      - name: Prepare PR Content Request
-        if: env.NO_RELEVANT_CHANGES == 'false'
-        run: |
-          echo 'PR_CONTENT_REQUEST<<EOF' >> $GITHUB_ENV
-          echo '{
-            "model": "llama-3.1-70b-versatile",
-            "messages": [
-              {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '"'"'title'"'"' and '"'"'body'"'"'."},
-              {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: ${{ env.BRANCH_NAME }}, Commits: ${{ toJson(github.event.commits) }}"}
-            ],
-            "temperature": 0.4,
-            "response_format": {"type": "json_object"}
-          }' >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
-
-      - name: Debug PR Content Request
-        if: env.NO_RELEVANT_CHANGES == 'false'
-        run: |
-          echo "PR Content Request Payload:"
-          echo "$PR_CONTENT_REQUEST"
-
-      - name: Generate PR Content
-        if: env.NO_RELEVANT_CHANGES == 'false'
-        id: pr_content
-        uses: fjogeleit/http-request-action@v1
+      - name: Validate Branch Name
+        id: validate-branch
+        uses: ./.github/actions/validate-branch-name
         with:
-          url: 'https://api.groq.com/openai/v1/chat/completions'
-          method: 'POST'
-          customHeaders: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
-          data: ${{ env.PR_CONTENT_REQUEST }}
+          branch-name: ${{ github.ref }}
+          branch-naming-rules: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.branch_prefixes }}
 
-      - name: Parse PR Content
-        if: env.NO_RELEVANT_CHANGES == 'false'
-        run: |
-          pr_data='${{ steps.pr_content.outputs.response }}'
-          pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
-          pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
+      - name: Create or Update Branch
+        id: create-update-branch
+        uses: ./.github/actions/create-or-update-branch
+        with:
+          branch-name: ${{ github.ref_name }}
+          base-branch: ${{ github.base_ref || fromJson(steps.setup-context.outputs.config-data).repository.version_control.main_branches[0] }}
+          commit-changes: ${{ toJson(github.event.commits) }}
 
-          if [ -z "$pr_title" ] || [ -z "$pr_body" ]; then
-            echo "Error: Generated PR content is null or empty. Retrying with a different prompt."
-            exit 1
-          fi
+      - name: Apply Branch Protection
+        id: apply-protection
+        uses: ./.github/actions/apply-branch-protection
+        with:
+          branch-name: ${{ github.ref }}
+          protection-rules: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.branch_protection }}
 
-          if [ "$CONFLICTS_DETECTED" == "true" ]; then
-            pr_body+=$'\n\n⚠️ **Warning:** Potential conflicts detected with the develop branch. Please review and resolve before merging.'
-          fi
+      - name: Wait for Manual PR Creation
+        id: wait-for-pr
+        uses: ./.github/actions/wait-for-pr
+        with:
+          branch-name: ${{ github.ref }}
+          wait-time: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.pr_creation_wait_time }}
 
-          echo "PR_TITLE=$(echo "$pr_title" | sed 's/"/\\"/g')" >> $GITHUB_ENV
-          echo "PR_BODY<<EOF" >> $GITHUB_ENV
-          echo "$pr_body" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-
-      - name: Validate PR Content
-        run: |
-          if [ -z "$PR_TITLE" ] || [ -z "$PR_BODY" ]; then
-            echo "Error: PR content is invalid. Please check API response."
-            exit 1
-          fi
-
-      - name: Create or Update Pull Request
-        if: env.NO_RELEVANT_CHANGES == 'false'
-        run: |
-          set -e
-          echo "Processing PR for branch: $BRANCH_NAME"
-          existing_pr=$(gh pr list --head "$BRANCH_NAME" --base develop --json number --jq '.[0].number')
-
-          if [ -n "$existing_pr" ]; then
-            echo "Updating existing PR #$existing_pr for $BRANCH_NAME"
-            gh pr edit $existing_pr --title "$PR_TITLE" --body "$PR_BODY"
-          else
-            echo "Creating new PR for $BRANCH_NAME"
-            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "$BRANCH_NAME" || {
-              echo "Failed to create PR. This might be due to no new commits or other issues."
-              exit 0
+      - name: Generate PR Description
+        id: generate-pr-description
+        uses: ./.github/actions/ai-generate-content
+        with:
+          content-type: "pr_description"
+          context-data: |
+            {
+              "branch-name": "${{ github.ref }}",
+              "commit-messages": ${{ toJson(github.event.commits) }}
             }
-          fi
+          template-path: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.pr_template }}
 
-      - name: Link Related Issues
-        if: env.NO_RELEVANT_CHANGES == 'false'
-        run: |
-          issues=$(gh issue list --search "$BRANCH_NAME" --json number,title)
-          if [ -n "$issues" ]; then
-            echo "Linking related issues to PR"
-            pr_number=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number')
-            updated_body="${PR_BODY}
-
-            Related Issues:
-            $(echo "$issues" | jq -r '.[] | "- #\(.number) \(.title)"')"
-            gh pr edit "$pr_number" --body "$updated_body"
-            echo "$issues" | jq -r '.[]' | while read -r issue; do
-              number=$(echo "$issue" | jq -r '.number')
-              gh issue comment "$number" --body "This issue is addressed in PR #$pr_number"
-            done
-          fi
-
-      - name: Debug Information
-        run: |
-          echo "Debugging Information:"
-          echo "Branch Name: $BRANCH_NAME"
-          echo "PR Title: $PR_TITLE"
-          echo "PR Body: $PR_BODY"
-          echo "Existing PR: $existing_pr"
-          echo "No Relevant Changes: $NO_RELEVANT_CHANGES"
-          echo "Conflicts Detected: $CONFLICTS_DETECTED"
-
-  check_open_branches:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Create or Update PR
+        id: create-or-update-pr
+        uses: ./.github/actions/create-or-update-pr
         with:
-          fetch-depth: 0
+          branch-name: ${{ github.ref }}
+          pr-title: ${{ github.event.pull_request.title || format('Update {0}', github.ref) }}
+          pr-body: ${{ steps.generate-pr-description.outputs.generated-content }}
+          base-branch: ${{ github.base_ref || fromJson(steps.setup-context.outputs.config-data).repository.version_control.main_branches[0] }}
 
-      - name: Validate GROQ API Key
-        run: |
-          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
-            echo "Error: GROQ_API_KEY is not set or empty"
-            exit 1
-          fi
-          echo "GROQ_API_KEY is set and not empty"
-
-      - name: Fetch All Branches
-        run: |
-          git fetch --all
-          echo "Fetched all branches"
-
-      - name: Get Branches Without PRs
-        id: get_branches
-        run: |
-          branches=$(git branch -r | grep -vE 'origin/(develop|main)' | grep -E 'origin/(feature|release|hotfix|chore|fix)/' | sed 's/origin\///')
-          echo "BRANCHES<<EOF" >> $GITHUB_OUTPUT
-          echo "$branches" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Process Branches
-        env:
-          BRANCHES: ${{ steps.get_branches.outputs.BRANCHES }}
-        run: |
-          echo "$BRANCHES" | while read branch; do
-            echo "Processing branch: $branch"
-            pr_exists=$(gh pr list --head "$branch" --base develop --json number --jq 'length')
-            if [ "$pr_exists" -eq 0 ]; then
-              echo "No PR exists for $branch. Checking for relevant changes."
-              git checkout $branch
-              creator=$(git log -1 --format='%an' origin/$branch)
-              
-              relevant_paths=(
-                "src/"
-                "apps/"
-                "packages/"
-                "package.json"
-                "yarn.lock"
-              )
-              
-              changes=""
-              for path in "${relevant_paths[@]}"; do
-                change=$(git diff --name-only origin/develop...$branch -- $path)
-                if [[ -n "$change" ]]; then
-                  changes+="$change"$'\n'
-                fi
-              done
-              
-              if [[ -n "$changes" ]]; then
-                echo "Relevant changes found in $branch. Creating new PR."
-                commits=$(git log --pretty=format:'%H' origin/develop..$branch | jq -R -s -c 'split("\n")[:-1]')
-                echo "BRANCH=$branch" >> $GITHUB_ENV
-                echo "CREATOR=$creator" >> $GITHUB_ENV
-                echo "COMMITS=$commits" >> $GITHUB_ENV
-                echo "CREATE_PR=true" >> $GITHUB_ENV
-              else
-                echo "No relevant changes found in $branch. Skipping PR creation."
-              fi
-            else
-              echo "PR exists for $branch. Checking for updates."
-              pr_number=$(gh pr list --head "$branch" --base develop --json number --jq '.[0].number')
-              branch_commits=$(git log origin/develop..$branch --oneline | wc -l)
-              pr_commits=$(gh pr view $pr_number --json commits --jq '.commits | length')
-              if [ "$branch_commits" -gt "$pr_commits" ]; then
-                echo "Branch $branch has new commits. Updating PR #$pr_number."
-                commits=$(git log --pretty=format:'%H' origin/develop..$branch | jq -R -s -c 'split("\n")[:-1]')
-                echo "BRANCH=$branch" >> $GITHUB_ENV
-                echo "PR_NUMBER=$pr_number" >> $GITHUB_ENV
-                echo "COMMITS=$commits" >> $GITHUB_ENV
-                echo "UPDATE_PR=true" >> $GITHUB_ENV
-              else
-                echo "No updates needed for $branch."
-              fi
-            fi
-            
-            # Check for potential conflicts
-            conflicts=$(git merge-tree $(git merge-base origin/develop $branch) origin/develop $branch | grep -A3 "^<<<<<<< ")
-            if [[ -n "$conflicts" ]]; then
-              echo "CONFLICTS_DETECTED=true" >> $GITHUB_ENV
-              echo "Warning: Potential conflicts detected between $branch and develop"
-            else
-              echo "CONFLICTS_DETECTED=false" >> $GITHUB_ENV
-            fi
-          done
-
-      - name: Prepare PR Content Request
-        if: env.CREATE_PR == 'true' || env.UPDATE_PR == 'true'
-        run: |
-          echo 'PR_CONTENT_REQUEST<<EOF' >> $GITHUB_ENV
-          echo '{
-            "model": "llama-3.1-70b-versatile",
-            "messages": [
-              {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys '"'"'title'"'"' and '"'"'body'"'"'."},
-              {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: ${{ env.BRANCH }}, Commits: ${{ env.COMMITS }}"}
-            ],
-            "temperature": 0.4,
-            "response_format": {"type": "json_object"}
-          }' >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
-
-      - name: Debug PR Content Request
-        if: env.CREATE_PR == 'true' || env.UPDATE_PR == 'true'
-        run: |
-          echo "PR Content Request Payload:"
-          echo "$PR_CONTENT_REQUEST"
-
-      - name: Generate PR Content
-        if: env.CREATE_PR == 'true' || env.UPDATE_PR == 'true'
-        id: pr_content
-        uses: fjogeleit/http-request-action@v1
+      - name: Merge Branch
+        id: merge-branch
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        uses: ./.github/actions/merge-branch
         with:
-          url: 'https://api.groq.com/openai/v1/chat/completions'
-          method: 'POST'
-          customHeaders: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
-          data: ${{ env.PR_CONTENT_REQUEST }}
+          source-branch: ${{ github.head_ref }}
+          target-branch: ${{ github.base_ref }}
+          merge-strategy: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.merge_strategy }}
 
-      - name: Parse PR Content
-        if: env.CREATE_PR == 'true' || env.UPDATE_PR == 'true'
-        run: |
-          pr_data='${{ steps.pr_content.outputs.response }}'
-          pr_title=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .title // empty')
-          pr_body=$(echo "$pr_data" | jq -r '.choices[0].message.content | fromjson | .body // empty')
-          
-          if [ "$CONFLICTS_DETECTED" == "true" ]; then
-            pr_body+=$'\n\n⚠️ **Warning:** Potential conflicts detected with the develop branch. Please review and resolve before merging.'
-          fi
-          
-          echo "PR_TITLE=$pr_title" >> $GITHUB_ENV
-          echo "PR_BODY<<EOF" >> $GITHUB_ENV
-          echo "$pr_body" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+      - name: Clean Up Branch
+        id: clean-up-branch
+        if: github.event_name == 'pull_request' && github.event.action == 'closed'
+        uses: ./.github/actions/clean-up-branch
+        with:
+          branch-name: ${{ github.head_ref }}
+          force-delete: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.auto_delete_merged_branches }}
 
-      - name: Create PR
-        if: env.CREATE_PR == 'true'
-        run: |
-          gh pr create --title "$PR_TITLE" --body "$PR_BODY" --base develop --head "$BRANCH" --author "$CREATOR"
+      - name: Send Notification
+        id: send-notification
+        uses: ./.github/actions/send-notification
+        with:
+          notification-type: "branch_management"
+          notification-data: |
+            {
+              "branch": "${{ github.ref }}",
+              "action": "${{ github.event_name == 'push' && 'pushed' || github.event.action }}",
+              "pr_url": "${{ steps.create-or-update-pr.outputs.pr-url }}"
+            }
 
-      - name: Update PR
-        if: env.UPDATE_PR == 'true'
-        run: |
-          gh pr edit $PR_NUMBER --title "$PR_TITLE" --body "$PR_BODY"
-
-      - name: Debug Information
-        run: |
-          echo "Debugging Information:"
-          echo "Branch: $BRANCH"
-          echo "PR Title: $PR_TITLE"
-          echo "PR Body: $PR_BODY"
-          echo "Create PR: $CREATE_PR"
-          echo "Update PR: $UPDATE_PR"
-          echo "PR Number: $PR_NUMBER"
-          echo "Conflicts Detected: $CONFLICTS_DETECTED"
+      - name: Cleanup Stale Branches
+        id: cleanup-stale-branches
+        if: github.event_name == 'schedule'
+        uses: ./.github/actions/cleanup-stale-branches
+        with:
+          stale-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.stale_branch_threshold }}
+          exclude-branches: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.protected_branches }}

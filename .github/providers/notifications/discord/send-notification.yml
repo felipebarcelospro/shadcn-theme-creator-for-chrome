@@ -1,0 +1,51 @@
+name: 'Send Discord Notification'
+description: 'Sends a notification to a Discord channel'
+
+inputs:
+  webhook-url:
+    description: 'Discord Webhook URL'
+    required: true
+  message:
+    description: 'Message to send'
+    required: true
+  username:
+    description: 'Username to display for the bot'
+    required: false
+    default: 'GitHub Actions'
+  avatar-url:
+    description: 'Avatar URL for the bot'
+    required: false
+    default: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Send Discord Message
+    shell: bash
+    env:
+      WEBHOOK_URL: ${{ inputs.webhook-url }}
+      MESSAGE: ${{ inputs.message }}
+      USERNAME: ${{ inputs.username }}
+      AVATAR_URL: ${{ inputs.avatar-url }}
+    run: |
+      echo "Sending Discord notification..."
+      curl -H "Content-Type: application/json" \
+           -d "{\"username\": \"$USERNAME\", \"avatar_url\": \"$AVATAR_URL\", \"content\": \"$MESSAGE\"}" \
+           $WEBHOOK_URL
+
+  - name: Check Notification Status
+    shell: bash
+    run: |
+      if [ $? -eq 0 ]; then
+        echo "Discord notification sent successfully."
+      else
+        echo "Failed to send Discord notification."
+        exit 1
+      fi
+
+  - name: Error Handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Error occurred while sending Discord notification."
+      echo "Please check your webhook URL and message content."

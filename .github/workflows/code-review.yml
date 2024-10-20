@@ -1,0 +1,95 @@
+name: Code Review Workflow
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.get-packages.outputs.packages }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Context
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        with:
+          config-path: '.github/config.yml'
+
+      - name: Get Packages
+        id: get-packages
+        run: |
+          packages=$(echo '${{ fromJson(steps.setup-context.outputs.config).packages.list }}' | jq -c .)
+          echo "packages=$packages" >> $GITHUB_OUTPUT
+
+  code-review:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: ${{ fromJson(needs.setup.outputs.packages) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Context
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        with:
+          config-path: '.github/config.yml'
+
+      - name: Assign Reviewers
+        uses: shufo/auto-assign-reviewer-by-files@v1.1.5
+        with:
+          config: ".github/assign-by-files.yml"
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Code Quality Checks
+        id: run-code-quality
+        uses: ./.github/actions/run-code-quality
+        with:
+          package-name: ${{ matrix.package }}
+          config-file: ${{ fromJson(steps.setup-context.outputs.config).pr_management.pr_analysis.tools[0] }}
+
+      - name: Post Code Quality Results
+        uses: ./.github/actions/post-pr-comment
+        with:
+          pr-number: ${{ github.event.pull_request.number }}
+          comment-content: ${{ steps.run-code-quality.outputs.quality-report }}
+
+      - name: Check Review Guidelines
+        uses: ./.github/actions/check-review-guidelines
+        with:
+          pr-description: ${{ github.event.pull_request.body }}
+          review-comments: ${{ github.event.review.body || '' }}
+          guideline-rules: ${{ fromJson(steps.setup-context.outputs.config).pr_management.code_review.review_guidelines }}
+
+      - name: Enforce Review Approval
+        id: enforce-review-approval
+        uses: ./.github/actions/enforce-review-approval
+        with:
+          pr-number: ${{ github.event.pull_request.number }}
+          approval-requirements: ${{ fromJson(steps.setup-context.outputs.config).pr_management.code_review.required_approvals }}
+
+      - name: Update PR Status
+        uses: ./.github/actions/update-pr-status
+        with:
+          pr-number: ${{ github.event.pull_request.number }}
+          review-status: ${{ steps.enforce-review-approval.outputs.approval-status }}
+          code-quality-results: ${{ steps.run-code-quality.outputs.quality-report }}
+
+      - name: Notify Reviewers
+        uses: ./.github/actions/send-notification
+        with:
+          notification-type: "review_reminder"
+          notification-data: |
+            {
+              "pr-url": "${{ github.event.pull_request.html_url }}",
+              "assigned-reviewers": ${{ toJson(github.event.pull_request.requested_reviewers) }}
+            }

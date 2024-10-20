@@ -1,0 +1,92 @@
+name: 'Create Discussion Post'
+description: 'Automatically creates discussion posts for important announcements or to gather feedback'
+
+inputs:
+  discussion-title:
+    description: 'Title of the discussion'
+    required: true
+  discussion-content:
+    description: 'Content of the discussion'
+    required: true
+  category:
+    description: 'Category for the discussion (e.g., Announcements)'
+    required: true
+
+outputs:
+  created-discussion-url:
+    description: 'URL of the created discussion'
+  creation-status:
+    description: 'Status of the discussion creation process'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash
+    run: |
+      echo "Debug: Input values"
+      echo "discussion-title: ${{ inputs.discussion-title }}"
+      echo "category: ${{ inputs.category }}"
+
+  - name: Validate inputs
+    id: validate-inputs
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { discussionTitle, discussionContent, category } = {
+          discussionTitle: '${{ inputs.discussion-title }}',
+          discussionContent: '${{ inputs.discussion-content }}',
+          category: '${{ inputs.category }}'
+        };
+
+        if (!discussionTitle || !discussionContent || !category) {
+          core.setFailed('All inputs (discussion-title, discussion-content, category) are required.');
+          return false;
+        }
+        return true;
+
+  - name: Create discussion
+    id: create-discussion
+    if: steps.validate-inputs.outputs.result == 'true'
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        try {
+          const { data: discussion } = await github.rest.discussions.create({
+            owner,
+            repo,
+            title: '${{ inputs.discussion-title }}',
+            body: '${{ inputs.discussion-content }}',
+            category_id: '${{ inputs.category }}'
+          });
+          console.log(`Discussion created successfully: ${discussion.html_url}`);
+          return { url: discussion.html_url, status: 'success' };
+        } catch (error) {
+          console.error(`Error creating discussion: ${error.message}`);
+          return { url: null, status: 'failed' };
+        }
+
+  - name: Set outputs
+    id: set-outputs
+    run: |
+      result=${{ steps.create-discussion.outputs.result }}
+      echo "created-discussion-url=$(echo $result | jq -r .url)" >> $GITHUB_OUTPUT
+      echo "creation-status=$(echo $result | jq -r .status)" >> $GITHUB_OUTPUT
+    shell: bash
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "An error occurred during discussion creation"
+      echo "created-discussion-url=" >> $GITHUB_OUTPUT
+      echo "creation-status=failed" >> $GITHUB_OUTPUT
+
+  - name: Final debug output
+    shell: bash
+    run: |
+      echo "Debug: Created Discussion URL: ${{ steps.set-outputs.outputs.created-discussion-url }}"
+      echo "Debug: Creation Status: ${{ steps.set-outputs.outputs.creation-status }}"

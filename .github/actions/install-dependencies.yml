@@ -1,0 +1,73 @@
+name: 'Install Dependencies'
+description: 'Installs project dependencies with efficient caching'
+
+inputs:
+  package-manager:
+    description: 'Package manager type (npm, yarn, pnpm)'
+    required: true
+  cache-key:
+    description: 'Cache key based on lock file'
+    required: true
+  working-directory:
+    description: 'Working directory for installation'
+    required: false
+    default: '.'
+
+outputs:
+  installation-status:
+    description: 'Status of dependency installation (success/failure)'
+  installed-packages:
+    description: 'List of installed packages (JSON array)'
+  cache-hit:
+    description: 'Whether there was a cache hit'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '20'
+
+  - name: Cache dependencies
+    uses: actions/cache@v3
+    with:
+      path: |
+        **/node_modules
+      key: ${{ inputs.cache-key }}
+
+  - name: Install dependencies
+    shell: bash
+    working-directory: ${{ inputs.working-directory }}
+    run: |
+      if [ "${{ inputs.package-manager }}" = "npm" ]; then
+        npm ci
+      elif [ "${{ inputs.package-manager }}" = "yarn" ]; then
+        yarn install --frozen-lockfile
+      elif [ "${{ inputs.package-manager }}" = "pnpm" ]; then
+        pnpm install --frozen-lockfile
+      else
+        echo "Unsupported package manager: ${{ inputs.package-manager }}"
+        exit 1
+      fi
+
+  - name: Get installed packages
+    id: get-packages
+    shell: bash
+    working-directory: ${{ inputs.working-directory }}
+    run: |
+      if [ "${{ inputs.package-manager }}" = "npm" ]; then
+        echo "installed-packages=$(npm list --json | jq -c '.dependencies | keys')" >> $GITHUB_OUTPUT
+      elif [ "${{ inputs.package-manager }}" = "yarn" ]; then
+        echo "installed-packages=$(yarn list --json | jq -c '.data.trees | map(.name)')" >> $GITHUB_OUTPUT
+      elif [ "${{ inputs.package-manager }}" = "pnpm" ]; then
+        echo "installed-packages=$(pnpm list --json | jq -c '.[].dependencies | keys')" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Set outputs
+    id: set-outputs
+    shell: bash
+    run: |
+      echo "installation-status=success" >> $GITHUB_OUTPUT
+      echo "installed-packages=${{ steps.get-packages.outputs.installed-packages }}" >> $GITHUB_OUTPUT
+      echo "cache-hit=${{ steps.cache.outputs.cache-hit }}" >> $GITHUB_OUTPUT

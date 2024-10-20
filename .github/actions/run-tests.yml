@@ -1,0 +1,142 @@
+name: 'Run Tests'
+description: 'Runs comprehensive tests on the codebase to ensure functionality and catch regressions'
+
+inputs:
+  working-directory:
+    description: 'Directory to run tests in (for monorepos)'
+    required: false
+    default: '.'
+  test-command:
+    description: 'Test command to run'
+    required: true
+  coverage-command:
+    description: 'Coverage command to run'
+    required: false
+  coverage-threshold:
+    description: 'Minimum coverage percentage required'
+    required: false
+    default: '80'
+
+outputs:
+  test-status:
+    description: 'Overall test status (pass/fail)'
+  coverage-report:
+    description: 'Test coverage report (JSON object)'
+  performance-metrics:
+    description: 'Performance metrics from tests'
+  junit-report:
+    description: 'Path to JUnit XML report'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Setup Node.js
+    uses: actions/setup-node@v3
+    with:
+      node-version: '20'
+
+  - name: Install dependencies
+    uses: ./.github/actions/install-dependencies
+    with:
+      working-directory: ${{ inputs.working-directory }}
+
+  - name: Detect test framework
+    id: detect-framework
+    shell: bash
+    working-directory: ${{ inputs.working-directory }}
+    run: |
+      if grep -q "jest" package.json; then
+        echo "framework=jest" >> $GITHUB_OUTPUT
+      elif grep -q "vitest" package.json; then
+        echo "framework=vitest" >> $GITHUB_OUTPUT
+      else
+        echo "framework=unknown" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Run tests
+    id: run-tests
+    shell: bash
+    working-directory: ${{ inputs.working-directory }}
+    run: |
+      ${{ inputs.test-command }}
+
+  - name: Run coverage
+    id: run-coverage
+    if: inputs.coverage-command
+    shell: bash
+    working-directory: ${{ inputs.working-directory }}
+    run: |
+      ${{ inputs.coverage-command }}
+
+  - name: Check coverage threshold
+    if: inputs.coverage-command && inputs.coverage-threshold
+    shell: bash
+    run: |
+      coverage_file=""
+      if [ -f "coverage/coverage-summary.json" ]; then
+        coverage_file="coverage/coverage-summary.json"
+      elif [ -f "coverage/coverage-final.json" ]; then
+        coverage_file="coverage/coverage-final.json"
+      fi
+
+      if [ -n "$coverage_file" ]; then
+        coverage=$(jq -r '.total.lines.pct // .total.statements.pct' "$coverage_file")
+        if (( $(echo "$coverage < ${{ inputs.coverage-threshold }}" | bc -l) )); then
+          echo "Coverage is below threshold: $coverage% < ${{ inputs.coverage-threshold }}%"
+          exit 1
+        fi
+      else
+        echo "No coverage file found. Skipping coverage check."
+      fi
+
+  - name: Parse test results
+    id: parse-results
+    shell: bash
+    run: |
+      if [ ${{ steps.run-tests.outcome }} == 'success' ]; then
+        echo "test-status=pass" >> $GITHUB_OUTPUT
+      else
+        echo "test-status=fail" >> $GITHUB_OUTPUT
+      fi
+
+      if [ -f "coverage/coverage-summary.json" ]; then
+        echo "coverage-report=$(cat coverage/coverage-summary.json)" >> $GITHUB_OUTPUT
+      elif [ -f "coverage/coverage-final.json" ]; then
+        echo "coverage-report=$(cat coverage/coverage-final.json)" >> $GITHUB_OUTPUT
+      fi
+
+      if [ "${{ steps.detect-framework.outputs.framework }}" = "jest" ]; then
+        if [ -f ".jest-performance.json" ]; then
+          echo "performance-metrics=$(cat .jest-performance.json)" >> $GITHUB_OUTPUT
+        fi
+      elif [ "${{ steps.detect-framework.outputs.framework }}" = "vitest" ]; then
+        if [ -f ".vitest-performance.json" ]; then
+          echo "performance-metrics=$(cat .vitest-performance.json)" >> $GITHUB_OUTPUT
+        fi
+      fi
+
+      if [ -f "junit.xml" ]; then
+        echo "junit-report=junit.xml" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Output results
+    shell: bash
+    run: |
+      echo "Test Framework: ${{ steps.detect-framework.outputs.framework }}"
+      echo "Test Status: ${{ steps.parse-results.outputs.test-status }}"
+      if [ -n "${{ steps.parse-results.outputs.coverage-report }}" ]; then
+        echo "Coverage Report: ${{ steps.parse-results.outputs.coverage-report }}"
+      fi
+      if [ -n "${{ steps.parse-results.outputs.performance-metrics }}" ]; then
+        echo "Performance Metrics: ${{ steps.parse-results.outputs.performance-metrics }}"
+      fi
+      if [ -n "${{ steps.parse-results.outputs.junit-report }}" ]; then
+        echo "JUnit Report: ${{ steps.parse-results.outputs.junit-report }}"
+      fi
+
+  - name: Check for test failures
+    if: failure()
+    shell: bash
+    run: |
+      echo "Error: Tests failed. Please check the logs for detailed information."
+      exit 1

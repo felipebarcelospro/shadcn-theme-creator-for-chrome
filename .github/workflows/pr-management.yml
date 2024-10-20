@@ -1,0 +1,133 @@
+name: PR Management Workflow
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - '**'
+  schedule:
+    - cron: '0 0 * * *'  # Run daily at midnight UTC
+
+jobs:
+  pr-management:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Context
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Existing PR
+        id: check-existing-pr
+        uses: ./.github/actions/check-existing-pr
+        with:
+          branch-name: ${{ github.head_ref }}
+
+      - name: Auto Label
+        id: auto-label
+        uses: ./.github/actions/auto-label
+        with:
+          item-type: 'pr'
+          item-number: ${{ github.event.pull_request.number }}
+
+      - name: Auto Assign
+        id: auto-assign
+        uses: ./.github/actions/auto-assign
+        with:
+          item-type: 'pr'
+          item-number: ${{ github.event.pull_request.number }}
+
+      - name: Analyze Code
+        id: analyze-code
+        uses: ./.github/actions/analyze-code
+        with:
+          source-dir: '.'
+          previous-results: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.previous_analysis_results_path }}
+
+      - name: Run Tests
+        id: run-tests
+        uses: ./.github/actions/run-tests
+        with:
+          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).automated_testing.test_command }}
+
+      - name: Generate Review Comments
+        id: generate-review-comments
+        uses: ./.github/actions/ai-generate-content
+        with:
+          content-type: "pr_review"
+          context-data: |
+            {
+              "pr-diff": "${{ github.event.pull_request.diff_url }}",
+              "analysis-results": "${{ steps.analyze-code.outputs.quality-report }}",
+              "test-results": "${{ steps.run-tests.outputs.test-results }}"
+            }
+          template-path: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.review_template_path }}
+          tone: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.review_tone }}
+
+      - name: Update PR
+        id: update-pr
+        uses: ./.github/actions/create-or-update-pr
+        with:
+          branch-name: ${{ github.head_ref }}
+          pr-title: ${{ github.event.pull_request.title }}
+          pr-body: ${{ steps.generate-review-comments.outputs.generated-content }}
+          base-branch: ${{ github.base_ref }}
+          labels: ${{ steps.auto-label.outputs.applied-labels }}
+          reviewers: ${{ steps.auto-assign.outputs.assigned-reviewers }}
+
+      - name: Check PR Status
+        id: check-pr-status
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+            const staleThreshold = ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.stale_threshold }};
+            
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+            
+            const lastUpdateTime = new Date(pr.updated_at).getTime();
+            const currentTime = new Date().getTime();
+            const daysSinceLastUpdate = (currentTime - lastUpdateTime) / (1000 * 60 * 60 * 24);
+            
+            const status = daysSinceLastUpdate > staleThreshold ? 'stale' : 'active';
+            
+            return status;
+
+      - name: Send Notifications
+        id: send-notifications
+        uses: ./.github/actions/send-notification
+        with:
+          notification-type: "pr_status"
+          notification-data: |
+            {
+              "pr-url": "${{ github.event.pull_request.html_url }}",
+              "pr-title": "${{ github.event.pull_request.title }}",
+              "pr-status": "${{ steps.check-pr-status.outputs.result }}"
+            }
+
+      - name: Review Stale PRs
+        id: review-stale-prs
+        if: github.event_name == 'schedule'
+        uses: ./.github/actions/review-stale-prs
+        with:
+          stale-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.stale_threshold }}
+
+      - name: Generate PR Health Report
+        id: generate-pr-health-report
+        if: github.event_name == 'schedule'
+        uses: ./.github/actions/generate-pr-health-report
+        with:
+          repository-context: ${{ steps.setup-context.outputs.repository-context }}

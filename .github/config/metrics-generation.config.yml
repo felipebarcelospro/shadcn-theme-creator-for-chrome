@@ -1,0 +1,25 @@
+metrics_generation:
+  schedule: "0 0 * * 1" # Weekly on Monday at 00:00 UTC
+  report_format: markdown
+  metrics_to_collect:
+  - code_coverage
+  - test_pass_rate
+  - build_success_rate
+  - deployment_frequency
+  - lead_time_for_changes
+  - mean_time_to_recovery
+  - change_failure_rate
+  output:
+  - create_discussion_post:
+      category: "Announcements"
+      title: "Weekly Metrics Report"
+  - send_notification:
+      type: "metrics_report"
+  - send_webhook:
+      type: "metrics_data"
+  improvement_suggestions:
+    enabled: true
+    create_issues: true
+  contributor_engagement:
+    enabled: true
+    top_contributors_count: 5

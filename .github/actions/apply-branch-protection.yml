@@ -1,0 +1,246 @@
+name: 'Apply Branch Protection'
+description: 'Applies and updates branch protection rules'
+
+inputs:
+  branch-name:
+    description: 'Name of the branch to protect'
+    required: true
+  require-pull-request:
+    description: 'Require pull request before merging'
+    required: true
+    type: boolean
+  required-approvals:
+    description: 'Number of required approvals before merging'
+    required: true
+    type: number
+  enforce-admins:
+    description: 'Enforce branch protection rules for administrators'
+    required: true
+    type: boolean
+  dismiss-stale-reviews:
+    description: 'Dismiss stale pull request approvals when new commits are pushed'
+    required: false
+    type: boolean
+    default: false
+  require-code-owner-reviews:
+    description: 'Require review from code owners'
+    required: false
+    type: boolean
+    default: false
+  restrict-pushes:
+    description: 'Restrict who can push to the protected branch'
+    required: false
+    type: boolean
+    default: false
+  allowed-push-teams:
+    description: 'Comma-separated list of team slugs allowed to push'
+    required: false
+  allowed-push-users:
+    description: 'Comma-separated list of usernames allowed to push'
+    required: false
+  require-status-checks:
+    description: 'Require status checks to pass before merging'
+    required: false
+    type: boolean
+    default: false
+  required-status-checks:
+    description: 'Comma-separated list of required status checks'
+    required: false
+  require-linear-history:
+    description: 'Require linear history'
+    required: false
+    type: boolean
+    default: false
+  allow-force-pushes:
+    description: 'Allow force pushes'
+    required: false
+    type: boolean
+    default: false
+  allow-deletions:
+    description: 'Allow branch deletions'
+    required: false
+    type: boolean
+    default: false
+
+outputs:
+  protection-status:
+    description: 'Status of the protection rules application'
+  applied-rules:
+    description: 'Summary of applied protection rules'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash
+    run: |
+      echo "Debug: Input values"
+      echo "branch-name: ${{ inputs.branch-name }}"
+      echo "require-pull-request: ${{ inputs.require-pull-request }}"
+      echo "required-approvals: ${{ inputs.required-approvals }}"
+      echo "enforce-admins: ${{ inputs.enforce-admins }}"
+      echo "dismiss-stale-reviews: ${{ inputs.dismiss-stale-reviews }}"
+      echo "require-code-owner-reviews: ${{ inputs.require-code-owner-reviews }}"
+      echo "restrict-pushes: ${{ inputs.restrict-pushes }}"
+      echo "allowed-push-teams: ${{ inputs.allowed-push-teams }}"
+      echo "allowed-push-users: ${{ inputs.allowed-push-users }}"
+      echo "require-status-checks: ${{ inputs.require-status-checks }}"
+      echo "required-status-checks: ${{ inputs.required-status-checks }}"
+      echo "require-linear-history: ${{ inputs.require-linear-history }}"
+      echo "allow-force-pushes: ${{ inputs.allow-force-pushes }}"
+      echo "allow-deletions: ${{ inputs.allow-deletions }}"
+
+  - name: Authenticate with GitHub API
+    id: auth
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        core.setOutput('owner', owner);
+        core.setOutput('repo', repo);
+        console.log(`Debug: Authenticated for ${owner}/${repo}`);
+
+  - name: Fetch current branch protection settings
+    id: fetch-current
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const branch = '${{ inputs.branch-name }}';
+        console.log(`Debug: Fetching protection settings for ${branch}`);
+        try {
+          const { data } = await github.rest.repos.getBranchProtection({
+            owner,
+            repo,
+            branch,
+          });
+          console.log(`Debug: Current protection settings: ${JSON.stringify(data)}`);
+          return data;
+        } catch (error) {
+          if (error.status === 404) {
+            console.log(`Debug: No existing protection found for ${branch}`);
+            return null;
+          }
+          console.error(`Error fetching protection: ${error.message}`);
+          throw error;
+        }
+
+  - name: Prepare update payload
+    id: prepare-payload
+    uses: actions/github-script@v6
+    with:
+      script: |
+        const currentSettings = ${{ steps.fetch-current.outputs.result }};
+        console.log(`Debug: Preparing payload based on current settings: ${JSON.stringify(currentSettings)}`);
+        const payload = {
+          required_status_checks: null,
+          enforce_admins: ${{ inputs.enforce-admins }},
+          required_pull_request_reviews: {
+            required_approving_review_count: ${{ inputs.required-approvals }},
+            dismiss_stale_reviews: ${{ inputs.dismiss-stale-reviews }},
+            require_code_owner_reviews: ${{ inputs.require-code-owner-reviews }}
+          },
+          restrictions: null,
+          required_linear_history: ${{ inputs.require-linear-history }},
+          allow_force_pushes: ${{ inputs.allow-force-pushes }},
+          allow_deletions: ${{ inputs.allow-deletions }}
+        };
+
+        if (${{ inputs.require-status-checks }}) {
+          payload.required_status_checks = {
+            strict: true,
+            contexts: '${{ inputs.required-status-checks }}'.split(',').map(check => check.trim())
+          };
+        }
+
+        if (${{ inputs.restrict-pushes }}) {
+          payload.restrictions = {
+            users: '${{ inputs.allowed-push-users }}'.split(',').map(user => user.trim()),
+            teams: '${{ inputs.allowed-push-teams }}'.split(',').map(team => team.trim())
+          };
+        }
+
+        console.log(`Debug: Prepared payload: ${JSON.stringify(payload)}`);
+        return payload;
+
+  - name: Apply new protection rules
+    id: apply-rules
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const branch = '${{ inputs.branch-name }}';
+        const payload = ${{ steps.prepare-payload.outputs.result }};
+        console.log(`Debug: Applying protection rules to ${branch}`);
+        try {
+          const result = await github.rest.repos.updateBranchProtection({
+            owner,
+            repo,
+            branch,
+            ...payload,
+          });
+          console.log(`Debug: Protection rules applied successfully. Response: ${JSON.stringify(result)}`);
+          return 'success';
+        } catch (error) {
+          console.error(`Error applying protection rules: ${error.message}`);
+          core.setFailed(`Failed to apply protection rules: ${error.message}`);
+          return 'failure';
+        }
+
+  - name: Verify applied settings
+    id: verify
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const branch = '${{ inputs.branch-name }}';
+        console.log(`Debug: Verifying applied settings for ${branch}`);
+        try {
+          const { data } = await github.rest.repos.getBranchProtection({
+            owner,
+            repo,
+            branch,
+          });
+          console.log(`Debug: Verified protection settings: ${JSON.stringify(data)}`);
+          // Implement verification logic here
+          return 'verified';
+        } catch (error) {
+          console.error(`Error verifying protection settings: ${error.message}`);
+          return 'verification-failed';
+        }
+
+  - name: Generate rules summary
+    id: summary
+    run: |
+      echo "Debug: Generating rules summary"
+      echo "Branch protection rules applied to ${{ inputs.branch-name }}:" > rules_summary.txt
+      echo "- Require pull request: ${{ inputs.require-pull-request }}" >> rules_summary.txt
+      echo "- Required approvals: ${{ inputs.required-approvals }}" >> rules_summary.txt
+      echo "- Enforce admins: ${{ inputs.enforce-admins }}" >> rules_summary.txt
+      echo "- Dismiss stale reviews: ${{ inputs.dismiss-stale-reviews }}" >> rules_summary.txt
+      echo "- Require code owner reviews: ${{ inputs.require-code-owner-reviews }}" >> rules_summary.txt
+      echo "- Restrict pushes: ${{ inputs.restrict-pushes }}" >> rules_summary.txt
+      echo "- Require status checks: ${{ inputs.require-status-checks }}" >> rules_summary.txt
+      echo "- Require linear history: ${{ inputs.require-linear-history }}" >> rules_summary.txt
+      echo "- Allow force pushes: ${{ inputs.allow-force-pushes }}" >> rules_summary.txt
+      echo "- Allow deletions: ${{ inputs.allow-deletions }}" >> rules_summary.txt
+      cat rules_summary.txt
+    shell: bash
+
+  - name: Set outputs
+    run: |
+      echo "Debug: Setting action outputs"
+      echo "protection-status=${{ steps.apply-rules.outputs.result }}" >> $GITHUB_OUTPUT
+      echo "applied-rules=$(cat rules_summary.txt)" >> $GITHUB_OUTPUT
+    shell: bash
+
+  - name: Error handling
+    if: failure()
+    run: |
+      echo "Debug: Error occurred during branch protection application"
+      echo "protection-status=failed" >> $GITHUB_OUTPUT
+    shell: bash

@@ -1,0 +1,156 @@
+name: 'Generate Metrics'
+description: 'Generates and reports key project metrics for development insights'
+
+inputs:
+  time-range:
+    description: 'Time range for metrics calculation (e.g., "7 days", "1 month")'
+    required: true
+  source-dir:
+    description: 'Directory containing source code to analyze'
+    required: true
+    default: '.'
+
+outputs:
+  metrics-data:
+    description: 'JSON object containing calculated metrics'
+  top-contributors:
+    description: 'List of top contributors during the specified time range'
+  improvement-areas:
+    description: 'Identified areas needing improvement'
+  quality-report:
+    description: 'JSON object containing the code quality report'
+  issues:
+    description: 'List of potential issues and recommendations'
+  visualizations:
+    description: 'Graphs of code metrics'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash
+    run: |
+      echo "Debug: Input values"
+      echo "time-range: ${{ inputs.time-range }}"
+      echo "source-dir: ${{ inputs.source-dir }}"
+
+  - name: Fetch repository data
+    id: fetch-data
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const timeRange = '${{ inputs.time-range }}';
+        const since = new Date(Date.now() - (timeRange === '1 month' ? 30 : 7) * 24 * 60 * 60 * 1000).toISOString();
+
+        const [prs, issues, commits] = await Promise.all([
+          github.rest.pulls.list({ owner, repo, state: 'all', sort: 'updated', direction: 'desc', per_page: 100 }),
+          github.rest.issues.listForRepo({ owner, repo, state: 'all', sort: 'updated', direction: 'desc', per_page: 100 }),
+          github.rest.repos.listCommits({ owner, repo, since, per_page: 100 })
+        ]);
+
+        return { prs: prs.data, issues: issues.data, commits: commits.data };
+
+  - name: Calculate metrics
+    id: calculate-metrics
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { prs, issues, commits } = ${{ steps.fetch-data.outputs.result }};
+
+        const prMetrics = {
+          mergeRate: prs.filter(pr => pr.merged_at).length / prs.length,
+          avgReviewTime: prs.reduce((sum, pr) => sum + (new Date(pr.merged_at) - new Date(pr.created_at)), 0) / prs.length / (1000 * 60 * 60)
+        };
+
+        const issueMetrics = {
+          resolutionTime: issues.filter(issue => issue.closed_at).reduce((sum, issue) => sum + (new Date(issue.closed_at) - new Date(issue.created_at)), 0) / issues.filter(issue => issue.closed_at).length / (1000 * 60 * 60),
+          reopeningRate: issues.filter(issue => issue.state === 'open' && issue.closed_at).length / issues.length
+        };
+
+        const contributionMetrics = commits.reduce((acc, commit) => {
+          acc.totalCommits++;
+          acc.contributors[commit.author.login] = (acc.contributors[commit.author.login] || 0) + 1;
+          return acc;
+        }, { totalCommits: 0, contributors: {} });
+
+        const topContributors = Object.entries(contributionMetrics.contributors)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([name, commits]) => ({ name, commits }));
+
+        return { prMetrics, issueMetrics, contributionMetrics, topContributors };
+
+  - name: Run static code analysis
+    id: code-analysis
+    shell: bash
+    run: |
+      # Placeholder for static code analysis
+      echo "Running static code analysis..."
+      # Add your preferred static analysis tool here
+
+  - name: Generate visualizations
+    id: generate-visualizations
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        // Placeholder for visualization data generation
+        const visualizationData = {
+          prMergeRate: [/* data for PR merge rate over time */],
+          issueResolutionTime: [/* data for issue resolution time over time */],
+          commitFrequency: [/* data for commit frequency over time */]
+        };
+        return visualizationData;
+
+  - name: Compile metrics report
+    id: compile-report
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const metrics = ${{ steps.calculate-metrics.outputs.result }};
+        const codeAnalysis = ${{ steps.code-analysis.outputs.result }};
+        const visualizations = ${{ steps.generate-visualizations.outputs.result }};
+
+        const report = {
+          metricsData: metrics,
+          topContributors: metrics.topContributors,
+          improvementAreas: [
+            metrics.prMetrics.mergeRate < 0.7 ? 'Improve PR merge rate' : null,
+            metrics.issueMetrics.reopeningRate > 0.1 ? 'Reduce issue reopening rate' : null
+          ].filter(Boolean),
+          qualityReport: codeAnalysis,
+          issues: [
+            metrics.issueMetrics.resolutionTime > 48 ? 'Long issue resolution time' : null,
+            metrics.prMetrics.avgReviewTime > 24 ? 'Long PR review time' : null
+          ].filter(Boolean),
+          visualizations: visualizations
+        };
+
+        return report;
+
+  - name: Set outputs
+    id: set-outputs
+    run: |
+      echo 'metrics-data=${{ toJson(fromJson(steps.compile-report.outputs.result).metricsData) }}' >> $GITHUB_OUTPUT
+      echo 'top-contributors=${{ toJson(fromJson(steps.compile-report.outputs.result).topContributors) }}' >> $GITHUB_OUTPUT
+      echo 'improvement-areas=${{ toJson(fromJson(steps.compile-report.outputs.result).improvementAreas) }}' >> $GITHUB_OUTPUT
+      echo 'quality-report=${{ toJson(fromJson(steps.compile-report.outputs.result).qualityReport) }}' >> $GITHUB_OUTPUT
+      echo 'issues=${{ toJson(fromJson(steps.compile-report.outputs.result).issues) }}' >> $GITHUB_OUTPUT
+      echo 'visualizations=${{ toJson(fromJson(steps.compile-report.outputs.result).visualizations) }}' >> $GITHUB_OUTPUT
+    shell: bash
+
+  - name: Error handling
+    if: failure()
+    run: |
+      echo "An error occurred during the metrics generation process"
+      echo "metrics-data={}" >> $GITHUB_OUTPUT
+      echo "top-contributors=[]" >> $GITHUB_OUTPUT
+      echo "improvement-areas=[]" >> $GITHUB_OUTPUT
+      echo "quality-report={}" >> $GITHUB_OUTPUT
+      echo "issues=[]" >> $GITHUB_OUTPUT
+      echo "visualizations={}" >> $GITHUB_OUTPUT
+    shell: bash

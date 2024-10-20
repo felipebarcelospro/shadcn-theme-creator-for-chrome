@@ -1,0 +1,106 @@
+pr_management:
+  auto_label:
+    enabled: true
+    rules:
+    - pattern: '\\bbug\\b'
+      label: 'bug'
+    - pattern: '\\bfeature\\b'
+      label: 'enhancement'
+    - pattern: '\\bdocumentation\\b'
+      label: 'documentation'
+    - pattern: '\\btest\\b'
+      label: 'test'
+    - pattern: '\\bperformance\\b'
+      label: 'performance'
+  auto_assign:
+    enabled: true
+    expertise_map:
+      frontend: ['js', 'ts', 'jsx', 'tsx']
+      backend: ['py', 'rb', 'java', 'php']
+      devops: ['yml', 'yaml', 'tf', 'sh']
+  code_review:
+    required_approvals: 2
+    review_reminder_sla: 24 # hours
+    codeowners_file: .github/CODEOWNERS
+    pr_template: .github/PULL_REQUEST_TEMPLATE.md
+    review_guidelines: .github/REVIEW_GUIDELINES.md
+  stale_pr:
+    threshold: 7 # days
+    exempt_labels:
+    - "work in progress"
+    - "blocked"
+  auto_merge:
+    enabled: true
+    conditions:
+    - all_checks_pass
+    - required_approvals_met
+  notifications:
+    slack_channel: "#pr-updates"
+    email_recipients:
+    - team@example.com
+  pr_analysis:
+    enabled: true
+    tools:
+    - eslint
+    - prettier
+    threshold:
+      warnings: 10
+      errors: 0
+  test_requirements:
+    run_unit_tests: true
+    run_integration_tests: true
+    coverage_threshold: 80
+  performance_check:
+    enabled: true
+    max_bundle_size: 500 # KB
+  security_scan:
+    enabled: true
+    tools:
+    - npm audit
+    - snyk
+  documentation_check:
+    enabled: true
+    required_files:
+    - README.md
+    - CHANGELOG.md
+  branch_naming:
+    pattern: '^(feature|bugfix|hotfix|chore)\/[a-z0-9-]+$'
+  commit_message:
+    pattern: '^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?: .{1,50}'
+  pr_size:
+    max_changes: 500 # lines
+  auto_update:
+    enabled: true
+    base_branches:
+    - main
+    - develop
+  conflict_resolution:
+    notify_author: true
+    suggest_rebase: true
+  review_assignment:
+    round_robin: true
+    max_reviewers: 3
+  pr_templates:
+    feature: .github/PULL_REQUEST_TEMPLATE/feature.md
+    bugfix: .github/PULL_REQUEST_TEMPLATE/bugfix.md
+    hotfix: .github/PULL_REQUEST_TEMPLATE/hotfix.md
+  pr_checklist:
+    enabled: true
+    items:
+    - "Tests added/updated"
+    - "Documentation updated"
+    - "Code follows style guidelines"
+    - "Reviewed own code"
+  auto_close:
+    enabled: true
+    conditions:
+    - all_comments_resolved
+    - ci_passed
+    - required_approvals_met
+  metrics:
+    collect:
+    - time_to_first_review
+    - time_to_merge
+    - number_of_comments
+    - number_of_commits
+    report_schedule: "0 0 * * 1" # Weekly on Monday

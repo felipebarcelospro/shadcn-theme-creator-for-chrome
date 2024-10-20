@@ -1,56 +1,98 @@
-name: Security and Dependency Management
+name: Security and Dependency Management Workflow
 
 on:
   schedule:
-    - cron: '0 0 * * 0' # Weekly on Sundays
+    - cron: '0 0 * * 1'  # Run every Monday at midnight
   workflow_dispatch:
+  repository_dispatch:
+    types: [security_alert]
 
 jobs:
-  security_checks:
+  security-dependency-management:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
+      - name: Checkout code
+        id: checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Context
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          node-version: 'lts/*'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Dependencies
-        run: yarn install
-
-      - name: Run Yarn Audit
-        run: yarn audit
-        continue-on-error: true
-
-  update_dependencies:
-    runs-on: ubuntu-latest
-    needs: [security_checks]
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Run Security Checks
+        id: security-checks
+        uses: ./.github/actions/run-security-checks
         with:
-          node-version: 'lts/*'
+          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).repository.root_directory }}
 
-      - name: Cache Turbo dependencies
-        uses: actions/cache@v3
+      - name: AI Analysis of Security Report
+        id: ai-analysis
+        uses: ./.github/actions/ai-generate-content
         with:
-          path: |
-            .turbo
-            node_modules/.cache/turbo
-          key: ${{ runner.os }}-turbo-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
+          content-type: "security_analysis"
+          context-data: |
+            {
+              "vulnerability-report": ${{ steps.security-checks.outputs.vulnerability-report }}
+            }
+          template-path: .github/templates/security_vulnerability_report_template.md
 
       - name: Update Dependencies
-        run: |
-          yarn upgrade-interactive --latest
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add package.json yarn.lock
-          git commit -m "chore: update dependencies"
-          git push
+        id: update-dependencies
+        uses: ./.github/actions/update-dependencies
+        with:
+          repository-context: ${{ steps.setup-context.outputs.repository-context }}
+
+      - name: AI Generate Update Summary
+        id: ai-update-summary
+        uses: ./.github/actions/ai-generate-content
+        with:
+          content-type: "dependency_update_summary"
+          context-data: |
+            {
+              "updates-list": ${{ steps.update-dependencies.outputs.updates-list }}
+            }
+          template-path: .github/templates/dependency_update_pr_description.md
+
+      - name: Create PR for Updates
+        id: create-pr
+        uses: ./.github/actions/create-or-update-pr
+        with:
+          branch-name: ${{ fromJson(steps.setup-context.outputs.config-data).version_control.branch_prefixes.feature }}security-dependency-update
+          pr-title: "Security and Dependency Updates"
+          pr-body: ${{ steps.ai-update-summary.outputs.generated-content }}
+          base-branch: ${{ fromJson(steps.setup-context.outputs.config-data).version_control.main_branches[0] }}
+          labels: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).pr_management.labels.security_update) }}
+
+      - name: Update Security Policy
+        id: update-security-policy
+        uses: ./.github/actions/update-security-policy
+        with:
+          security-report: ${{ steps.security-checks.outputs.vulnerability-report }}
+          ai-analysis: ${{ steps.ai-analysis.outputs.generated-content }}
+
+      - name: Create Critical Security Issue
+        id: create-critical-issue
+        if: fromJson(steps.security-checks.outputs.vulnerability-report).critical > 0
+        uses: ./.github/actions/create-issue
+        with:
+          issue-type: "security_vulnerability"
+          issue-details: ${{ steps.security-checks.outputs.vulnerability-report }}
+          issue-template: .github/templates/critical_security_issue_template.md
+          issue-title: "Critical Security Vulnerabilities Detected"
+          labels: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).issue_management.labels.security_critical) }}
+
+      - name: Send Notification
+        id: send-notification
+        uses: ./.github/actions/send-notification
+        with:
+          notification-type: "security_update"
+          notification-data: |
+            {
+              "vulnerability-report": ${{ steps.security-checks.outputs.vulnerability-report }},
+              "ai-analysis": ${{ steps.ai-analysis.outputs.generated-content }},
+              "pr-url": ${{ steps.create-pr.outputs.pr-url }},
+              "critical-issues": ${{ fromJson(steps.security-checks.outputs.vulnerability-report).critical }}
+            }

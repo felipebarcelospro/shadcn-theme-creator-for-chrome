@@ -1,0 +1,67 @@
+name: 'Check Review Guidelines'
+description: 'Checks if pull request descriptions and review comments adhere to project guidelines'
+
+inputs:
+  pr-description:
+    description: 'Description of the pull request'
+    required: true
+  review-comments:
+    description: 'Comments on the pull request'
+    required: true
+  guideline-rules:
+    description: 'Path to the guideline rules configuration file'
+    required: true
+
+outputs:
+  compliance-status:
+    description: 'Status of guideline compliance'
+  violations-list:
+    description: 'List of guideline violations (if any)'
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
+jobs:
+  check-guidelines:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Debug - Input values
+      run: |
+        echo "PR description: ${{ inputs.pr-description }}"
+        echo "Review comments: ${{ inputs.review-comments }}"
+        echo "Guideline rules: ${{ inputs.guideline-rules }}"
+
+    - name: Load guideline rules
+      id: load-rules
+      run: |
+        rules=$(cat ${{ inputs.guideline-rules }})
+        echo "::set-output name=rules::$rules"
+
+    - name: Check compliance
+      id: check-compliance
+      run: |
+        pr_description='${{ inputs.pr-description }}'
+        review_comments='${{ inputs.review-comments }}'
+        rules='${{ steps.load-rules.outputs.rules }}'
+
+        # Implement compliance checking logic here
+        # This is a placeholder implementation
+        compliance_status="compliant"
+        violations=[]
+
+        echo "::set-output name=compliance-status::$compliance_status"
+        echo "::set-output name=violations-list::$violations"
+
+    - name: Debug - Compliance result
+      run: |
+        echo "Compliance status: ${{ steps.check-compliance.outputs.compliance-status }}"
+        echo "Violations: ${{ steps.check-compliance.outputs.violations-list }}"

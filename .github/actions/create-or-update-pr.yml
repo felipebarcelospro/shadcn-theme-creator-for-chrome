@@ -1,0 +1,208 @@
+name: 'Create or Update Pull Request'
+description: 'Creates a new pull request or updates an existing one'
+
+inputs:
+  branch-name:
+    description: 'Name of the branch for the PR'
+    required: true
+  pr-title:
+    description: 'Title of the pull request'
+    required: true
+  pr-body:
+    description: 'Body content of the pull request'
+    required: true
+  base-branch:
+    description: 'Name of the base branch for the PR'
+    required: true
+  labels:
+    description: 'Comma-separated list of labels to apply to the PR'
+    required: false
+  reviewers:
+    description: 'Comma-separated list of reviewers to request'
+    required: false
+
+outputs:
+  pr-url:
+    description: 'URL of the created or updated pull request'
+  pr-status:
+    description: 'Status of the PR operation (created/updated)'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Debug inputs
+    shell: bash
+    run: |
+      echo "Debug: Input values:"
+      echo "branch-name: ${{ inputs.branch-name }}"
+      echo "pr-title: ${{ inputs.pr-title }}"
+      echo "base-branch: ${{ inputs.base-branch }}"
+      echo "labels: ${{ inputs.labels }}"
+      echo "reviewers: ${{ inputs.reviewers }}"
+
+  - name: Check for existing PR
+    id: check-pr
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const branch = '${{ inputs.branch-name }}';
+        const base = '${{ inputs.base-branch }}';
+
+        console.log(`Debug: Checking for existing PR from ${branch} to ${base}`);
+
+        try {
+          const { data: prs } = await github.rest.pulls.list({
+            owner,
+            repo,
+            head: `${owner}:${branch}`,
+            base,
+            state: 'open'
+          });
+
+          if (prs.length > 0) {
+            console.log(`Debug: Existing PR found: #${prs[0].number}`);
+            return prs[0].number;
+          } else {
+            console.log('Debug: No existing PR found');
+            return null;
+          }
+        } catch (error) {
+          console.error(`Debug: Error checking for existing PR: ${error.message}`);
+          return null;
+        }
+
+  - name: Create or update PR
+    id: create-update-pr
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const existingPrNumber = ${{ steps.check-pr.outputs.result }};
+        const prData = {
+          title: '${{ inputs.pr-title }}',
+          body: '${{ inputs.pr-body }}',
+          head: '${{ inputs.branch-name }}',
+          base: '${{ inputs.base-branch }}'
+        };
+
+        console.log(`Debug: PR Data: ${JSON.stringify(prData)}`);
+
+        try {
+          let pr;
+          if (existingPrNumber) {
+            console.log(`Debug: Updating existing PR #${existingPrNumber}`);
+            const { data } = await github.rest.pulls.update({
+              owner,
+              repo,
+              pull_number: existingPrNumber,
+              ...prData
+            });
+            pr = data;
+            core.setOutput('pr-status', 'updated');
+          } else {
+            console.log('Debug: Creating new PR');
+            const { data } = await github.rest.pulls.create({
+              owner,
+              repo,
+              ...prData
+            });
+            pr = data;
+            core.setOutput('pr-status', 'created');
+          }
+
+          console.log(`Debug: PR ${pr.number} ${core.getOutput('pr-status')}`);
+          core.setOutput('pr-url', pr.html_url);
+          return pr.number;
+        } catch (error) {
+          console.error(`Debug: Error creating/updating PR: ${error.message}`);
+          core.setFailed(`Failed to create/update PR: ${error.message}`);
+        }
+
+  - name: Apply labels
+    if: inputs.labels
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const prNumber = ${{ steps.create-update-pr.outputs.result }};
+        const labels = '${{ inputs.labels }}'.split(',').map(label => label.trim());
+
+        console.log(`Debug: Applying labels to PR #${prNumber}: ${labels.join(', ')}`);
+
+        try {
+          await github.rest.issues.addLabels({
+            owner,
+            repo,
+            issue_number: prNumber,
+            labels: labels
+          });
+          console.log(`Debug: Labels applied successfully`);
+        } catch (error) {
+          console.error(`Debug: Error applying labels: ${error.message}`);
+        }
+
+  - name: Request reviewers
+    if: inputs.reviewers
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const prNumber = ${{ steps.create-update-pr.outputs.result }};
+        const reviewers = '${{ inputs.reviewers }}'.split(',').map(reviewer => reviewer.trim());
+
+        console.log(`Debug: Requesting reviewers for PR #${prNumber}: ${reviewers.join(', ')}`);
+
+        try {
+          await github.rest.pulls.requestReviewers({
+            owner,
+            repo,
+            pull_number: prNumber,
+            reviewers: reviewers
+          });
+          console.log(`Debug: Reviewers requested successfully`);
+        } catch (error) {
+          console.error(`Debug: Error requesting reviewers: ${error.message}`);
+        }
+
+  - name: Verify PR status
+    id: verify
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      script: |
+        const { owner, repo } = context.repo;
+        const prNumber = ${{ steps.create-update-pr.outputs.result }};
+
+        console.log(`Debug: Verifying PR #${prNumber}`);
+
+        try {
+          const { data: pr } = await github.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: prNumber
+          });
+          console.log(`Debug: PR #${prNumber} verified successfully`);
+          console.log(`Debug: PR Status: ${pr.state}`);
+          return 'success';
+        } catch (error) {
+          console.error(`Debug: Error verifying PR: ${error.message}`);
+          return 'failure';
+        }
+
+  - name: Error handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "Debug: An error occurred during PR creation/update"
+      echo "pr-status=failed" >> $GITHUB_OUTPUT
+
+  - name: Final debug output
+    shell: bash
+    run: |
+      echo "Debug: Final PR URL: ${{ steps.create-update-pr.outputs.pr-url }}"
+      echo "Debug: Final PR Status: ${{ steps.create-update-pr.outputs.pr-status }}"

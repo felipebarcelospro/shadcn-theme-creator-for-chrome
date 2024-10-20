@@ -1,0 +1,39 @@
+name: 'Validate Config'
+description: 'Validates the existence and structure of the config.yml file in the repository'
+
+inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+
+outputs:
+  config-validation-status:
+    description: 'Boolean indicating if the configuration is valid'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Check config.yml existence
+    shell: bash
+    run: |
+      if [ ! -f ".github/config.yml" ]; then
+        echo "config-validation-status=false" >> $GITHUB_OUTPUT
+        echo "::error::config.yml file not found in .github directory"
+        exit 1
+      fi
+
+  - name: Validate YAML structure
+    shell: bash
+    run: |
+      if ! yaml-lint .github/config.yml; then
+        echo "config-validation-status=false" >> $GITHUB_OUTPUT
+        echo "::error::config.yml is not a valid YAML file"
+        exit 1
+      else
+        echo "config-validation-status=true" >> $GITHUB_OUTPUT
+      fi
+
+  - name: Install yaml-lint
+    shell: bash
+    run: |
+      npm install -g yaml-lint

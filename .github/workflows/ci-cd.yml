@@ -1,0 +1,138 @@
+name: CI/CD Workflow
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.get-packages.outputs.packages }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Context
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Packages
+        id: get-packages
+        run: |
+          packages=$(echo '${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific }}' | jq -r 'keys | @json')
+          echo "packages=$packages" >> $GITHUB_OUTPUT
+
+  ci-cd:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: ${{ fromJson(needs.setup.outputs.packages) }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        id: checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Context
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate Configuration
+        id: validate-config
+        uses: ./.github/actions/validate-config
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Dependencies
+        id: install-dependencies
+        uses: ./.github/actions/install-dependencies
+        with:
+          package-manager: ${{ fromJson(steps.setup-context.outputs.config-data).package_manager }}
+          cache-key: ${{ runner.os }}-${{ matrix.package }}-${{ hashFiles(format('{0}/package-lock.json', fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path)) }}
+          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
+
+      - name: Run Linting
+        id: run-linting
+        uses: ./.github/actions/run-linting
+        with:
+          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
+          lint-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.lint }}
+
+      - name: Run Tests
+        id: run-tests
+        uses: ./.github/actions/run-tests
+        with:
+          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
+          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.test }}
+
+      - name: Upload Code Coverage
+        id: upload-coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.package }}-code-coverage-report
+          path: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}/coverage
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Build Application
+        id: build-app
+        uses: ./.github/actions/build-app
+        with:
+          build-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.build }}
+          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
+
+      - name: Deploy Application
+        id: deploy-app
+        if: github.event_name == 'push'
+        uses: ./.github/actions/deploy-app
+        with:
+          package-name: ${{ matrix.package }}
+          artifacts-path: ${{ steps.build-app.outputs.artifacts-path }}
+          deployment-type: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.deployment.type }}
+          deployment-config: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.deployment) }}
+
+      - name: Run Post-Deployment Tests
+        id: post-deployment-tests
+        if: github.event_name == 'push' && fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.post_deployment_tests.enabled
+        uses: ./.github/actions/run-post-deployment-tests
+        with:
+          app-url: ${{ steps.deploy-app.outputs.deployed-url }}
+          test-suite: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.post_deployment_tests.url }}
+
+      - name: Send Notifications
+        id: send-notifications
+        uses: ./.github/actions/send-notification
+        with:
+          notification-type: 'ci_cd_status'
+          notification-data: |
+            {
+              "repository": "${{ github.repository }}",
+              "workflow": "${{ github.workflow }}",
+              "package": "${{ matrix.package }}",
+              "status": "${{ job.status }}",
+              "run_id": "${{ github.run_id }}",
+              "run_number": "${{ github.run_number }}"
+            }
+
+      - name: Create Issue on Failure
+        id: create-issue-on-failure
+        if: failure()
+        uses: ./.github/actions/create-issue
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-title: "CI/CD Workflow Failure for ${{ matrix.package }}"
+          issue-body: "The CI/CD workflow failed for package ${{ matrix.package }}. Please check the logs for more details."
+          labels: "bug,ci-cd,${{ matrix.package }}"

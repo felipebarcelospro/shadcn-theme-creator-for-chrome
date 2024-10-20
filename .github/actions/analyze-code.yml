@@ -1,0 +1,123 @@
+name: 'Analyze Code'
+description: 'Performs static code analysis to identify potential issues and maintain code quality'
+
+inputs:
+  source-dir:
+    description: 'Directory containing source code to analyze'
+    required: true
+    default: '.'
+  previous-results:
+    description: 'Path to previous analysis results for comparison'
+    required: false
+
+outputs:
+  quality-report:
+    description: 'JSON object containing the code quality report'
+    value: ${{ steps.analyze.outputs.quality-report }}
+  issues:
+    description: 'List of potential issues and recommendations'
+    value: ${{ steps.analyze.outputs.issues }}
+  diff:
+    description: 'Diff from previous analysis'
+    value: ${{ steps.analyze.outputs.diff }}
+  visualizations:
+    description: 'Graphs of code metrics'
+    value: ${{ steps.analyze.outputs.visualizations }}
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Prepare Analysis Environment
+    shell: bash
+    run: |
+      npm install -g eslint typescript @typescript-eslint/parser @typescript-eslint/eslint-plugin
+      npm install -g jscpd
+      npm install -g cloc
+
+  - name: Fetch Previous Results
+    id: fetch-previous
+    shell: bash
+    run: |
+      if [ -n "${{ inputs.previous-results }}" ]; then
+        echo "Using provided previous results: ${{ inputs.previous-results }}"
+        cp ${{ inputs.previous-results }} previous_results.json
+      elif [ -f ".github/analysis_results.json" ]; then
+        echo "Using results from previous run"
+        cp .github/analysis_results.json previous_results.json
+      else
+        echo "No previous results found"
+      fi
+
+  - name: Run Static Code Analysis
+    id: analyze
+    shell: bash
+    run: |
+      cd ${{ inputs.source-dir }}
+
+      # Run ESLint
+      eslint_output=$(eslint . --format=json || true)
+      echo "$eslint_output" > eslint_report.json
+
+      # Run TypeScript compiler for type checking
+      tsc_output=$(tsc --noEmit --pretty false || true)
+      echo "$tsc_output" > tsc_report.txt
+
+      # Run JSCPD for code duplication
+      jscpd_output=$(jscpd . --format=json || true)
+      echo "$jscpd_output" > jscpd_report.json
+
+      # Run CLOC for code metrics
+      cloc_output=$(cloc . --json || true)
+      echo "$cloc_output" > cloc_report.json
+
+      # Generate comprehensive report
+      echo "{" > report.json
+      echo "  \"eslint\": $(cat eslint_report.json)," >> report.json
+      echo "  \"typescript\": $(cat tsc_report.txt | jq -R -s .)," >> report.json
+      echo "  \"jscpd\": $(cat jscpd_report.json)," >> report.json
+      echo "  \"cloc\": $(cat cloc_report.json)" >> report.json
+      echo "}" >> report.json
+
+      # Generate issues list
+      jq -r '.eslint[] | .messages[] | "ESLint: \(.message) at \(.filePath):\(.line):\(.column)"' eslint_report.json > issues.txt
+      grep -n "error TS" tsc_report.txt | sed 's/^/TypeScript: /' >> issues.txt
+      jq -r '.duplicates[] | "Duplication: \(.firstFile.name) and \(.secondFile.name)"' jscpd_report.json >> issues.txt
+
+      # Compare with previous results
+      if [ -f "previous_results.json" ]; then
+        diff_output=$(diff -u previous_results.json report.json || true)
+        echo "$diff_output" > diff.txt
+      else
+        echo "No previous results for comparison" > diff.txt
+      fi
+
+      # Prepare visualizations (simplified example)
+      echo "{" > visualizations.json
+      echo "  \"eslintIssues\": $(jq '.eslint[].errorCount + .eslint[].warningCount' eslint_report.json | jq -s 'add')," >> visualizations.json
+      echo "  \"duplicatedLines\": $(jq '.statistics.total.duplicatedLines' jscpd_report.json)," >> visualizations.json
+      echo "  \"totalLines\": $(jq '.SUM.code' cloc_report.json)" >> visualizations.json
+      echo "}" >> visualizations.json
+
+      # Set outputs
+      echo "quality-report=$(cat report.json | jq -c .)" >> $GITHUB_OUTPUT
+      echo "issues<<EOF" >> $GITHUB_OUTPUT
+      cat issues.txt >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
+      echo "diff<<EOF" >> $GITHUB_OUTPUT
+      cat diff.txt >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
+      echo "visualizations=$(cat visualizations.json | jq -c .)" >> $GITHUB_OUTPUT
+
+      # Save results for next run
+      mkdir -p .github
+      cp report.json .github/analysis_results.json
+
+  - name: Error Handling
+    if: failure()
+    shell: bash
+    run: |
+      echo "An error occurred during the analysis. Continuing with available results."
+      echo "quality-report={\"error\":\"Analysis failed\"}" >> $GITHUB_OUTPUT
+      echo "issues=Analysis failed" >> $GITHUB_OUTPUT
+      echo "diff=No diff available due to analysis failure" >> $GITHUB_OUTPUT
+      echo "visualizations={}" >> $GITHUB_OUTPUT
