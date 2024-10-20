@@ -1,11 +1,11 @@
-name: Release
+name: Publish
 
 on:
-  workflow_run:
-    workflows: ["Build and Test"]
-    types:
-      - completed
-    branches: ["main"]
+  push:
+    branches: ["main", "develop", "feature/*", "release/*", "hotfix/*", "ci/*", "chore/*"]
+  pull_request:
+    branches: ["main", "develop"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,15 +15,132 @@ permissions:
   issues: write
 
 jobs:
-  prepare_release:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+  check_project_changes:
+    runs-on: ubuntu-latest
     outputs:
-      should_release_web: ${{ steps.check_changes.outputs.should_release_web }}
-      should_release_extension: ${{ steps.check_changes.outputs.should_release_extension }}
+      changes: ${{ steps.check.outputs.changes }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Changes
+        id: check
+        run: |
+          echo "changes=[\"all\"]" >> $GITHUB_OUTPUT
+          echo "Detected changes in all projects"
+
+  build_packages:
+    runs-on: ubuntu-latest
+    needs: check_project_changes
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'all') || contains(fromJson(needs.check_project_changes.outputs.changes), 'packages')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.yarn
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build Packages
+        run: yarn turbo run build --filter=./packages/*
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-build
+          path: ./packages
+
+  build_web:
+    runs-on: ubuntu-latest
+    needs: check_project_changes
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'all') || contains(fromJson(needs.check_project_changes.outputs.changes), 'web')
+    env:
+      NEXT_PUBLIC_PLUNK_API_KEY: ${{ secrets.NEXT_PUBLIC_PLUNK_API_KEY }}
+      NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.yarn
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build Web
+        run: yarn turbo run build --filter=web...
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: ./apps/web/out
+
+  build_chrome_extension:
+    runs-on: ubuntu-latest
+    needs: check_project_changes
+    if: contains(fromJson(needs.check_project_changes.outputs.changes), 'all') || contains(fromJson(needs.check_project_changes.outputs.changes), 'chrome-extension')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.yarn
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build Chrome Extension
+        run: yarn turbo run build --filter=chrome-extension...
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension-build
+          path: ./apps/chrome-extension/dist
+
+  prepare_release:
+    runs-on: ubuntu-latest
+    needs: [build_packages, build_web, build_chrome_extension]
+    if: github.ref == 'refs/heads/main'
+    outputs:
       new_version: ${{ steps.version.outputs.new_version }}
       changelog: ${{ steps.changelog.outputs.changelog }}
+      has_extension_changes: ${{ steps.check_extension_changes.outputs.has_changes }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -33,24 +150,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check for Relevant Changes
-        id: check_changes
+      - name: Check for Extension Changes
+        id: check_extension_changes
         run: |
-          changes=$(git diff --name-only ${{ github.event.workflow_run.head_sha }} ${{ github.sha }})
-          if echo "$changes" | grep -qE "^(apps/web|packages)/"; then
-            echo "should_release_web=true" >> $GITHUB_OUTPUT
-          else
-            echo "should_release_web=false" >> $GITHUB_OUTPUT
-          fi
-          if echo "$changes" | grep -qE "^(apps/chrome-extension|packages)/"; then
-            echo "should_release_extension=true" >> $GITHUB_OUTPUT
-          else
-            echo "should_release_extension=false" >> $GITHUB_OUTPUT
-          fi
+          git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q '^apps/chrome-extension/' && echo "has_changes=true" >> $GITHUB_OUTPUT || echo "has_changes=false" >> $GITHUB_OUTPUT
 
       - name: Determine Version
         id: version
-        if: steps.check_changes.outputs.should_release_web == 'true' || steps.check_changes.outputs.should_release_extension == 'true'
         run: |
           current_version=$(jq -r '.version' package.json)
           new_version=$(echo $current_version | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
@@ -58,7 +164,6 @@ jobs:
 
       - name: Generate Changelog
         id: changelog
-        if: steps.check_changes.outputs.should_release_web == 'true' || steps.check_changes.outputs.should_release_extension == 'true'
         uses: fjogeleit/http-request-action@v1
         with:
           url: 'https://api.groq.com/openai/v1/chat/completions'
@@ -76,7 +181,6 @@ jobs:
             }
 
       - name: Parse Changelog
-        if: steps.check_changes.outputs.should_release_web == 'true' || steps.check_changes.outputs.should_release_extension == 'true'
         run: |
           changelog_data='${{ steps.changelog.outputs.response }}'
           changelog=$(echo "$changelog_data" | jq -r '.choices[0].message.content | fromjson | .changelog // empty')
@@ -90,9 +194,7 @@ jobs:
 
   release_web:
     needs: prepare_release
-    if: needs.prepare_release.outputs.should_release_web == 'true'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -102,14 +204,13 @@ jobs:
       - name: Download Web Artifact
         uses: actions/download-artifact@v4
         with:
-          name: github-pages
+          name: web-build
           path: web-build
-          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
         with:
-          artifact_name: github-pages
+          artifact_name: web-build
 
       - name: Update package.json for Web
         run: |
@@ -126,9 +227,8 @@ jobs:
 
   release_extension:
     needs: prepare_release
-    if: needs.prepare_release.outputs.should_release_extension == 'true'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    if: ${{ needs.prepare_release.outputs.has_extension_changes == 'true' }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -138,9 +238,8 @@ jobs:
       - name: Download Chrome Extension Artifact
         uses: actions/download-artifact@v4
         with:
-          name: chrome-extension
+          name: chrome-extension-build
           path: releases
-          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Create GitHub Release for Extension
         uses: softprops/action-gh-release@v1
