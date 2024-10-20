@@ -1,29 +1,39 @@
 # Repository Configuration
-repository: !include ./configs/repository.config.yml
+repository:
+  file: ./configs/repository.config.yml
 
 # Package Management
-packages: !include ./configs/packages.config.yml
+packages:
+  file: ./configs/packages.config.yml
 
 # Pull Request Management
-pr_management: !include ./configs/pr_management.config.yml
+pr_management:
+  file: ./configs/pr_management.config.yml
 
 # Issue Management
-issue_management: !include ./configs/issue-management.config.yml
+issue_management:
+  file: ./configs/issue-management.config.yml
 
 # Release Management
-release_management: !include ./configs/release-management.config.yml
+release_management:
+  file: ./configs/release-management.config.yml
 
 # Security and Dependency Management
-security_dependency_management: !include ./configs/security-dependency-management.config.yml
+security_dependency_management:
+  file: ./configs/security-dependency-management.config.yml
 
 # Automated Testing
-automated_testing: !include ./configs/automated-testing.config.yml
+automated_testing:
+  file: ./configs/automated-testing.config.yml
 
 # Metrics Generation
-metrics_generation: !include ./configs/metrics-generation.config.yml
+metrics_generation:
+  file: ./configs/metrics-generation.config.yml
 
 # Cron Jobs
-cron_jobs: !include ./configs/cron-jobs.config.yml
+cron_jobs:
+  file: ./configs/cron-jobs.config.yml
 
 # Plugins
-plugins: !include ./configs/plugins.config.yml
+plugins:
+  file: ./configs/plugins.config.yml
