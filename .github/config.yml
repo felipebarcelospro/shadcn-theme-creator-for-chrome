@@ -1,61 +1,474 @@
-# Anchor definitions
-repository_config: &repository_config
-  file: ./configs/repository.config.yml
-
-packages_config: &packages_config
-  file: ./configs/packages.config.yml
-
-pr_management_config: &pr_management_config
-  file: ./configs/pr_management.config.yml
-
-issue_management_config: &issue_management_config
-  file: ./configs/issue-management.config.yml
-
-release_management_config: &release_management_config
-  file: ./configs/release-management.config.yml
-
-security_dependency_management_config: &security_dependency_management_config
-  file: ./configs/security-dependency-management.config.yml
-
-automated_testing_config: &automated_testing_config
-  file: ./configs/automated-testing.config.yml
-
-metrics_generation_config: &metrics_generation_config
-  file: ./configs/metrics-generation.config.yml
-
-cron_jobs_config: &cron_jobs_config
-  file: ./configs/cron-jobs.config.yml
-
-plugins_config: &plugins_config
-  file: ./configs/plugins.config.yml
-
-# Configuration sections
 repository:
-  !!merge <<: *repository_config
-
-packages:
-  !!merge <<: *packages_config
-
-pr_management:
-  !!merge <<: *pr_management_config
+  name: shadcn-theme-creator-for-chrome
+  type: monorepo
+  description: "Boost productivity and create stunning Shadcn/UI UI themes in real-time. Customize, preview, and export with ease using our Chrome extension."
+  version_control:
+    main_branches:
+    - main
+    - develop
+    branch_prefixes:
+      feature: feature/
+      release: release/
+      hotfix: hotfix/
+    branch_protection:
+      require_pull_request: true
+      required_approvals: 2
+      enforce_admins: true
+    merge_strategy:
+      develop_to_main: squash
+      feature_to_develop: merge
+    auto_delete_merged_branches: true
+    stale_branch_threshold: 30 # days
+    pr_creation_wait_time: 15 # minutes
+    protected_branches:
+    - main
+    - develop
+  setup:
+    initial_branches:
+    - main
+    - develop
+    - release
+    - hotfix
+    branch_protection_rules:
+      main:
+        required_approvals: 2
+        status_checks_required: true
+      develop:
+        required_approvals: 1
+        status_checks_required: true
+    initial_labels:
+    - name: bug
+      color: d73a4a
+    - name: enhancement
+      color: a2eeef
+    - name: documentation
+      color: 0075ca
+    - name: security
+      color: d93f0b
+    - name: critical
+      color: b60205
+    project_board:
+      name: Roadmap
+      columns:
+      - Planned
+      - In Progress
+      - Development
+      - Testing
+      - Final Review
+      - Completed
+      - Future Considerations
+    wiki_pages:
+    - title: "Git Flow Process"
+      content_file: .github/wiki/git_flow_process.md
+    - title: "Branching Strategy"
+      content_file: .github/wiki/branching_strategy.md
+    - title: "Release Process"
+      content_file: .github/wiki/release_process.md
+    initial_workflows:
+    - ci-cd.yml
+    - branch-management.yml
+    - issue-management.yml
+    - pr-management.yml
+    - security-dependency-management.yml
+    - repository-setup.yml
+    repository_settings:
+      has_issues: true
+      has_projects: true
+      has_wiki: true
+      delete_branch_on_merge: true
+      allow_squash_merge: true
+      allow_merge_commit: false
+      allow_rebase_merge: true
+    dependabot_setup:
+      package_ecosystems:
+      - npm
+      - github-actions
+      schedule:
+        interval: weekly
+    code_owners:
+      path: .github/CODEOWNERS
+      default_owners:
+      - "@repo-admins"
+    initial_files:
+    - README.md
+    - CONTRIBUTING.md
+    - CODE_OF_CONDUCT.md
+    - CHANGELOG.md
+    - .github/SECURITY.md
 
 issue_management:
-  !!merge <<: *issue_management_config
-
-release_management:
-  !!merge <<: *release_management_config
-
-security_dependency_management:
-  !!merge <<: *security_dependency_management_config
-
-automated_testing:
-  !!merge <<: *automated_testing_config
+  default_project_board: "Roadmap"
+  stale_issue_threshold: 30 # days
+  stale_exempt_labels:
+  - "important"
+  - "bug"
+  auto_label:
+    enabled: true
+    rules:
+    - pattern: '\\bbug\\b'
+      label: 'bug'
+    - pattern: '\\bfeature\\b'
+      label: 'enhancement'
+    - pattern: '\\bdocumentation\\b'
+      label: 'documentation'
+    - pattern: '\\btest\\b'
+      label: 'test'
+    - pattern: '\\bperformance\\b'
+      label: 'performance'
+  auto_assign:
+    enabled: true
+    max_reviewers: 2
+    expertise_map:
+      frontend: ['js', 'ts', 'jsx', 'tsx', 'css', 'html', 'vue', 'svelte']
+      backend: ['py', 'rb', 'java', 'php', 'go', 'rust', 'node', 'csharp']
+      devops: ['yml', 'yaml', 'tf', 'sh', 'docker', 'k8s', 'ansible', 'jenkins']
+      database: ['sql', 'nosql', 'mongodb', 'postgres', 'mysql', 'redis']
+      mobile: ['swift', 'kotlin', 'dart', 'flutter', 'reactnative']
+      ai_ml: ['py', 'jupyter', 'tensorflow', 'pytorch', 'scikit-learn']
+    exclude_labels:
+    - "do-not-review"
+    - "wip"
+  auto_response:
+    enabled: true
+    template_path: .github/templates/issue_response_template.md
+  prioritization:
+    enabled: true
+    rules:
+    - criteria:
+        labels: ['bug', 'critical']
+      priority: high
+    - criteria:
+        labels: ['enhancement']
+      priority: medium
+    - criteria:
+        default: true
+      priority: low
+  milestone_setting:
+    enabled: true
+    title: "Next Release"
+    label_to_match: "ready"
+  sla_tracking:
+    enabled: true
+    timeframe: 1440 # 24 hours in minutes
+    warning_threshold: 120 # 2 hours in minutes
 
 metrics_generation:
-  !!merge <<: *metrics_generation_config
+  schedule: "0 0 * * 1" # Weekly on Monday at 00:00 UTC
+  report_format: markdown
+  metrics_to_collect:
+  - code_coverage
+  - test_pass_rate
+  - build_success_rate
+  - deployment_frequency
+  - lead_time_for_changes
+  - mean_time_to_recovery
+  - change_failure_rate
+  output:
+  - create_discussion_post:
+      category: "Announcements"
+      title: "Weekly Metrics Report"
+  - send_notification:
+      type: "metrics_report"
+  - send_webhook:
+      type: "metrics_data"
+  improvement_suggestions:
+    enabled: true
+    create_issues: true
+  contributor_engagement:
+    enabled: true
+    top_contributors_count: 5
 
-cron_jobs:
-  !!merge <<: *cron_jobs_config
+packages:
+  global_settings:
+    ci_cd:
+      tools:
+      - GitHub Actions
+      - Turbo
+    security_checks:
+      enabled: true
+      tools:
+      - npm audit
+      schedule: "0 0 * * 0" # Weekly on Sunday
+      fail_on: high
+    performance_monitoring:
+      enabled: true
+      check_interval: 15 # minutes
+      metrics_to_collect:
+      - availability
+      - response_time
+      - ttfb
+      - lcp
+      - cls
+      - fid
+      thresholds:
+        availability: 99.9
+        response_time: 1000 # ms
+        ttfb: 200 # ms
+        lcp: 2500 # ms
+        cls: 0.1
+        fid: 100 # ms
+      notification:
+        on_failure:
+          type: slack
+          channel: performance-alerts
+      issue_creation:
+        enabled: true
+        labels:
+        - performance
+        - high-priority
+  package_specific:
+    web:
+      path: apps/web
+      ci_cd:
+        commands:
+          test: turbo run test --filter=web
+          build: turbo run build --filter=web
+          lint: turbo run lint --filter=web
+          dev: turbo run dev --filter=web
+        deployment:
+          type: static
+          config:
+            output_dir: apps/web/out
+            github_pages:
+              branch: gh-pages
+          production:
+            branch: main
+            url: https://felipebarcelospro.github.io/shadcn-theme-creator-for-chrome/
+        post_deployment_tests:
+          enabled: true
+          url: https://felipebarcelospro.github.io/shadcn-theme-creator-for-chrome/
+        performance_monitoring:
+          urls_to_monitor:
+          - https://felipebarcelospro.github.io/shadcn-theme-creator-for-chrome/
+    chrome-extension:
+      path: apps/chrome-extension
+      ci_cd:
+        commands:
+          test: turbo run test --filter=chrome-extension
+          build: turbo run build --filter=chrome-extension
+          lint: turbo run lint --filter=chrome-extension
+        deployment:
+          type: chrome-web-store
+          config:
+            extension_id: ${{ secrets.CHROME_EXTENSION_ID }}
+            client_id: ${{ secrets.CHROME_CLIENT_ID }}
+            client_secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+            refresh_token: ${{ secrets.CHROME_REFRESH_TOKEN }}
 
 plugins:
-  !!merge <<: *plugins_config
+  slack:
+    webhook: https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
+    channels:
+      performance_alerts: performance-alerts
+      pr_updates: "#pr-updates"
+      ci_alerts: ci-alerts
+      security_alerts: "#security-alerts"
+      repo_updates: repo-updates
+
+  email:
+    team: team@example.com
+    security_team: security-team@example.com
+
+  github:
+    actions:
+    - GitHub Actions
+    pages:
+      branch: gh-pages
+
+  npm:
+    audit: true
+
+  snyk:
+    enabled: false
+
+  turbo:
+    enabled: true
+
+  chrome_web_store:
+    extension_id: ${{ secrets.CHROME_EXTENSION_ID }}
+    client_id: ${{ secrets.CHROME_CLIENT_ID }}
+    client_secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+    refresh_token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+
+  swagger:
+    enabled: true
+
+  eslint:
+    enabled: true
+
+  prettier:
+    enabled: true
+
+  dependabot:
+    enabled: true
+    package_ecosystems:
+    - npm
+    - github-actions
+    schedule:
+      interval: weekly
+
+  webhook:
+    url: https://example.com/webhook
+
+pr_management:
+  auto_label:
+    enabled: true
+    rules:
+    - pattern: '\\bbug\\b'
+      label: 'bug'
+    - pattern: '\\bfeature\\b'
+      label: 'enhancement'
+    - pattern: '\\bdocumentation\\b'
+      label: 'documentation'
+    - pattern: '\\btest\\b'
+      label: 'test'
+    - pattern: '\\bperformance\\b'
+      label: 'performance'
+  auto_assign:
+    enabled: true
+    expertise_map:
+      frontend: ['js', 'ts', 'jsx', 'tsx']
+      backend: ['py', 'rb', 'java', 'php']
+      devops: ['yml', 'yaml', 'tf', 'sh']
+  code_review:
+    required_approvals: 2
+    review_reminder_sla: 24 # hours
+    codeowners_file: .github/CODEOWNERS
+    pr_template: .github/templates/BASE/PULL_REQUEST_TEMPLATE.md
+    review_guidelines: .github/REVIEW_GUIDELINES.md
+  stale_pr:
+    threshold: 7 # days
+    exempt_labels:
+    - "work in progress"
+    - "blocked"
+  auto_merge:
+    enabled: true
+    conditions:
+    - all_checks_pass
+    - required_approvals_met
+  notifications:
+    slack_channel: "#pr-updates"
+    email_recipients:
+    - team@example.com
+  pr_analysis:
+    enabled: true
+    tools:
+    - eslint
+    - prettier
+    threshold:
+      warnings: 10
+      errors: 0
+  test_requirements:
+    run_unit_tests: true
+    run_integration_tests: true
+    coverage_threshold: 80
+  performance_check:
+    enabled: true
+    max_bundle_size: 500 # KB
+  security_scan:
+    enabled: true
+    tools:
+    - npm audit
+    - snyk
+  documentation_check:
+    enabled: true
+    required_files:
+    - README.md
+    - CHANGELOG.md
+  branch_naming:
+    pattern: '^(feature|bugfix|hotfix|chore)\/[a-z0-9-]+$'
+  commit_message:
+    pattern: '^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?: .{1,50}'
+  pr_size:
+    max_changes: 500 # lines
+  auto_update:
+    enabled: true
+    base_branches:
+    - main
+    - develop
+  conflict_resolution:
+    notify_author: true
+    suggest_rebase: true
+  review_assignment:
+    round_robin: true
+    max_reviewers: 3
+  pr_templates:
+    feature: .github/templates/PULL_REQUEST_TEMPLATE/feature.md
+    bugfix: .github/templates/PULL_REQUEST_TEMPLATE/bugfix.md
+    hotfix: .github/templates/PULL_REQUEST_TEMPLATE/hotfix.md
+  pr_checklist:
+    enabled: true
+    items:
+    - "Tests added/updated"
+    - "Documentation updated"
+    - "Code follows style guidelines"
+    - "Reviewed own code"
+  auto_close:
+    enabled: true
+    conditions:
+    - all_comments_resolved
+    - ci_passed
+    - required_approvals_met
+  metrics:
+    collect:
+    - time_to_first_review
+    - time_to_merge
+    - number_of_comments
+    - number_of_commits
+    report_schedule: "0 0 * * 1" # Weekly on Monday
+
+release_management:
+  version_bump:
+    strategy: semantic
+    default_increment: patch
+  changelog:
+    auto_generate: true
+    template: .github/templates/changelog_template.md
+  affected_apps:
+    detection_method: git_diff
+  pre_release_checks:
+  - run_tests
+  - build_app
+  post_release_actions:
+  - update_project_board
+  - notify_slack
+  release_notes:
+    template: .github/templates/release_notes_template.md
+    ai_generation:
+      enabled: true
+      prompt_template: .github/templates/release_notes_ai_prompt.md
+  deployment:
+    strategy: rolling
+    environments:
+    - production
+  approval_required:
+    production: true
+  rollback_strategy:
+    enabled: true
+    steps:
+    - revert_deployment
+    - notify_team
+
+security_dependency_management:
+  schedule: "0 2 * * 1" # Weekly on Monday at 2 AM UTC
+  security_check:
+    tools:
+    - npm audit
+    fail_on: high
+  dependency_update:
+    enabled: true
+    auto_merge: true
+    ignore_dev_dependencies: false
+  vulnerability_reporting:
+    enabled: true
+    issue_creation:
+      enabled: true
+      labels:
+      - security
+      - critical
+  ai_analysis:
+    enabled: true
+    template: .github/templates/security_vulnerability_report_template.md
+  update_security_policy:
+    enabled: true
+    policy_file: .github/SECURITY.md
