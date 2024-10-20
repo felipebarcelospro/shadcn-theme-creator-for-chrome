@@ -1,6 +1,7 @@
 import { Button } from "@repo/ui/components/ui/button";
 import { Card } from "@repo/ui/components/ui/card";
 import Link from 'next/link';
+import { WaitlistDialog } from "../components/waitlist-dialog";
 
 export default function About() {
   return (
@@ -118,18 +119,18 @@ export default function About() {
         <p className="text-base sm:text-lg text-muted-foreground mb-4 sm:mb-6">
           Transform your Shadcn/UI UI development workflow. Download our Chrome extension and start creating stunning, custom themes in minutes.
         </p>
-        <Button asChild className="inline-flex items-center text-sm sm:text-base">
-          <a href="https://chrome.google.com/webstore" target="_blank" rel="noopener noreferrer" className="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <WaitlistDialog>
+          <Button size="lg" className="w-full sm:w-auto inline-flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <circle cx="12" cy="12" r="4" />
               <line x1="21.17" y1="8" x2="12" y2="8" />
               <line x1="3.95" y1="6.06" x2="8.54" y2="14" />
               <line x1="10.88" y1="21.94" x2="15.46" y2="14" />
             </svg>
-            Install Extension
-          </a>
-        </Button>
+            Join Waitlist - <i>It's Free!</i>
+          </Button>
+        </WaitlistDialog>
       </section>
     </main>
   );
