@@ -91,7 +91,7 @@ jobs:
       - name: Create or Update Pull Request
         if: env.NO_COMMITS == 'false'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           echo "Processing PR for branch: $BRANCH_NAME"
@@ -113,6 +113,8 @@ jobs:
 
       - name: Link Related Issues
         if: env.NO_COMMITS == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           issues=$(gh issue list --search "$BRANCH_NAME" --json number,title)
           if [ -n "$issues" ]; then
@@ -154,15 +156,13 @@ jobs:
           echo "Checking for branches without PRs..."
           branches=$(git branch -r | grep -vE 'origin/(develop|main)' | grep -E 'origin/(feature|release|hotfix|chore|fix)/' | sed 's/origin\///')
           for branch in $branches; do
-            pr_exists=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:$branch&base=develop&state=open" | jq length)
+            pr_exists=$(gh pr list --head "$branch" --base develop --json number --jq 'length')
             if [ "$pr_exists" -eq 0 ]; then
               echo "Processing branch without PR: $branch"
               git checkout $branch
               ./.github/workflows/branch-management.yml
             else
-              pr_number=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                "https://api.github.com/repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:$branch&base=develop&state=open" | jq -r '.[0].number')
+              pr_number=$(gh pr list --head "$branch" --base develop --json number --jq '.[0].number')
               echo "PR #$pr_number exists for branch $branch. Checking for updates."
               branch_commits=$(git log origin/develop..$branch --oneline | wc -l)
               pr_commits=$(gh pr view $pr_number --json commits --jq '.commits | length')
