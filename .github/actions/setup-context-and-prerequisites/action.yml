@@ -21,143 +21,115 @@ outputs:
 runs:
   using: "composite"
   steps:
-  - name: Load and parse config.yml
-    shell: bash
-    run: |
-      CONFIG_PATH='.github/config.yml'
-      if [ ! -f "$CONFIG_PATH" ]; then
-        echo "::error::config.yml is missing"
-        exit 1
-      fi
-      CONFIG_DATA=$(yq eval -o=json "$CONFIG_PATH")
-      echo "config-data<<EOF" >> $GITHUB_OUTPUT
-      echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
-
-  - name: Detect package manager
-    id: detect-package-manager
-    shell: bash
-    run: |
-      PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager')
-      if [ -z "$PACKAGE_MANAGER" ] || [ "$PACKAGE_MANAGER" = "null" ]; then
-        if [ -f "package-lock.json" ]; then
-          PACKAGE_MANAGER="npm"
-        elif [ -f "yarn.lock" ]; then
-          PACKAGE_MANAGER="yarn"
-        elif [ -f "pnpm-lock.yaml" ]; then
-          PACKAGE_MANAGER="pnpm"
-        else
-          echo "::error::No supported package manager lock file found in the repository root"
-          exit 1
-        fi
-      fi
-      echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
-
   - name: Install dependencies
     shell: bash
-    env:
-      GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
-      case "${{ steps.detect-package-manager.outputs.package-manager }}" in
-        npm)
-          npm ci
-          ;;
-        yarn)
-          yarn install --frozen-lockfile
-          ;;
-        pnpm)
-          pnpm install --frozen-lockfile
-          ;;
-        *)
-          echo "::error::Unsupported package manager: ${{ steps.detect-package-manager.outputs.package-manager }}"
-          exit 1
-          ;;
-      esac
-      echo "installation-status=success" >> $GITHUB_OUTPUT
+      npm install fs js-yaml
 
-  - name: Fetch repository metadata
-    id: fetch-repo-metadata
-    shell: bash
-    env:
-      GITHUB_TOKEN: ${{ inputs.github-token }}
-    run: |
-      REPO_METADATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-        "https://api.github.com/repos/${{ github.repository }}")
-      echo "repo-metadata<<EOF" >> $GITHUB_OUTPUT
-      echo "$REPO_METADATA" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+  - name: Setup Context and Prerequisites
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ inputs.github-token }}
+      script: |
+        const fs = require('fs');
+        const yaml = require('js-yaml');
 
-  - name: Set up environment variables
-    id: set-env-vars
-    shell: bash
-    run: |
-      {
-        echo "REPO_NAME=${{ github.repository }}"
-        echo "REPO_OWNER=${{ github.repository_owner }}"
-        echo "GITHUB_SHA=${{ github.sha }}"
-        echo "GITHUB_REF=${{ github.ref }}"
-        echo "PACKAGE_MANAGER=${{ steps.detect-package-manager.outputs.package-manager }}"
-        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')"
-        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches | @json')"
-        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes | @json')"
-        echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy | @json')"
-        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches | @json')"
-      } >> $GITHUB_ENV
-      echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
+        // Load and parse config.yml
+        const configPath = '.github/config.yml';
+        if (!fs.existsSync(configPath)) {
+          core.setFailed('config.yml is missing');
+          return;
+        }
+        const configData = yaml.load(fs.readFileSync(configPath, 'utf8'));
+        core.setOutput('config-data', JSON.stringify(configData));
 
-  - name: Validate repository settings
-    shell: bash
-    run: |
-      HAS_ISSUES=$(echo "${{ steps.fetch-repo-metadata.outputs.repo-metadata }}" | jq -r '.has_issues')
-      HAS_PROJECTS=$(echo "${{ steps.fetch-repo-metadata.outputs.repo-metadata }}" | jq -r '.has_projects')
-      AUTO_LABELING=$(echo "$CONFIG_DATA" | jq -r '.issue_management.auto_label.enabled')
-      REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')
+        // Detect package manager
+        let packageManager = configData.packages?.global_settings?.ci_cd?.package_manager;
+        if (!packageManager) {
+          if (fs.existsSync('package-lock.json')) packageManager = 'npm';
+          else if (fs.existsSync('yarn.lock')) packageManager = 'yarn';
+          else if (fs.existsSync('pnpm-lock.yaml')) packageManager = 'pnpm';
+          else {
+            core.setFailed('No supported package manager lock file found in the repository root');
+            return;
+          }
+        }
+        core.setOutput('package-manager', packageManager);
 
-      if [ "$HAS_ISSUES" = "false" ] && [ "$AUTO_LABELING" = "true" ]; then
-        echo "::warning::Issues are not enabled for this repository, but issue management is configured"
-      fi
+        // Install dependencies
+        const { execSync } = require('child_process');
+        try {
+          switch (packageManager) {
+            case 'npm':
+              execSync('npm ci');
+              break;
+            case 'yarn':
+              execSync('yarn install --frozen-lockfile');
+              break;
+            case 'pnpm':
+              execSync('pnpm install --frozen-lockfile');
+              break;
+            default:
+              core.setFailed(`Unsupported package manager: ${packageManager}`);
+              return;
+          }
+          core.setOutput('installation-status', 'success');
+        } catch (error) {
+          core.setFailed(`Failed to install dependencies: ${error.message}`);
+          return;
+        }
 
-      if [ "$HAS_PROJECTS" = "false" ] && [ "$REPO_TYPE" = "monorepo" ]; then
-        echo "::warning::Projects are not enabled for this repository, but it is configured as a monorepo"
-      fi
+        // Fetch repository metadata
+        const repoMetadata = await github.rest.repos.get({
+          owner: context.repo.owner,
+          repo: context.repo.repo
+        });
 
-  - name: Set repository context
-    id: set-repo-context
-    shell: bash
-    run: |
-      CONTEXT=$(jq -n \
-        --argjson repoMetadata "${{ steps.fetch-repo-metadata.outputs.repo-metadata }}" \
-        --argjson config "$CONFIG_DATA" \
-        --arg branch "${GITHUB_REF#refs/heads/}" \
-        --arg commit "$GITHUB_SHA" \
-        --arg repoType "$REPO_TYPE" \
-        --argjson mainBranches "$(echo "$CONFIG_DATA" | jq '.repository.version_control.main_branches')" \
-        --argjson branchPrefixes "$(echo "$CONFIG_DATA" | jq '.repository.version_control.branch_prefixes')" \
-        --argjson mergeStrategy "$(echo "$CONFIG_DATA" | jq '.repository.version_control.merge_strategy')" \
-        --argjson protectedBranches "$(echo "$CONFIG_DATA" | jq '.repository.version_control.protected_branches')" \
-        --arg packageManager "${{ steps.detect-package-manager.outputs.package-manager }}" \
-        '{
-          repoMetadata: $repoMetadata,
-          config: $config,
-          branch: $branch,
-          commit: $commit,
-          repoType: $repoType,
-          mainBranches: $mainBranches,
-          branchPrefixes: $branchPrefixes,
-          mergeStrategy: $mergeStrategy,
-          protectedBranches: $protectedBranches,
-          packageManager: $packageManager
-        }')
-      echo "repository-context<<EOF" >> $GITHUB_OUTPUT
-      echo "$CONTEXT" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+        // Set up environment variables
+        const envVars = {
+          REPO_NAME: `${context.repo.owner}/${context.repo.repo}`,
+          REPO_OWNER: context.repo.owner,
+          GITHUB_SHA: context.sha,
+          GITHUB_REF: context.ref,
+          PACKAGE_MANAGER: packageManager,
+          REPO_TYPE: configData.repository.type,
+          MAIN_BRANCHES: JSON.stringify(configData.repository.version_control.main_branches),
+          BRANCH_PREFIXES: JSON.stringify(configData.repository.version_control.branch_prefixes),
+          MERGE_STRATEGY: JSON.stringify(configData.repository.version_control.merge_strategy),
+          PROTECTED_BRANCHES: JSON.stringify(configData.repository.version_control.protected_branches)
+        };
+        Object.entries(envVars).forEach(([key, value]) => {
+          core.exportVariable(key, value);
+        });
+        core.setOutput('environment-variables', 'Environment variables set');
 
-  - name: Output results
-    shell: bash
-    run: |
-      echo "Repository context: ${{ steps.set-repo-context.outputs.repository-context }}"
-      echo "Configuration data: $CONFIG_DATA"
-      echo "Environment variables set: ${{ steps.set-env-vars.outputs.environment-variables }}"
-      echo "Package manager: ${{ steps.detect-package-manager.outputs.package-manager }}"
-      echo "Installation status: ${{ steps.install-dependencies.outputs.installation-status }}"
-      echo "Setup context and prerequisites completed successfully"
+        // Validate repository settings
+        if (!repoMetadata.data.has_issues && configData.issue_management.auto_label.enabled) {
+          core.warning('Issues are not enabled for this repository, but issue management is configured');
+        }
+        if (!repoMetadata.data.has_projects && configData.repository.type === 'monorepo') {
+          core.warning('Projects are not enabled for this repository, but it is configured as a monorepo');
+        }
+
+        // Set repository context
+        const repositoryContext = {
+          repoMetadata: repoMetadata.data,
+          config: configData,
+          branch: context.ref.replace('refs/heads/', ''),
+          commit: context.sha,
+          repoType: configData.repository.type,
+          mainBranches: configData.repository.version_control.main_branches,
+          branchPrefixes: configData.repository.version_control.branch_prefixes,
+          mergeStrategy: configData.repository.version_control.merge_strategy,
+          protectedBranches: configData.repository.version_control.protected_branches,
+          packageManager: packageManager
+        };
+        core.setOutput('repository-context', JSON.stringify(repositoryContext));
+
+        // Output results
+        console.log('Repository context:', JSON.stringify(repositoryContext));
+        console.log('Configuration data:', JSON.stringify(configData));
+        console.log('Environment variables set:', core.getOutput('environment-variables'));
+        console.log('Package manager:', packageManager);
+        console.log('Installation status:', core.getOutput('installation-status'));
+        console.log('Setup context and prerequisites completed successfully');
