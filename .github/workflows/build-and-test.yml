@@ -21,23 +21,8 @@ jobs:
       - name: Check for Changes
         id: check
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            base_sha=${{ github.event.pull_request.base.sha }}
-            head_sha=${{ github.event.pull_request.head.sha }}
-          else
-            base_sha=${{ github.event.before }}
-            head_sha=${{ github.sha }}
-          fi
-
-          changes=$(git diff --name-only $base_sha $head_sha | grep -E '^(apps/chrome-extension|packages|apps/web)/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
-          
-          if [ -z "$changes" ] || [ "$changes" == "[]" ]; then
-            echo "changes=[\"all\"]" >> $GITHUB_OUTPUT
-            echo "Detected changes in all projects"
-          else
-            echo "changes=$changes" >> $GITHUB_OUTPUT
-            echo "Detected changes: $changes"
-          fi
+          echo "changes=[\"all\"]" >> $GITHUB_OUTPUT
+          echo "Detected changes in all projects"
 
   build_packages:
     runs-on: ubuntu-latest
@@ -128,25 +113,25 @@ jobs:
 
       - name: Update Version in Files
         run: |
-          jq --arg version "${{ steps.determine_version.outputs.version }}" '.version = $version' apps/chrome-extension/package.json > tmp.json && mv tmp.json apps/chrome-extension/package.json
-          jq --arg version "${{ steps.determine_version.outputs.version }}" '.version = $version' package.json > tmp.json && mv tmp.json package.json
+          jq --arg version "${{ steps.determine_version.outputs.changes }}" '.version = $version' apps/chrome-extension/package.json > tmp.json && mv tmp.json apps/chrome-extension/package.json
+          jq --arg version "${{ steps.determine_version.outputs.changes }}" '.version = $version' package.json > tmp.json && mv tmp.json package.json
 
       - name: Commit Version Update
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add apps/chrome-extension/package.json package.json
-          git commit -m "chore: bump version to ${{ steps.determine_version.outputs.version }}"
+          git commit -m "chore: bump version to ${{ steps.determine_version.outputs.changes }}"
           git push
 
       - name: Zip Chrome Extension
         run: |
           mkdir -p releases
           cd apps/chrome-extension/dist
-          zip -r ../../../releases/STC_Beta_${{ steps.determine_version.outputs.version }}.zip .
+          zip -r ../../../releases/STC_Beta_${{ steps.determine_version.outputs.changes }}.zip .
 
       - name: Upload Chrome Extension Zip
         uses: actions/upload-artifact@v4
         with:
           name: chrome-extension
-          path: releases/STC_Beta_${{ steps.determine_version.outputs.version }}.zip
+          path: releases/STC_Beta_${{ steps.determine_version.outputs.changes }}.zip
