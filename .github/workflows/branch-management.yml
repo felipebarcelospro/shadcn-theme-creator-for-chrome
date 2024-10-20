@@ -77,12 +77,12 @@ jobs:
           url: 'https://api.groq.com/openai/v1/chat/completions'
           method: 'POST'
           customHeaders: '{"Authorization": "Bearer ${{ secrets.GROQ_API_KEY }}", "Content-Type": "application/json"}'
-          data: >
+          data: |
             {
               "model": "llama-3.1-70b-versatile",
               "messages": [
                 {"role": "system", "content": "You are an AI assistant tasked with creating pull request titles and descriptions. Respond in JSON format with keys 'title' and 'body'."},
-                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: ${{ env.BRANCH_NAME }}, Commits: ${{ toJson(github.event.commits) }}"}
+                {"role": "user", "content": "Create a pull request title and description for the following branch and commits: Branch: ${{ env.BRANCH_NAME }}, Commits: ${{ github.event.commits }}"}
               ],
               "temperature": 0.4,
               "response_format": {"type": "json_object"}
