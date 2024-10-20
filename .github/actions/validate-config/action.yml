@@ -9,42 +9,51 @@ inputs:
 outputs:
   config-validation-status:
     description: 'Boolean indicating if the configuration is valid'
+  installation-status:
+    description: 'Status of the installation process'
 
 runs:
   using: 'composite'
   steps:
-  - name: Install yq
+  - name: Check package manager
     shell: bash
     run: |
-      sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
-
-  - name: Check config.yml existence
-    shell: bash
-    run: |
-      if [ ! -f ".github/config.yml" ]; then
-        echo "config-validation-status=false" >> $GITHUB_OUTPUT
-        echo "::error::config.yml file not found in .github directory"
-        exit 1
+      if [ "yarn" = "npm" ]; then
+        echo "installation-status=success" >> $GITHUB_OUTPUT
       fi
 
-  - name: Validate YAML structure
-    shell: bash
-    run: |
-      if ! yq eval '.github/config.yml' > /dev/null 2>&1; then
-        echo "config-validation-status=false" >> $GITHUB_OUTPUT
-        echo "::error::config.yml is not a valid YAML file"
-        exit 1
-      fi
+  - name: Validate config
+    uses: actions/github-script@v7
+    with:
+      github-token: ${{ inputs.github-token }}
+      script: |
+        const fs = require('fs');
+        const yaml = require('js-yaml');
 
-  - name: Validate config structure
-    shell: bash
-    run: |
-      required_keys=("repository" "issue_management" "pr_management" "release_management" "security_dependency_management" "metrics_generation" "packages" "plugins")
-      for key in "${required_keys[@]}"; do
-        if ! yq eval ".$key" .github/config.yml > /dev/null 2>&1; then
-          echo "config-validation-status=false" >> $GITHUB_OUTPUT
-          echo "::error::Required key '$key' not found in config.yml"
-          exit 1
-        fi
-      done
-      echo "config-validation-status=true" >> $GITHUB_OUTPUT
+        const CONFIG_PATH = '.github/config.yml';
+
+        try {
+          if (!fs.existsSync(CONFIG_PATH)) {
+            core.setFailed('config.yml file not found in .github directory');
+            core.setOutput('config-validation-status', 'false');
+            return;
+          }
+
+          const configContent = fs.readFileSync(CONFIG_PATH, 'utf8');
+          const config = yaml.load(configContent);
+
+          const requiredKeys = ['repository', 'issue_management', 'pr_management', 'release_management', 'security_dependency_management', 'metrics_generation', 'packages', 'plugins'];
+
+          for (const key of requiredKeys) {
+            if (!(key in config)) {
+              core.setFailed(`Required key '${key}' not found in config.yml`);
+              core.setOutput('config-validation-status', 'false');
+              return;
+            }
+          }
+
+          core.setOutput('config-validation-status', 'true');
+        } catch (error) {
+          core.setFailed(`Error validating config: ${error.message}`);
+          core.setOutput('config-validation-status', 'false');
+        }

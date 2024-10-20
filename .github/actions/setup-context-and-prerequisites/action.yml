@@ -15,6 +15,8 @@ outputs:
     description: 'Set environment variables'
   package-manager:
     description: 'Detected package manager'
+  installation-status:
+    description: 'Status of the installation process'
 
 runs:
   using: "composite"
@@ -32,6 +34,13 @@ runs:
       else
         echo "::error::No package manager lock file found"
         exit 1
+      fi
+
+  - name: Check package manager
+    shell: bash
+    run: |
+      if [ "yarn" = "npm" ]; then
+        echo "installation-status=success" >> $GITHUB_OUTPUT
       fi
 
   - name: Install dependencies
@@ -57,15 +66,28 @@ runs:
 
   - name: Load and parse config.yml
     id: config
-    shell: bash
-    run: |
-      CONFIG_PATH='.github/config.yml'
-      if [ ! -f "$CONFIG_PATH" ]; then
-        echo "::error::config.yml is missing"
-        exit 1
-      fi
-      CONFIG_DATA=$(yq eval -o=json "$CONFIG_PATH")
-      echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
+    uses: actions/github-script@v7
+    with:
+      github-token: ${{ inputs.github-token }}
+      script: |
+        const fs = require('fs');
+        const yaml = require('js-yaml');
+
+        const CONFIG_PATH = '.github/config.yml';
+
+        try {
+          if (!fs.existsSync(CONFIG_PATH)) {
+            core.setFailed('config.yml is missing');
+            return;
+          }
+
+          const configContent = fs.readFileSync(CONFIG_PATH, 'utf8');
+          const config = yaml.load(configContent);
+
+          core.setOutput('config-data', JSON.stringify(config));
+        } catch (error) {
+          core.setFailed(`Error loading or parsing config.yml: ${error.message}`);
+        }
 
   - name: Set up environment variables
     id: set-env-vars

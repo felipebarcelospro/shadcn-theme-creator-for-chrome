@@ -265,6 +265,10 @@ plugins:
       security_alerts: "#security-alerts"
       repo_updates: repo-updates
 
+  telegram:
+    bot-token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    chat-id: ${{ secrets.TELEGRAM_CHAT_ID }}
+
   email:
     team: team@example.com
     security_team: security-team@example.com
