@@ -34,14 +34,13 @@ jobs:
           github-token: ${{ secrets.GH_TOKEN }}
           debug: 'true'
 
-  repository-setup:
+  setup-branches:
     needs: check-repository-setup
     if: needs.check-repository-setup.outputs.is-configured == 'false'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
       SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -61,40 +60,83 @@ jobs:
         run: |
           echo "Debug: An error occurred during branch creation/update"
           echo "operation-status=failed" >> $GITHUB_OUTPUT
-        
-      - name: Generate Content
-        id: generate-content
+
+  generate-content:
+    needs: check-repository-setup
+    if: needs.check-repository-setup.outputs.is-configured == 'false'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+    steps:
+      - name: Generate Wiki Content
+        id: generate-wiki-content
         uses: ./.github/actions/ai-generate-content
         with:
           ai-api-key: ${{ secrets.GOOGLE_AI_API_KEY }}
-          content-type: "repository_docs"
+          content-type: "wiki_page"
           context-data: ${{ env.SETUP_CONTEXT }}
-          template-path: .github/templates/repository_setup_template.md
+          template-path: .github/templates/wiki_template.md
           tone: ${{ env.SETUP_CONTEXT.config.repository.documentation_tone }}
           max-length: ${{ env.SETUP_CONTEXT.config.repository.documentation_max_length }}
 
+      - name: Generate Discussion Content
+        id: generate-discussion-content
+        uses: ./.github/actions/ai-generate-content
+        with:
+          ai-api-key: ${{ secrets.GOOGLE_AI_API_KEY }}
+          content-type: "discussion_post"
+          context-data: ${{ env.SETUP_CONTEXT }}
+          template-path: .github/templates/discussion_template.md
+          tone: ${{ env.SETUP_CONTEXT.config.repository.documentation_tone }}
+          max-length: ${{ env.SETUP_CONTEXT.config.repository.documentation_max_length }}
+
+  setup-repository-rules:
+    needs: [check-repository-setup, setup-branches]
+    if: needs.check-repository-setup.outputs.is-configured == 'false'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+    steps:
       - name: Setup Branch Protection Rules
-        uses: ./.github/actions/apply-branch-protection
+        uses: ./.github/actions/setup-repository-branch-rules
         with:
           github-token: ${{ env.GH_TOKEN }}
           branch-patterns: ${{ env.SETUP_CONTEXT.protectedBranches }}
           protection-rules: ${{ env.SETUP_CONTEXT.config.repository.version_control.branch_protection_rules }}
 
+  create-wiki-and-discussions:
+    needs: [check-repository-setup, generate-content]
+    if: needs.check-repository-setup.outputs.is-configured == 'false'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+    steps:
       - name: Create Wiki Pages
         uses: ./.github/actions/create-wiki-page
         with:
           github-token: ${{ env.GH_TOKEN }}
           page-name: "Git Flow Process"
-          page-content: ${{ steps.generate-content.outputs.generated-content }}
+          page-content: ${{ needs.generate-content.outputs.generate-wiki-content.generated-content }}
 
       - name: Create Discussion Posts
         uses: ./.github/actions/create-discussion-post
         with:
           discussion-title: "Welcome to the Repository"
-          discussion-content: ${{ steps.generate-content.outputs.generated-content }}
+          discussion-content: ${{ needs.generate-content.outputs.generate-discussion-content.generated-content }}
           category: ${{ env.SETUP_CONTEXT.config.repository.initial_discussion_category }}
           github-token: ${{ env.GH_TOKEN }}
 
+  setup-repository-features:
+    needs: check-repository-setup
+    if: needs.check-repository-setup.outputs.is-configured == 'false'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+    steps:
       - name: Setup Issue Labels
         uses: ./.github/actions/setup-issue-labels
         with:
@@ -119,6 +161,14 @@ jobs:
           allow-rebase-merge: ${{ env.SETUP_CONTEXT.config.repository.version_control.merge_strategy.allow_rebase_merge }}
           delete-branch-on-merge: ${{ env.SETUP_CONTEXT.config.repository.version_control.delete_branch_on_merge }}
 
+  setup-security-features:
+    needs: check-repository-setup
+    if: needs.check-repository-setup.outputs.is-configured == 'false'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+    steps:
       - name: Setup Dependabot
         uses: ./.github/actions/setup-dependabot
         with:
@@ -131,6 +181,19 @@ jobs:
         with:
           github-token: ${{ env.GH_TOKEN }}
           repository-admins: ${{ env.SETUP_CONTEXT.config.repository.default_code_owners }}
+
+  finalize-setup:
+    needs: [setup-branches, setup-repository-rules, create-wiki-and-discussions, setup-repository-features, setup-security-features]
+    if: needs.check-repository-setup.outputs.is-configured == 'false'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ env.GH_TOKEN }}
 
       - name: Commit Changes
         uses: ./.github/actions/commit-changes
@@ -156,7 +219,7 @@ jobs:
           notification-type: "setup_completion"
           notification-data: |
             {
-              "setup-details": ${{ toJson(steps) }}
+              "setup-details": ${{ needs.check-repository-setup.outputs.setup-context }}
             }
           github-token: ${{ env.GH_TOKEN }}
 

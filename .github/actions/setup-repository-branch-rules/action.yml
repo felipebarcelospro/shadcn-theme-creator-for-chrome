@@ -1,0 +1,65 @@
+name: 'Setup Repository Branch Rules'
+description: 'Sets up branch protection rules for specified branches'
+
+inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+  branch-patterns:
+    description: 'JSON array of branch patterns to protect'
+    required: true
+  protection-rules:
+    description: 'JSON object containing protection rules'
+    required: true
+
+outputs:
+  rules-applied:
+    description: 'Summary of applied branch protection rules'
+
+runs:
+  using: "composite"
+  steps:
+  - name: Parse branch patterns and protection rules
+    id: parse-inputs
+    shell: bash
+    run: |
+      echo "Branch patterns: ${{ inputs.branch-patterns }}"
+      echo "Protection rules: ${{ inputs.protection-rules }}"
+
+  - name: Apply branch protection rules
+    uses: actions/github-script@v6
+    env:
+      BRANCH_PATTERNS: ${{ inputs.branch-patterns }}
+      PROTECTION_RULES: ${{ inputs.protection-rules }}
+    with:
+      github-token: ${{ inputs.github-token }}
+      script: |
+        const branchPatterns = JSON.parse(process.env.BRANCH_PATTERNS);
+        const protectionRules = JSON.parse(process.env.PROTECTION_RULES);
+
+        for (const pattern of branchPatterns) {
+          console.log(`Applying protection rules to branch pattern: ${pattern}`);
+
+          try {
+            await github.rest.repos.updateBranchProtection({
+              ...context.repo,
+              branch: pattern,
+              required_status_checks: protectionRules.required_status_checks,
+              enforce_admins: protectionRules.enforce_admins,
+              required_pull_request_reviews: protectionRules.required_pull_request_reviews,
+              restrictions: protectionRules.restrictions,
+              required_linear_history: protectionRules.required_linear_history,
+              allow_force_pushes: protectionRules.allow_force_pushes,
+              allow_deletions: protectionRules.allow_deletions
+            });
+            console.log(`Successfully applied protection rules to ${pattern}`);
+          } catch (error) {
+            console.error(`Error applying protection rules to ${pattern}: ${error.message}`);
+          }
+        }
+
+  - name: Generate summary
+    id: generate-summary
+    shell: bash
+    run: |
+      echo "Branch protection rules applied to patterns: ${{ inputs.branch-patterns }}" >> $GITHUB_OUTPUT
