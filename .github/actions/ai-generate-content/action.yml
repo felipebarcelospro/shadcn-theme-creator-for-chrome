@@ -54,9 +54,7 @@ runs:
       If a template is provided, use it as a guide for the structure and format of the content.
       EOF
       )
-      echo "PROMPT<<EOF" >> $GITHUB_ENV
-      echo "$prompt" >> $GITHUB_ENV
-      echo "EOF" >> $GITHUB_ENV
+      echo "$prompt" > prompt.txt
     shell: bash
 
   - name: Load template
@@ -64,9 +62,7 @@ runs:
     if: inputs.template-path
     run: |
       template=$(cat ${{ inputs.template-path }})
-      echo "TEMPLATE<<EOF" >> $GITHUB_ENV
-      echo "$template" >> $GITHUB_ENV
-      echo "EOF" >> $GITHUB_ENV
+      echo "$template" > template.txt
     shell: bash
 
   - name: Generate content
@@ -75,40 +71,43 @@ runs:
       response=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent" \
         -H "Authorization: Bearer ${{ inputs.ai-api-key }}" \
         -H "Content-Type: application/json" \
-        -d '{
-          "contents": [
-            {
-              "parts": [
-                {
-                  "text": "'"${PROMPT}"'"
-                }
-              ]
-            }
-          ],
-          "generationConfig": {
-            "temperature": 0.7,
-            "topK": 40,
-            "topP": 0.95,
-            "maxOutputTokens": $((${{ inputs.max-length }} / 4))
+        -d @- << EOF
+      {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": "$(cat prompt.txt)"
+              }
+            ]
           }
-        }')
+        ],
+        "generationConfig": {
+          "temperature": 0.7,
+          "topK": 40,
+          "topP": 0.95,
+          "maxOutputTokens": $(( ${{ inputs.max-length }} / 4 ))
+        }
+      }
+      EOF
+      )
 
-      content=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text')
-      metadata=$(echo "$response" | jq -r '.candidates[0].safetyRatings')
+      echo "$response" > response.json
 
-      echo "GENERATED_CONTENT<<EOF" >> $GITHUB_OUTPUT
-      echo "$content" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      content=$(jq -r '.candidates[0].content.parts[0].text' response.json)
+      metadata=$(jq -r '.candidates[0].safetyRatings' response.json)
 
-      echo "GENERATION_METADATA<<EOF" >> $GITHUB_OUTPUT
-      echo "$metadata" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "$content" > generated_content.txt
+      echo "$metadata" > generation_metadata.json
+
+      echo "generated-content=$(cat generated_content.txt)" >> $GITHUB_OUTPUT
+      echo "generation-metadata=$(cat generation_metadata.json)" >> $GITHUB_OUTPUT
     shell: bash
 
   - name: Debug - Generated content
     run: |
       echo "Generated content:"
-      echo "${{ steps.generate-content.outputs.GENERATED_CONTENT }}"
+      cat generated_content.txt
       echo "Generation metadata:"
-      echo "${{ steps.generate-content.outputs.GENERATION_METADATA }}"
+      cat generation_metadata.json
     shell: bash
