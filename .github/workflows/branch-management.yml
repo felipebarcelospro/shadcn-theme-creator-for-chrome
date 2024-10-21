@@ -29,7 +29,7 @@ jobs:
         uses: ./.github/actions/validate-branch-name
         with:
           branch-name: ${{ github.ref }}
-          branch-naming-rules: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.branch_prefixes }}
+          branch-naming-rules: ${{ steps.setup-context.outputs.branch-prefixes }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create or Update Branch
@@ -37,7 +37,7 @@ jobs:
         uses: ./.github/actions/create-or-update-branch
         with:
           branch-name: ${{ github.ref_name }}
-          base-branch: ${{ github.base_ref || fromJson(steps.setup-context.outputs.config-data).repository.version_control.main_branches[0] }}
+          base-branch: ${{ github.base_ref || steps.setup-context.outputs.main-branch }}
           commit-changes: ${{ toJson(github.event.commits) }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/apply-branch-protection
         with:
           branch-name: ${{ github.ref }}
-          protection-rules: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).repository.setup.branch_protection_rules) }}
+          protection-rules: ${{ steps.setup-context.outputs.branch-protection-rules }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Wait for Manual PR Creation
@@ -54,7 +54,7 @@ jobs:
         uses: ./.github/actions/wait-for-pr
         with:
           branch-name: ${{ github.ref }}
-          wait-time: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.pr_creation_wait_time }}
+          wait-time: ${{ steps.setup-context.outputs.pr-creation-wait-time }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate PR Description
@@ -77,7 +77,7 @@ jobs:
           branch-name: ${{ github.ref }}
           pr-title: ${{ github.event.pull_request.title || format('Update {0}', github.ref) }}
           pr-body: ${{ steps.generate-pr-description.outputs.generated-content }}
-          base-branch: ${{ github.base_ref || fromJson(steps.setup-context.outputs.config-data).repository.version_control.main_branches[0] }}
+          base-branch: ${{ github.base_ref || steps.setup-context.outputs.main-branch }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Merge Branch
@@ -87,7 +87,7 @@ jobs:
         with:
           source-branch: ${{ github.head_ref }}
           target-branch: ${{ github.base_ref }}
-          merge-strategy: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.merge_strategy }}
+          merge-strategy: ${{ steps.setup-context.outputs.merge-strategy }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Clean Up Branch
@@ -96,7 +96,7 @@ jobs:
         uses: ./.github/actions/clean-up-branch
         with:
           branch-name: ${{ github.head_ref }}
-          force-delete: ${{ fromJson(steps.setup-context.outputs.config-data).repository.repository_settings.delete_branch_on_merge }}
+          force-delete: ${{ steps.setup-context.outputs.delete-branch-on-merge }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Notification
@@ -117,6 +117,6 @@ jobs:
         if: github.event_name == 'schedule'
         uses: ./.github/actions/cleanup-stale-branches
         with:
-          stale-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).repository.version_control.stale_branch_threshold }}
-          exclude-branches: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).repository.version_control.protected_branches) }}
+          stale-threshold: ${{ steps.setup-context.outputs.stale-branch-threshold }}
+          exclude-branches: ${{ steps.setup-context.outputs.protected-branches }}
           github-token: ${{ secrets.GITHUB_TOKEN }}

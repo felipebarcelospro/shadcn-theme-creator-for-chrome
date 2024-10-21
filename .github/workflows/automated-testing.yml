@@ -29,7 +29,7 @@ jobs:
       - name: Get Packages
         id: get-packages
         run: |
-          packages=$(echo '${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific }}' | jq -r 'keys | @json')
+          packages=$(jq -r '.packages.package_specific | keys | @json' .github/config.yml)
           echo "packages=$packages" >> $GITHUB_OUTPUT
 
   test:
@@ -55,16 +55,16 @@ jobs:
         id: install-dependencies
         uses: ./.github/actions/install-dependencies
         with:
-          package-manager: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.package_manager }}
-          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
+          package-manager: ${{ steps.setup-context.outputs.package-manager }}
+          working-directory: ${{ steps.setup-context.outputs.package-path }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         id: run-tests
         uses: ./.github/actions/run-tests
         with:
-          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.test }}
-          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
+          test-command: ${{ steps.setup-context.outputs.test-command }}
+          working-directory: ${{ steps.setup-context.outputs.package-path }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate Test Report

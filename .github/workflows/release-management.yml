@@ -82,20 +82,30 @@ jobs:
           to_tag: ${{ steps.get-version.outputs.new_version }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get Package Config
+        id: get-package-config
+        run: |
+          package_config=$(jq -r '.config.packages.package_specific["${{ matrix.package }}"]' <<< '${{ steps.setup-context.outputs.repository-context }}')
+          echo "package_path=$(echo $package_config | jq -r '.path')" >> $GITHUB_OUTPUT
+          echo "build_command=$(echo $package_config | jq -r '.ci_cd.commands.build')" >> $GITHUB_OUTPUT
+          echo "test_command=$(echo $package_config | jq -r '.ci_cd.commands.test')" >> $GITHUB_OUTPUT
+          echo "deployment_type=$(echo $package_config | jq -r '.ci_cd.deployment.type')" >> $GITHUB_OUTPUT
+          echo "deployment_config=$(echo $package_config | jq -r '.ci_cd.deployment')" >> $GITHUB_OUTPUT
+
       - name: Build App
         id: build-app
         uses: ./.github/actions/build-app
         with:
-          working-directory: ${{ fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].path }}
-          build-command: ${{ fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].ci_cd.commands.build }}
+          working-directory: ${{ steps.get-package-config.outputs.package_path }}
+          build-command: ${{ steps.get-package-config.outputs.build_command }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         id: run-tests
         uses: ./.github/actions/run-tests
         with:
-          working-directory: ${{ fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].path }}
-          test-command: ${{ fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].ci_cd.commands.test }}
+          working-directory: ${{ steps.get-package-config.outputs.package_path }}
+          test-command: ${{ steps.get-package-config.outputs.test_command }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
@@ -130,8 +140,8 @@ jobs:
         with:
           package-name: ${{ matrix.package }}
           artifacts-path: ${{ steps.build-app.outputs.artifacts-path }}
-          deployment-type: ${{ fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].ci_cd.deployment.type }}
-          deployment-config: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].ci_cd.deployment) }}
+          deployment-type: ${{ steps.get-package-config.outputs.deployment_type }}
+          deployment-config: ${{ steps.get-package-config.outputs.deployment_config }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Project Documentation
@@ -165,11 +175,17 @@ jobs:
             }
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get Main Branch
+        id: get-main-branch
+        run: |
+          main_branch=$(jq -r '.config.repository.version_control.main_branches[0]' <<< '${{ steps.setup-context.outputs.repository-context }}')
+          echo "main_branch=$main_branch" >> $GITHUB_OUTPUT
+
       - name: Update Release Branch
         id: update-release-branch
         if: success()
         uses: ./.github/actions/update-release-branch
         with:
           release_branch: ${{ github.ref }}
-          main_branch: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.version_control.main_branches[0] }}
+          main_branch: ${{ steps.get-main-branch.outputs.main_branch }}
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -25,7 +25,7 @@ jobs:
         with:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
-          labeling-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.auto_label.rules }}
+          labeling-rules: ${{ steps.setup-context.outputs.auto-label-rules }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Auto Assign
@@ -33,7 +33,7 @@ jobs:
         with:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
-          assignment-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.auto_assign.expertise_map }}
+          assignment-rules: ${{ steps.setup-context.outputs.auto-assign-rules }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate Auto Response
@@ -46,7 +46,7 @@ jobs:
               "issue-title": "${{ github.event.issue.title }}",
               "issue-body": "${{ github.event.issue.body }}"
             }
-          template-path: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.auto_response.template_path }}
+          template-path: ${{ steps.setup-context.outputs.auto-response-template-path }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Issue
@@ -61,7 +61,7 @@ jobs:
         with:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
-          project-board-id: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.default_project_board }}
+          project-board-id: ${{ steps.setup-context.outputs.default-project-board }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Link Related Issues/PRs
@@ -75,7 +75,7 @@ jobs:
         uses: ./.github/actions/prioritize-issue
         with:
           issue-number: ${{ github.event.issue.number }}
-          prioritization-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.prioritization.rules }}
+          prioritization-rules: ${{ steps.setup-context.outputs.prioritization-rules }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set Milestone
@@ -83,7 +83,7 @@ jobs:
         with:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
-          milestone-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.milestone_setting }}
+          milestone-rules: ${{ steps.setup-context.outputs.milestone-rules }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Notifications
@@ -103,14 +103,14 @@ jobs:
         with:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
-          sla-timeframe: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.sla_tracking.timeframe }}
-          warning-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.sla_tracking.warning_threshold }}
+          sla-timeframe: ${{ steps.setup-context.outputs.sla-timeframe }}
+          warning-threshold: ${{ steps.setup-context.outputs.sla-warning-threshold }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Close Stale Issues
         if: github.event_name == 'schedule'
         uses: ./.github/actions/close-stale-issues
         with:
-          stale-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.stale_issue_threshold }}
-          exempt-labels: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.stale_exempt_labels }}
+          stale-threshold: ${{ steps.setup-context.outputs.stale-issue-threshold }}
+          exempt-labels: ${{ steps.setup-context.outputs.stale-exempt-labels }}
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -26,7 +26,7 @@ jobs:
         id: security-checks
         uses: ./.github/actions/run-security-checks
         with:
-          working-directory: ${{ fromJson(steps.setup-context.outputs.repository-context).repository.root_directory }}
+          working-directory: ${{ steps.setup-context.outputs.repository_root_directory }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: AI Analysis of Security Report
@@ -64,11 +64,11 @@ jobs:
         id: create-pr
         uses: ./.github/actions/create-or-update-pr
         with:
-          branch-name: ${{ fromJson(steps.setup-context.outputs.repository-context).repository.version_control.branch_prefixes.feature }}security-dependency-update
+          branch-name: ${{ steps.setup-context.outputs.feature_branch_prefix }}security-dependency-update
           pr-title: "Security and Dependency Updates"
           pr-body: ${{ steps.ai-update-summary.outputs.generated-content }}
-          base-branch: ${{ fromJson(steps.setup-context.outputs.repository-context).repository.version_control.main_branches[0] }}
-          labels: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).pr_management.labels.security_update) }}
+          base-branch: ${{ steps.setup-context.outputs.main_branch }}
+          labels: ${{ steps.setup-context.outputs.security_update_labels }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Security Policy
@@ -81,14 +81,14 @@ jobs:
 
       - name: Create Critical Security Issue
         id: create-critical-issue
-        if: fromJson(steps.security-checks.outputs.vulnerability-report).critical > 0
+        if: ${{ steps.security-checks.outputs.critical_vulnerabilities > 0 }}
         uses: ./.github/actions/create-issue
         with:
           issue-type: "security_vulnerability"
           issue-details: ${{ steps.security-checks.outputs.vulnerability-report }}
           issue-template: .github/templates/critical_security_issue_template.md
           issue-title: "Critical Security Vulnerabilities Detected"
-          labels: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).issue_management.labels.security_critical) }}
+          labels: ${{ steps.setup-context.outputs.security_critical_labels }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Notification
@@ -101,6 +101,6 @@ jobs:
               "vulnerability-report": ${{ steps.security-checks.outputs.vulnerability-report }},
               "ai-analysis": ${{ steps.ai-analysis.outputs.generated-content }},
               "pr-url": ${{ steps.create-pr.outputs.pr-url }},
-              "critical-issues": ${{ fromJson(steps.security-checks.outputs.vulnerability-report).critical }}
+              "critical-issues": ${{ steps.security-checks.outputs.critical_vulnerabilities }}
             }
           github-token: ${{ secrets.GITHUB_TOKEN }}
