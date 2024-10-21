@@ -27,6 +27,12 @@ outputs:
     description: 'Configuration for all apps in the repository'
   github_pages_urls:
     description: 'URLs of GitHub Pages for the repository'
+  metrics_data:
+    description: 'Metrics data from config.yml'
+  security_checks:
+    description: 'Security check configuration from config.yml'
+  performance_monitoring:
+    description: 'Performance monitoring configuration from config.yml'
 
 runs:
   using: "composite"
@@ -40,74 +46,49 @@ runs:
       sudo chmod +x /usr/bin/yq
 
   - name: Load and parse config.yml
+    id: load_config
     shell: bash
     run: |
-      echo "Current directory: $(pwd)"
-      echo "Contents of .github directory:"
-      ls -la .github/
-      echo "Attempting to read config.yml..."
-      cat "$GITHUB_WORKSPACE/.github/config.yml" || echo "Failed to read config.yml"
-
-      if [ ! -f "$GITHUB_WORKSPACE/.github/config.yml" ]; then
-        echo "Error: config.yml is missing"
+      CONFIG_CONTENT=$(cat "$GITHUB_WORKSPACE/.github/config.yml")
+      if [ -z "$CONFIG_CONTENT" ]; then
+        echo "Error: Failed to read config.yml"
         exit 1
       fi
-
-      CONFIG_DATA=$(yq eval -o=json "$GITHUB_WORKSPACE/.github/config.yml")
+      CONFIG_DATA=$(echo "$CONFIG_CONTENT" | yq eval -o=json -)
       if [ -z "$CONFIG_DATA" ]; then
         echo "Error: Failed to parse config.yml"
         exit 1
       fi
-
-      echo "config-data<<EOF" >> $GITHUB_OUTPUT
-      echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
-
-      # Validate essential config sections
-      if ! echo "$CONFIG_DATA" | jq -e '.repository' > /dev/null; then
-        echo "Error: 'repository' section is missing in config.yml"
-        exit 1
-      fi
+      echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
 
   - name: Detect package manager
+    id: detect_package_manager
     shell: bash
     run: |
-      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
-      if [ -z "$CONFIG_DATA" ]; then
-        echo "Error: Failed to read config-data from GITHUB_OUTPUT"
-        exit 1
-      fi
+      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
       PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager // "unknown"')
       echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
 
   - name: Fetch repository metadata
+    id: fetch_repo_metadata
     shell: bash
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
-      if [ -z "$GITHUB_TOKEN" ]; then
-        echo "Error: GITHUB_TOKEN is not set"
-        exit 1
-      fi
       REPO_METADATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
         "https://api.github.com/repos/$GITHUB_REPOSITORY")
       if [ -z "$REPO_METADATA" ]; then
         echo "Error: Failed to fetch repository metadata"
         exit 1
       fi
-      echo "repo-metadata<<EOF" >> $GITHUB_OUTPUT
-      echo "$REPO_METADATA" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "repo-metadata=$REPO_METADATA" >> $GITHUB_OUTPUT
 
   - name: Get changed files
+    id: get_changed_files
     shell: bash
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
-      if [ -z "$GITHUB_TOKEN" ]; then
-        echo "Error: GITHUB_TOKEN is not set"
-        exit 1
-      fi
       if [[ $GITHUB_REF == refs/pull/* ]]; then
         PR_NUMBER=${GITHUB_REF#refs/pull/}
         PR_NUMBER=${PR_NUMBER%/merge}
@@ -117,21 +98,13 @@ runs:
       else
         CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r $GITHUB_SHA)
       fi
-      if [ -z "$CHANGED_FILES" ]; then
-        echo "Warning: No changed files detected"
-      fi
-      echo "changed_files<<EOF" >> $GITHUB_OUTPUT
-      echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
 
   - name: Set environment variables
+    id: set_env_vars
     shell: bash
     run: |
-      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
-      if [ -z "$CONFIG_DATA" ]; then
-        echo "Error: Failed to read config-data from GITHUB_OUTPUT"
-        exit 1
-      fi
+      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
       {
         echo "REPO_NAME=${GITHUB_REPOSITORY}"
         echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
@@ -142,21 +115,19 @@ runs:
         echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes // {} | to_entries | map("\(.key)=\(.value)") | join(",")')"
         echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy // empty')"
         echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches // ["main", "develop"] | join(",")')"
+        echo "PR_CREATION_WAIT_TIME=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.pr_creation_wait_time // 15')"
+        echo "STALE_BRANCH_THRESHOLD=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.stale_branch_threshold // 30')"
       } >> $GITHUB_ENV
       echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
 
   - name: Set repository context
+    id: set_repo_context
     shell: bash
     run: |
-      REPO_METADATA=$(cat $GITHUB_OUTPUT | sed -n '/^repo-metadata<<EOF$/,/^EOF$/p' | sed '1d;$d')
-      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
-      CHANGED_FILES=$(cat $GITHUB_OUTPUT | sed -n '/^changed_files<<EOF$/,/^EOF$/p' | sed '1d;$d')
-      PACKAGE_MANAGER=$(cat $GITHUB_OUTPUT | grep '^package-manager=' | cut -d'=' -f2)
-
-      if [ -z "$REPO_METADATA" ] || [ -z "$CONFIG_DATA" ] || [ -z "$CHANGED_FILES" ] || [ -z "$PACKAGE_MANAGER" ]; then
-        echo "Error: Failed to read required data from GITHUB_OUTPUT"
-        exit 1
-      fi
+      REPO_METADATA='${{ steps.fetch_repo_metadata.outputs.repo-metadata }}'
+      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
+      CHANGED_FILES='${{ steps.get_changed_files.outputs.changed_files }}'
+      PACKAGE_MANAGER='${{ steps.detect_package_manager.outputs.package-manager }}'
 
       REPOSITORY_CONTEXT=$(jq -n \
         --argjson repoMetadata "$REPO_METADATA" \
@@ -176,38 +147,54 @@ runs:
           mergeStrategy: ($config.repository.version_control.merge_strategy // null),
           protectedBranches: ($config.repository.version_control.protected_branches // ["main", "develop"]),
           packageManager: $packageManager,
-          changedFiles: $changedFiles
+          changedFiles: $changedFiles,
+          prCreationWaitTime: ($config.repository.version_control.pr_creation_wait_time // 15),
+          staleBranchThreshold: ($config.repository.version_control.stale_branch_threshold // 30)
         }')
-      echo "repository-context<<EOF" >> $GITHUB_OUTPUT
-      echo "$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "repository-context=$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
 
   - name: Set apps configuration
+    id: set_apps_config
     shell: bash
     run: |
-      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
-      if [ -z "$CONFIG_DATA" ]; then
-        echo "Error: Failed to read config-data from GITHUB_OUTPUT"
-        exit 1
-      fi
+      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
       APPS_CONFIG=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific // {}')
-      echo "apps_configuration<<EOF" >> $GITHUB_OUTPUT
-      echo "$APPS_CONFIG" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "apps_configuration=$APPS_CONFIG" >> $GITHUB_OUTPUT
 
   - name: Set GitHub Pages URLs
+    id: set_github_pages_urls
     shell: bash
     run: |
-      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
-      if [ -z "$CONFIG_DATA" ]; then
-        echo "Error: Failed to read config-data from GITHUB_OUTPUT"
-        exit 1
-      fi
+      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
       PAGES_URL=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific.web.ci_cd.deployment.production.url // empty')
       if [ -z "$PAGES_URL" ]; then
         PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
       fi
       echo "github_pages_urls=[\"$PAGES_URL\"]" >> $GITHUB_OUTPUT
+
+  - name: Set metrics data
+    id: set_metrics_data
+    shell: bash
+    run: |
+      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
+      METRICS_DATA=$(echo "$CONFIG_DATA" | jq -r '.metrics_generation // {}')
+      echo "metrics_data=$METRICS_DATA" >> $GITHUB_OUTPUT
+
+  - name: Set security checks configuration
+    id: set_security_checks
+    shell: bash
+    run: |
+      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
+      SECURITY_CHECKS=$(echo "$CONFIG_DATA" | jq -r '.security_dependency_management // {}')
+      echo "security_checks=$SECURITY_CHECKS" >> $GITHUB_OUTPUT
+
+  - name: Set performance monitoring configuration
+    id: set_performance_monitoring
+    shell: bash
+    run: |
+      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
+      PERFORMANCE_MONITORING=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.performance_monitoring // {}')
+      echo "performance_monitoring=$PERFORMANCE_MONITORING" >> $GITHUB_OUTPUT
 
   - name: Completion message
     shell: bash
@@ -215,5 +202,5 @@ runs:
       echo "Setup context and prerequisites completed successfully"
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Repository Context"
-        cat $GITHUB_OUTPUT | sed -n '/^repository-context<<EOF$/,/^EOF$/p' | sed '1d;$d' | jq '.'
+        echo '${{ steps.set_repo_context.outputs.repository-context }}' | jq '.'
       fi
