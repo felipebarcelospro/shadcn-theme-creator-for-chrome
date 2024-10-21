@@ -23,7 +23,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get Packages
         id: get-packages
@@ -48,13 +48,13 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate Configuration
         id: validate-config
         uses: ./.github/actions/validate-config
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Dependencies
         id: install-dependencies
@@ -63,7 +63,7 @@ jobs:
           package-manager: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.package_manager }}
           cache-key: ${{ runner.os }}-${{ matrix.package }}-${{ hashFiles(format('{0}/package-lock.json', fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path)) }}
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Linting
         id: run-linting
@@ -71,7 +71,7 @@ jobs:
         with:
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
           lint-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.lint }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         id: run-tests
@@ -79,7 +79,7 @@ jobs:
         with:
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
           test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.test }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Code Coverage
         id: upload-coverage
@@ -96,7 +96,7 @@ jobs:
         with:
           build-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.build }}
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy Application
         id: deploy-app
@@ -107,7 +107,7 @@ jobs:
           artifacts-path: ${{ steps.build-app.outputs.artifacts-path }}
           deployment-type: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.deployment.type }}
           deployment-config: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.deployment.config) }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Post-Deployment Tests
         id: post-deployment-tests
@@ -116,7 +116,7 @@ jobs:
         with:
           app-url: ${{ steps.deploy-app.outputs.deployed-url }}
           test-suite: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.post_deployment_tests.url }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Notifications
         id: send-notifications
@@ -132,14 +132,14 @@ jobs:
               "run_id": "${{ github.run_id }}",
               "run_number": "${{ github.run_number }}"
             }
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Issue on Failure
         id: create-issue-on-failure
         if: failure()
         uses: ./.github/actions/create-issue
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           issue-title: "CI/CD Workflow Failure for ${{ matrix.package }}"
           issue-body: "The CI/CD workflow failed for package ${{ matrix.package }}. Please check the logs for more details."
           labels: "bug,ci-cd,${{ matrix.package }}"

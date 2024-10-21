@@ -39,7 +39,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Git Flow Branches
         id: create-git-flow-branches
@@ -47,7 +47,7 @@ jobs:
         with:
           branch-name: ${{ fromJson(steps.setup-context.outputs.repository-context).mainBranches[0] }}
           base-branch: 'main'
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Generate Content
         id: generate-content
@@ -58,13 +58,13 @@ jobs:
           template-path: .github/templates/repository_setup_template.md
           tone: ${{ fromJson(steps.setup-context.outputs.repository-context).config.documentation.tone }}
           max-length: ${{ fromJson(steps.setup-context.outputs.repository-context).config.documentation.max_length }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Branch Protection Rules
         id: setup-branch-protection
         uses: ./.github/actions/apply-branch-protection
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           branch-patterns: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).protectedBranches) }}
           protection-rules: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.branch_protection_rules) }}
 
@@ -72,7 +72,7 @@ jobs:
         id: create-wiki-pages
         uses: ./.github/actions/create-wiki-page
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           page-name: "Git Flow Process"
           page-content: ${{ steps.generate-content.outputs.generated-content }}
 
@@ -83,27 +83,27 @@ jobs:
           discussion-title: "Welcome to the Repository"
           discussion-content: ${{ steps.generate-content.outputs.generated-content }}
           category: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.initial_discussions[0] }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Issue Labels
         id: setup-issue-labels
         uses: ./.github/actions/setup-issue-labels
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           labels: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.initial_labels) }}
 
       - name: Setup Project Board
         id: setup-project-board
         uses: ./.github/actions/setup-project-board
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           columns: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.project_board.columns) }}
 
       - name: Setup Repository Settings
         id: setup-repository-settings
         uses: ./.github/actions/setup-repository-settings
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           has-wiki: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.has_wiki }}
           has-issues: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.has_issues }}
           has-projects: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.has_projects }}
@@ -116,7 +116,7 @@ jobs:
         id: setup-dependabot
         uses: ./.github/actions/setup-dependabot
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           ecosystems: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.dependabot_setup.package_ecosystems) }}
           config: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.dependabot_setup) }}
 
@@ -124,7 +124,7 @@ jobs:
         id: setup-codeowners
         uses: ./.github/actions/setup-codeowners
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           repository-admins: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.code_owners.default_owners) }}
 
       - name: Commit Changes
@@ -133,7 +133,7 @@ jobs:
         with:
           commit-message: "chore: initial repository setup"
           files: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.initial_files) }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Pull Request
         id: create-pull-request
@@ -145,7 +145,7 @@ jobs:
             chore: initial repository setup
             
             - feat: add initial repository files and configurations
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Notification
         id: send-notification
@@ -156,7 +156,7 @@ jobs:
             {
               "setup-details": ${{ toJson(steps) }}
             }
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Mark repository as configured
         id: mark-configured
@@ -168,4 +168,4 @@ jobs:
           git commit -m "chore: mark repository as configured"
           git push
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

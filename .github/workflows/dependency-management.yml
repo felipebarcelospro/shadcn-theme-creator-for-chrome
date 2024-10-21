@@ -20,7 +20,7 @@ jobs:
         uses: ./.github/actions/setup-context-and-prerequisites
         id: setup-context
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check for Updates
         id: check-updates
@@ -28,7 +28,7 @@ jobs:
         with:
           package-manager-type: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.package_manager }}
           current-dependencies: ${{ steps.setup-context.outputs.current-dependencies }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Security Vulnerability Scan
         id: security-scan
@@ -36,7 +36,7 @@ jobs:
         with:
           current-dependencies: ${{ steps.setup-context.outputs.current-dependencies }}
           vulnerability-databases: ${{ fromJson(steps.setup-context.outputs.config-data).security_dependency_management.security_check.tools }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Update PRs
         id: create-dependency-update-prs
@@ -44,7 +44,7 @@ jobs:
         with:
           update-report: ${{ steps.check-updates.outputs.update-report }}
           vulnerability-report: ${{ steps.security-scan.outputs.vulnerability-report }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests on Update PRs
         id: run-tests
@@ -54,7 +54,7 @@ jobs:
           test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.commands.test }}
           coverage-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.commands.coverage }}
           coverage-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.test_requirements.coverage_threshold }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update PR Descriptions
         uses: ./.github/actions/create-or-update-pr
@@ -64,14 +64,14 @@ jobs:
             Test Results: ${{ steps.run-tests.outputs.test-status }}
             Coverage Report: ${{ steps.run-tests.outputs.coverage-report }}
             Update Details: ${{ steps.check-updates.outputs.update-report }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Auto-merge Minor/Patch Updates
         uses: ./.github/actions/auto-merge-updates
         with:
           pr-details: ${{ steps.create-dependency-update-prs.outputs.created-prs }}
           auto-merge-settings: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.auto_merge }}
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify Team
         if: ${{ fromJson(steps.setup-context.outputs.config-data).security_dependency_management.vulnerability_reporting.enabled }}
@@ -83,4 +83,4 @@ jobs:
               "created-prs": ${{ steps.create-dependency-update-prs.outputs.created-prs }},
               "security-vulnerabilities": ${{ steps.security-scan.outputs.vulnerability-report }}
             }
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

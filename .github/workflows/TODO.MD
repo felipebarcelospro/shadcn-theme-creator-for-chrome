@@ -8,7 +8,7 @@
 1. Setup Context
    - Use: ./.github/actions/setup-context-and-prerequisites
    - Input:
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output: 
      repository-context: JSON object containing repository context
      config-data: Parsed configuration data
@@ -17,7 +17,7 @@
 2. Validate Configuration
    - Use: ./.github/actions/validate-config
    - Input: 
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      config-validation-status: Boolean indicating if the configuration is valid
 
@@ -68,7 +68,7 @@
 8. Analyze Code
    - Use: ./.github/actions/analyze-code
    - Input:
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
      working-directory: '.'
    - Output:
      analysis-results: JSON object with analysis results
@@ -112,7 +112,7 @@
 13. Update Documentation
     - Use: ./.github/actions/update-documentation
     - Input:
-      github-token: ${{ github.token }}
+      github-token: ${{ secrets.GITHUB_TOKEN }}
       api-changes: ${{ steps.analyze-code.outputs.api-changes }}
     - Output:
       documentation-update-status: Status of documentation update (updated/no-update-needed)
@@ -143,7 +143,7 @@
 
 ## Environment Variables:
 - CONFIG: Content of config.json
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 ## Templates Used:
 - .github/templates/ci-cd_workflow_template.md
@@ -173,7 +173,7 @@
 1. Setup Context
    - Use: ./.github/actions/setup-context-and-prerequisites
    - Input:
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output: 
      repository-context: JSON object containing repository context
      config-data: Parsed configuration data
@@ -193,7 +193,7 @@
    - Input: 
      branch-name: ${{ github.ref }}
      base-branch: ${{ github.base_ref }}
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      branch-operation: Created/Updated/No-change
      branch-sha: SHA of the latest commit on the branch
@@ -203,7 +203,7 @@
    - Input: 
      branch-name: ${{ github.ref }}
      protection-rules: ${{ fromJson(env.CONFIG).branchProtectionRules }}
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      protection-status: Applied/Failed/Already-protected
 
@@ -231,7 +231,7 @@
      branch-name: ${{ github.ref }}
      pr-title: ${{ github.event.head_commit.message }}
      pr-description: ${{ steps.generate-pr-description.outputs.generated-description }}
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      pr-number: Number of the created/updated PR
      pr-url: URL of the PR
@@ -242,7 +242,7 @@
      source-branch: ${{ github.ref }}
      target-branch: ${{ github.base_ref }}
      merge-strategy: ${{ fromJson(env.CONFIG).mergeStrategy }}
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      merge-status: Success/Conflict/Failed
      merge-commit-sha: SHA of the merge commit (if successful)
@@ -252,7 +252,7 @@
    - Input: 
      branch-name: ${{ github.ref }}
      auto-delete: ${{ fromJson(env.CONFIG).autoDeleteMergedBranches }}
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      cleanup-status: Deleted/Kept/Failed
 
@@ -270,7 +270,7 @@
     - Input: 
       stale-threshold: ${{ fromJson(env.CONFIG).staleBranchThreshold }}
       protected-branches: ${{ fromJson(env.CONFIG).protectedBranches }}
-      github-token: ${{ github.token }}
+      github-token: ${{ secrets.GITHUB_TOKEN }}
     - Output:
       cleaned-branches: List of branches that were deleted
       remaining-stale-branches: List of stale branches that couldn't be deleted
@@ -293,7 +293,7 @@
 
 ## Environment Variables:
 - CONFIG: Content of config.json
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 ## Required Configuration Properties:
 - From config.json:
@@ -332,7 +332,7 @@
 1. Setup Context
    - Use: ./.github/actions/setup-context-and-prerequisites
    - Input:
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output: 
      repository-context: JSON object containing repository context
      config-data: Parsed configuration data
@@ -370,7 +370,7 @@
      comment-body: ${{ steps.generate-auto-response.outputs.generated-response }}
      update-body: true
      body-update: "## Steps to Reproduce\n\n[Please provide steps here]"
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      update-status: Success/Failed
 
@@ -379,7 +379,7 @@
    - Input:
      issue-number: ${{ github.event.issue.number }}
      project-board: ${{ fromJson(env.CONFIG).defaultProjectBoard }}
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      card-id: ID of the created project card
 
@@ -388,7 +388,7 @@
    - Input:
      issue-number: ${{ github.event.issue.number }}
      similarity-threshold: ${{ fromJson(env.CONFIG).issueSimilarityThreshold }}
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      linked-items: List of linked issues and PRs
 
@@ -438,7 +438,7 @@
     - Input: 
       stale-threshold: ${{ fromJson(env.CONFIG).staleIssueThreshold }}
       exempt-labels: ${{ fromJson(env.CONFIG).staleExemptLabels }}
-      github-token: ${{ github.token }}
+      github-token: ${{ secrets.GITHUB_TOKEN }}
     - Output:
       closed-issues: List of issues closed due to staleness
 
@@ -464,7 +464,7 @@
 
 ## Environment Variables:
 - CONFIG: Content of config.json
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 ## Templates Used:
 - .github/templates/issue_create_template.md
@@ -496,7 +496,7 @@
 1. Setup Context
    - Use: ./.github/actions/setup-context-and-prerequisites
    - Input:
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output: 
      repository-context: JSON object containing repository context
      config-data: Parsed configuration data
@@ -506,7 +506,7 @@
    - Use: ./.github/actions/check-existing-pr
    - Input:
      branch-name: ${{ github.head_ref }}
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      pr-exists: Boolean indicating if PR already exists
      existing-pr-number: Number of existing PR (if any)
@@ -533,7 +533,7 @@
 5. Analyze Code
    - Use: ./.github/actions/analyze-code
    - Input:
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
      pr-number: ${{ github.event.pull_request.number }}
    - Output:
      analysis-results: JSON object with analysis results
@@ -565,7 +565,7 @@
      pr-body: ${{ steps.generate-review-comments.outputs.generated-comments }}
      labels: ${{ steps.auto-label.outputs.applied-labels }}
      reviewers: ${{ steps.auto-assign.outputs.assigned-reviewers }}
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      update-status: Success/Failed
 
@@ -574,7 +574,7 @@
    - Input:
      pr-number: ${{ github.event.pull_request.number }}
      stale-threshold: ${{ fromJson(env.CONFIG).prStaleThreshold }}
-     github-token: ${{ github.token }}
+     github-token: ${{ secrets.GITHUB_TOKEN }}
    - Output:
      pr-status: Active/Stale/Needs-Attention
 
@@ -609,7 +609,7 @@
 
 ## Environment Variables:
 - CONFIG: Content of config.json
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 ## Templates Used:
 - .github/templates/pull-request_create_template.md
@@ -639,7 +639,7 @@
 1. Setup Context
    - Use: ./.github/actions/setup-context-and-prerequisites
    - Input: 
-     - GITHUB_TOKEN: ${{ github.token }}
+     - GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
      - CONFIG: ${{ env.CONFIG }}
    - Output: 
      - repository_context: JSON object with repository details
@@ -789,7 +789,7 @@
 
 ## Environment Variables:
 - CONFIG: Content of config.json
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 ## Templates Used:
 - .github/templates/release_notes_changelog.md
@@ -905,7 +905,7 @@ This workflow performs security checks and dependency updates.
   - notification.settings
 
 ## Environment Variables:
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 - CONFIG: ${{ env.CONFIG }}
 
 ## Templates Used:
@@ -1026,7 +1026,7 @@ This workflow updates project documentation.
   - notification.preferences
 
 ## Environment Variables:
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 - CONFIG: ${{ env.CONFIG }}
 
 ## Templates Used:
@@ -1161,7 +1161,7 @@ This workflow generates project metrics periodically and provides insights.
   - webhook.endpoints
 
 ## Environment Variables:
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 - CONFIG: ${{ env.CONFIG }}
 - WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
 
@@ -1337,7 +1337,7 @@ This workflow handles initial repository setup and maintenance for Git Flow impl
   - notification.preferences
 
 ## Environment Variables:
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 - CONFIG: ${{ env.CONFIG }}
 
 ## Templates Used:
@@ -1443,7 +1443,7 @@ This workflow handles initial repository setup and maintenance for Git Flow impl
   - webhook.endpoints
 
 ## Environment Variables:
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 - CONFIG: ${{ env.CONFIG }}
 - WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
 
@@ -1540,7 +1540,7 @@ This workflow handles initial repository setup and maintenance for Git Flow impl
   - last_known_good_commit: SHA of the last known good deployment
 
 ## Environment Variables:
-- GITHUB_TOKEN: ${{ github.token }}
+- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 - CONFIG: ${{ env.CONFIG }}
 
 ## Templates Used:
