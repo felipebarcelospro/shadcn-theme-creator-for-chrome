@@ -61,12 +61,43 @@ runs:
       fi
       echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
 
+  - name: Normalize config data
+    id: normalize_config
+    shell: bash
+    run: |
+      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
+      NORMALIZED_CONFIG=$(echo "$CONFIG_DATA" | jq '{
+        repository: {
+          type: (.repository.type // "monorepo"),
+          version_control: {
+            main_branches: (.repository.version_control.main_branches // ["main", "develop"]),
+            branch_prefixes: (.repository.version_control.branch_prefixes // {}),
+            merge_strategy: (.repository.version_control.merge_strategy // null),
+            protected_branches: (.repository.version_control.protected_branches // ["main", "develop"]),
+            pr_creation_wait_time: (.repository.version_control.pr_creation_wait_time // 15),
+            stale_branch_threshold: (.repository.version_control.stale_branch_threshold // 30)
+          }
+        },
+        packages: {
+          global_settings: {
+            ci_cd: {
+              package_manager: (.packages.global_settings.ci_cd.package_manager // "npm")
+            },
+            performance_monitoring: (.packages.global_settings.performance_monitoring // {})
+          },
+          package_specific: (.packages.package_specific // {})
+        },
+        metrics_generation: (.metrics_generation // {}),
+        security_dependency_management: (.security_dependency_management // {})
+      }')
+      echo "normalized-config=$NORMALIZED_CONFIG" >> $GITHUB_OUTPUT
+
   - name: Detect package manager
     id: detect_package_manager
     shell: bash
     run: |
-      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
-      PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager // "unknown"')
+      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      PACKAGE_MANAGER=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.global_settings.ci_cd.package_manager')
       echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
 
   - name: Fetch repository metadata
@@ -104,19 +135,19 @@ runs:
     id: set_env_vars
     shell: bash
     run: |
-      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
+      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
       {
         echo "REPO_NAME=${GITHUB_REPOSITORY}"
         echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
         echo "GITHUB_SHA=${GITHUB_SHA}"
         echo "GITHUB_REF=${GITHUB_REF}"
-        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type // "monorepo"')"
-        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches // ["main", "develop"] | join(",")')"
-        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes // {} | to_entries | map("\(.key)=\(.value)") | join(",")')"
-        echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy // empty')"
-        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches // ["main", "develop"] | join(",")')"
-        echo "PR_CREATION_WAIT_TIME=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.pr_creation_wait_time // 15')"
-        echo "STALE_BRANCH_THRESHOLD=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.stale_branch_threshold // 30')"
+        echo "REPO_TYPE=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.type')"
+        echo "MAIN_BRANCHES=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.main_branches | join(",")')"
+        echo "BRANCH_PREFIXES=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.branch_prefixes | to_entries | map("\(.key)=\(.value)") | join(",")')"
+        echo "MERGE_STRATEGY=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.merge_strategy')"
+        echo "PROTECTED_BRANCHES=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.protected_branches | join(",")')"
+        echo "PR_CREATION_WAIT_TIME=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.pr_creation_wait_time')"
+        echo "STALE_BRANCH_THRESHOLD=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.stale_branch_threshold')"
       } >> $GITHUB_ENV
       echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
 
@@ -125,13 +156,13 @@ runs:
     shell: bash
     run: |
       REPO_METADATA='${{ steps.fetch_repo_metadata.outputs.repo-metadata }}'
-      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
+      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
       CHANGED_FILES='${{ steps.get_changed_files.outputs.changed_files }}'
       PACKAGE_MANAGER='${{ steps.detect_package_manager.outputs.package-manager }}'
 
       REPOSITORY_CONTEXT=$(jq -n \
         --argjson repoMetadata "$REPO_METADATA" \
-        --argjson config "$CONFIG_DATA" \
+        --argjson config "$NORMALIZED_CONFIG" \
         --arg branch "${GITHUB_REF#refs/heads/}" \
         --arg commit "$GITHUB_SHA" \
         --arg packageManager "$PACKAGE_MANAGER" \
@@ -141,15 +172,15 @@ runs:
           config: $config,
           branch: $branch,
           commit: $commit,
-          repoType: ($config.repository.type // "monorepo"),
-          mainBranches: ($config.repository.version_control.main_branches // ["main", "develop"]),
-          branchPrefixes: ($config.repository.version_control.branch_prefixes // {}),
-          mergeStrategy: ($config.repository.version_control.merge_strategy // null),
-          protectedBranches: ($config.repository.version_control.protected_branches // ["main", "develop"]),
+          repoType: $config.repository.type,
+          mainBranches: $config.repository.version_control.main_branches,
+          branchPrefixes: $config.repository.version_control.branch_prefixes,
+          mergeStrategy: $config.repository.version_control.merge_strategy,
+          protectedBranches: $config.repository.version_control.protected_branches,
           packageManager: $packageManager,
           changedFiles: $changedFiles,
-          prCreationWaitTime: ($config.repository.version_control.pr_creation_wait_time // 15),
-          staleBranchThreshold: ($config.repository.version_control.stale_branch_threshold // 30)
+          prCreationWaitTime: $config.repository.version_control.pr_creation_wait_time,
+          staleBranchThreshold: $config.repository.version_control.stale_branch_threshold
         }')
       echo "repository-context=$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
 
@@ -157,16 +188,16 @@ runs:
     id: set_apps_config
     shell: bash
     run: |
-      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
-      APPS_CONFIG=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific // {}')
+      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      APPS_CONFIG=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.package_specific')
       echo "apps_configuration=$APPS_CONFIG" >> $GITHUB_OUTPUT
 
   - name: Set GitHub Pages URLs
     id: set_github_pages_urls
     shell: bash
     run: |
-      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
-      PAGES_URL=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific.web.ci_cd.deployment.production.url // empty')
+      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      PAGES_URL=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.package_specific.web.ci_cd.deployment.production.url // empty')
       if [ -z "$PAGES_URL" ]; then
         PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
       fi
@@ -176,24 +207,24 @@ runs:
     id: set_metrics_data
     shell: bash
     run: |
-      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
-      METRICS_DATA=$(echo "$CONFIG_DATA" | jq -r '.metrics_generation // {}')
+      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      METRICS_DATA=$(echo "$NORMALIZED_CONFIG" | jq -r '.metrics_generation')
       echo "metrics_data=$METRICS_DATA" >> $GITHUB_OUTPUT
 
   - name: Set security checks configuration
     id: set_security_checks
     shell: bash
     run: |
-      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
-      SECURITY_CHECKS=$(echo "$CONFIG_DATA" | jq -r '.security_dependency_management // {}')
+      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      SECURITY_CHECKS=$(echo "$NORMALIZED_CONFIG" | jq -r '.security_dependency_management')
       echo "security_checks=$SECURITY_CHECKS" >> $GITHUB_OUTPUT
 
   - name: Set performance monitoring configuration
     id: set_performance_monitoring
     shell: bash
     run: |
-      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
-      PERFORMANCE_MONITORING=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.performance_monitoring // {}')
+      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      PERFORMANCE_MONITORING=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.global_settings.performance_monitoring')
       echo "performance_monitoring=$PERFORMANCE_MONITORING" >> $GITHUB_OUTPUT
 
   - name: Completion message
