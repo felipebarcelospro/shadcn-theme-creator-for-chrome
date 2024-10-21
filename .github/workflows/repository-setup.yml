@@ -13,7 +13,6 @@ jobs:
       is-configured: ${{ steps.check-config.outputs.is-configured }}
     steps:
       - name: Checkout code
-        id: checkout
         uses: actions/checkout@v3
 
       - name: Check repository configuration
@@ -32,7 +31,6 @@ jobs:
 
     steps:
       - name: Checkout code
-        id: checkout
         uses: actions/checkout@v3
 
       - name: Setup Context and Prerequisites
@@ -43,10 +41,9 @@ jobs:
           debug: 'true'
 
       - name: Create Git Flow Branches
-        id: create-git-flow-branches
         uses: ./.github/actions/create-or-update-branch
         with:
-          branch-name: ${{ fromJson(steps.setup-context.outputs.repository-context).mainBranches[0] }}
+          branch-name: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.version_control.main_branches[0] }}
           base-branch: 'main'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           
@@ -57,20 +54,18 @@ jobs:
           content-type: "repository_docs"
           context-data: ${{ steps.setup-context.outputs.repository-context }}
           template-path: .github/templates/repository_setup_template.md
-          tone: ${{ fromJson(steps.setup-context.outputs.repository-context).config.documentation.tone }}
-          max-length: ${{ fromJson(steps.setup-context.outputs.repository-context).config.documentation.max_length }}
+          tone: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.documentation.tone }}
+          max-length: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.documentation.max_length }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Branch Protection Rules
-        id: setup-branch-protection
         uses: ./.github/actions/apply-branch-protection
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          branch-patterns: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).protectedBranches) }}
+          branch-patterns: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.version_control.protected_branches) }}
           protection-rules: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.branch_protection_rules) }}
 
       - name: Create Wiki Pages
-        id: create-wiki-pages
         uses: ./.github/actions/create-wiki-page
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -78,7 +73,6 @@ jobs:
           page-content: ${{ steps.generate-content.outputs.generated-content }}
 
       - name: Create Discussion Posts
-        id: create-discussion-posts
         uses: ./.github/actions/create-discussion-post
         with:
           discussion-title: "Welcome to the Repository"
@@ -87,21 +81,18 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Issue Labels
-        id: setup-issue-labels
         uses: ./.github/actions/setup-issue-labels
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           labels: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.initial_labels) }}
 
       - name: Setup Project Board
-        id: setup-project-board
         uses: ./.github/actions/setup-project-board
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           columns: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.project_board.columns) }}
 
       - name: Setup Repository Settings
-        id: setup-repository-settings
         uses: ./.github/actions/setup-repository-settings
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -114,7 +105,6 @@ jobs:
           delete-branch-on-merge: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.delete_branch_on_merge }}
 
       - name: Setup Dependabot
-        id: setup-dependabot
         uses: ./.github/actions/setup-dependabot
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -122,14 +112,12 @@ jobs:
           config: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.dependabot_setup) }}
 
       - name: Setup CODEOWNERS
-        id: setup-codeowners
         uses: ./.github/actions/setup-codeowners
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository-admins: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.code_owners.default_owners) }}
 
       - name: Commit Changes
-        id: commit-changes
         uses: ./.github/actions/commit-changes
         with:
           commit-message: "chore: initial repository setup"
@@ -137,7 +125,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Pull Request
-        id: create-pull-request
         uses: ./.github/actions/create-or-update-branch
         with:
           branch-name: 'initial-setup'
@@ -149,7 +136,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Notification
-        id: send-notification
         uses: ./.github/actions/send-notification
         with:
           notification-type: "setup_completion"
@@ -160,7 +146,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Mark repository as configured
-        id: mark-configured
         run: |
           echo '{"configured": true}' > .github/enabled
           git config --local user.email "action@github.com"
