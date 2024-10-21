@@ -45,7 +45,9 @@ runs:
   - name: Install action dependencies
     if: steps.cache.outputs.cache-hit != 'true'
     shell: bash
-    run: npm install --no-save fs js-yaml @octokit/rest
+    run: |
+      npm install --no-save js-yaml
+      npm install --no-save @octokit/rest@latest
 
   - name: Setup Context and Prerequisites
     uses: actions/github-script@v6
@@ -55,7 +57,7 @@ runs:
         const fs = require('fs');
         const yaml = require('js-yaml');
         const { execSync } = require('child_process');
-        const { Octokit } = require("@octokit/rest");
+        const { Octokit } = await import('@octokit/rest');
 
         const DEBUG = '${{ inputs.debug }}' === 'true';
 
