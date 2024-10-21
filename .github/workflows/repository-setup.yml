@@ -9,7 +9,7 @@ on:
 permissions:
   actions: read
   checks: write
-  contents: read
+  contents: write
   deployments: write
   issues: write
   packages: read
@@ -44,6 +44,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Context and Prerequisites
         id: setup-context
@@ -58,7 +60,14 @@ jobs:
           branch-name: ${{ steps.setup-context.outputs.main_branch }}
           base-branch: 'main'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          
+        continue-on-error: true
+
+      - name: Debug Branch Creation
+        if: failure()
+        run: |
+          echo "Debug: An error occurred during branch creation/update"
+          echo "operation-status=failed" >> $GITHUB_OUTPUT
+        
       - name: Generate Content
         id: generate-content
         uses: ./.github/actions/ai-generate-content
