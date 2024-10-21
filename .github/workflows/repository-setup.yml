@@ -16,7 +16,7 @@ jobs:
       setup-context: ${{ steps.setup-context.outputs.context }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Check repository configuration
         id: check-config
@@ -32,7 +32,6 @@ jobs:
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
           github-token: ${{ secrets.GH_TOKEN }}
-          debug: 'true'
 
   setup-branches:
     needs: check-repository-setup
@@ -40,17 +39,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+      SETUP_CONTEXT: ${{ fromJson(needs.check-repository-setup.outputs.setup-context) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           token: ${{ env.GH_TOKEN }}
 
       - name: Setup Repository Branches
-        uses: ./.github/actions/setup-repository-branchs
+        uses: ./.github/actions/setup-repository-branches
         with:
-          branches: ${{ env.SETUP_CONTEXT.mainBranches }}
+          branches: ${{ toJson(env.SETUP_CONTEXT.mainBranches) }}
           base-branch: 'main'
           github-token: ${{ env.GH_TOKEN }}
         continue-on-error: true
@@ -67,15 +66,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+      SETUP_CONTEXT: ${{ fromJson(needs.check-repository-setup.outputs.setup-context) }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Generate Wiki Content
         id: generate-wiki-content
         uses: ./.github/actions/ai-generate-content
         with:
           ai-api-key: ${{ secrets.GOOGLE_AI_API_KEY }}
           content-type: "wiki_page"
-          context-data: ${{ env.SETUP_CONTEXT }}
+          context-data: ${{ toJson(env.SETUP_CONTEXT) }}
           template-path: .github/templates/wiki_template.md
           tone: ${{ env.SETUP_CONTEXT.config.repository.documentation_tone }}
           max-length: ${{ env.SETUP_CONTEXT.config.repository.documentation_max_length }}
@@ -86,7 +88,7 @@ jobs:
         with:
           ai-api-key: ${{ secrets.GOOGLE_AI_API_KEY }}
           content-type: "discussion_post"
-          context-data: ${{ env.SETUP_CONTEXT }}
+          context-data: ${{ toJson(env.SETUP_CONTEXT) }}
           template-path: .github/templates/discussion_template.md
           tone: ${{ env.SETUP_CONTEXT.config.repository.documentation_tone }}
           max-length: ${{ env.SETUP_CONTEXT.config.repository.documentation_max_length }}
@@ -97,14 +99,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+      SETUP_CONTEXT: ${{ fromJson(needs.check-repository-setup.outputs.setup-context) }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Setup Branch Protection Rules
         uses: ./.github/actions/setup-repository-branch-rules
         with:
           github-token: ${{ env.GH_TOKEN }}
-          branch-patterns: ${{ env.SETUP_CONTEXT.protectedBranches }}
-          protection-rules: ${{ env.SETUP_CONTEXT.config.repository.version_control.branch_protection_rules }}
+          branch-patterns: ${{ toJson(env.SETUP_CONTEXT.protectedBranches) }}
+          protection-rules: ${{ toJson(env.SETUP_CONTEXT.config.repository.version_control.branch_protection_rules) }}
 
   create-wiki-and-discussions:
     needs: [check-repository-setup, generate-content]
@@ -112,20 +117,23 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+      SETUP_CONTEXT: ${{ fromJson(needs.check-repository-setup.outputs.setup-context) }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Create Wiki Pages
         uses: ./.github/actions/create-wiki-page
         with:
           github-token: ${{ env.GH_TOKEN }}
           page-name: "Git Flow Process"
-          page-content: ${{ needs.generate-content.outputs.generate-wiki-content.generated-content }}
+          page-content: ${{ needs.generate-content.outputs.generate-wiki-content }}
 
       - name: Create Discussion Posts
         uses: ./.github/actions/create-discussion-post
         with:
           discussion-title: "Welcome to the Repository"
-          discussion-content: ${{ needs.generate-content.outputs.generate-discussion-content.generated-content }}
+          discussion-content: ${{ needs.generate-content.outputs.generate-discussion-content }}
           category: ${{ env.SETUP_CONTEXT.config.repository.initial_discussion_category }}
           github-token: ${{ env.GH_TOKEN }}
 
@@ -135,19 +143,22 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+      SETUP_CONTEXT: ${{ fromJson(needs.check-repository-setup.outputs.setup-context) }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Setup Issue Labels
         uses: ./.github/actions/setup-issue-labels
         with:
           github-token: ${{ env.GH_TOKEN }}
-          labels: ${{ env.SETUP_CONTEXT.config.issue_management.auto_label.rules }}
+          labels: ${{ toJson(env.SETUP_CONTEXT.config.issue_management.auto_label.rules) }}
 
       - name: Setup Project Board
         uses: ./.github/actions/setup-project-board
         with:
           github-token: ${{ env.GH_TOKEN }}
-          columns: ${{ env.SETUP_CONTEXT.config.repository.project_board_columns }}
+          columns: ${{ toJson(env.SETUP_CONTEXT.config.repository.project_board_columns) }}
 
       - name: Setup Repository Settings
         uses: ./.github/actions/setup-repository-settings
@@ -167,20 +178,23 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+      SETUP_CONTEXT: ${{ fromJson(needs.check-repository-setup.outputs.setup-context) }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Setup Dependabot
         uses: ./.github/actions/setup-dependabot
         with:
           github-token: ${{ env.GH_TOKEN }}
-          ecosystems: ${{ env.SETUP_CONTEXT.config.security_dependency_management.security_check.tools }}
+          ecosystems: ${{ toJson(env.SETUP_CONTEXT.config.security_dependency_management.security_check.tools) }}
           schedule: ${{ env.SETUP_CONTEXT.config.security_dependency_management.schedule }}
 
       - name: Setup CODEOWNERS
         uses: ./.github/actions/setup-codeowners
         with:
           github-token: ${{ env.GH_TOKEN }}
-          repository-admins: ${{ env.SETUP_CONTEXT.config.repository.default_code_owners }}
+          repository-admins: ${{ toJson(env.SETUP_CONTEXT.config.repository.default_code_owners) }}
 
   finalize-setup:
     needs: [setup-branches, setup-repository-rules, create-wiki-and-discussions, setup-repository-features, setup-security-features]
@@ -188,10 +202,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+      SETUP_CONTEXT: ${{ fromJson(needs.check-repository-setup.outputs.setup-context) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           token: ${{ env.GH_TOKEN }}
 
@@ -199,7 +213,7 @@ jobs:
         uses: ./.github/actions/commit-changes
         with:
           commit-message: "chore: initial repository setup"
-          files: ${{ env.SETUP_CONTEXT.config.repository.initial_files }}
+          files: ${{ toJson(env.SETUP_CONTEXT.config.repository.initial_files) }}
           github-token: ${{ env.GH_TOKEN }}
 
       - name: Create Pull Request
@@ -217,10 +231,7 @@ jobs:
         uses: ./.github/actions/send-notification
         with:
           notification-type: "setup_completion"
-          notification-data: |
-            {
-              "setup-details": ${{ needs.check-repository-setup.outputs.setup-context }}
-            }
+          notification-data: ${{ toJson(fromJson(needs.check-repository-setup.outputs.setup-context)) }}
           github-token: ${{ env.GH_TOKEN }}
 
       - name: Mark repository as configured
