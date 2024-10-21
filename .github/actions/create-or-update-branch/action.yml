@@ -19,13 +19,16 @@ outputs:
   branch-url:
     description: 'URL of the created or updated branch'
   operation-status:
-    description: 'Status of the branch operation (created/updated/unchanged)'
+    description: 'Status of the branch operation (created/updated/unchanged/failed)'
 
 runs:
   using: 'composite'
   steps:
   - name: Checkout repository
     uses: actions/checkout@v3
+    with:
+      token: ${{ inputs.github-token }}
+      fetch-depth: 0
 
   - name: Debug Input Values
     shell: bash
@@ -38,7 +41,7 @@ runs:
 
   - name: Create or update branch
     id: branch-operation
-    shell: bash -l {0}
+    shell: bash
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       BRANCH_NAME: ${{ inputs.branch-name }}
@@ -48,6 +51,10 @@ runs:
       set -e
 
       echo "Debug: Starting branch operation"
+
+      # Configure Git
+      git config user.name "GitHub Actions Bot"
+      git config user.email "actions@github.com"
 
       # Check if branch exists
       if git ls-remote --exit-code --heads origin $BRANCH_NAME > /dev/null 2>&1; then
@@ -67,6 +74,7 @@ runs:
       else
         # Update existing branch
         echo "Debug: Updating existing branch $BRANCH_NAME"
+        git fetch origin $BRANCH_NAME
         git checkout $BRANCH_NAME
         git reset --hard origin/$BASE_BRANCH
         git push --force origin $BRANCH_NAME
@@ -86,14 +94,14 @@ runs:
       fi
 
       # Generate branch URL
-      REPO_URL=$(git config --get remote.origin.url | sed 's/\.git$//')
+      REPO_URL=$(git config --get remote.origin.url | sed 's/\.git$//' | sed 's|^https://github.com/|https://github.com/|')
       BRANCH_URL="${REPO_URL}/tree/${BRANCH_NAME}"
       echo "branch-url=$BRANCH_URL" >> $GITHUB_OUTPUT
       echo "Debug: Branch URL: $BRANCH_URL"
 
   - name: Error handling
     if: failure()
-    shell: bash -l {0}
+    shell: bash
     run: |
       echo "Debug: An error occurred during branch creation/update"
       echo "operation-status=failed" >> $GITHUB_OUTPUT

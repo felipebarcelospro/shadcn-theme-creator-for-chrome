@@ -48,13 +48,13 @@ runs:
 
         // Prepare prompt
         const prompt = `
-        Generate ${context.inputs['content-type']} content with the following context:
-        ${context.inputs['context-data']}
+        Generate ${inputs['content-type']} content with the following context:
+        ${inputs['context-data']}
 
         Additional instructions:
-        ${context.inputs['additional-context']}
+        ${inputs['additional-context']}
 
-        Please use a ${context.inputs['tone']} tone and limit the response to ${context.inputs['max-length']} characters.
+        Please use a ${inputs['tone']} tone and limit the response to ${inputs['max-length']} characters.
 
         If a template is provided, use it as a guide for the structure and format of the content.
         `;
@@ -62,9 +62,9 @@ runs:
         core.setOutput('prompt', prompt);
 
         // Load template if provided
-        if (context.inputs['template-path']) {
+        if (inputs['template-path']) {
           try {
-            const template = fs.readFileSync(context.inputs['template-path'], 'utf8');
+            const template = fs.readFileSync(inputs['template-path'], 'utf8');
             core.setOutput('template', template);
           } catch (error) {
             core.setFailed(`Error reading template file: ${error.message}`);
@@ -84,7 +84,7 @@ runs:
             {
               "parts": [
                 {
-                  "text": "${{ steps.prepare-prompt.outputs.prompt }}"
+                  "text": "${{ steps.prepare-data.outputs.prompt }}"
                 }
               ]
             }
