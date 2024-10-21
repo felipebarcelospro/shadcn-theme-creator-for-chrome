@@ -90,8 +90,18 @@ runs:
       fi
 
       # Fetch repository metadata and changed files using GitHub CLI
-      REPO_METADATA=$(bun run gh api repos/${GITHUB_REPOSITORY} --jq .)
-      CHANGED_FILES=$(bun run gh pr view ${GITHUB_REF#refs/pull/} --json files --jq '.files[].path')
+      REPO_METADATA=$(gh api repos/${GITHUB_REPOSITORY} --jq .)
+
+      # Check if we're in a PR context
+      if [[ $GITHUB_REF == refs/pull/* ]]; then
+        PR_NUMBER=${GITHUB_REF#refs/pull/}
+        PR_NUMBER=${PR_NUMBER%/merge}
+        CHANGED_FILES=$(gh pr view $PR_NUMBER --json files --jq '.files[].path')
+      else
+        # If not in a PR, get changed files from the last commit
+        CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r $GITHUB_SHA)
+      fi
+
       echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
 
       # Set up environment variables
@@ -101,22 +111,22 @@ runs:
         echo "GITHUB_SHA=${GITHUB_SHA}"
         echo "GITHUB_REF=${GITHUB_REF}"
         echo "PACKAGE_MANAGER=$PACKAGE_MANAGER"
-        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | bun run jq -r '.repository.type')"
-        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | bun run jq -r '.repository.version_control.main_branches')"
-        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | bun run jq -r '.repository.version_control.branch_prefixes')"
-        echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | bun run jq -r '.repository.version_control.merge_strategy')"
-        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | bun run jq -r '.repository.version_control.protected_branches')"
+        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')"
+        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches')"
+        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes')"
+        echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy')"
+        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches')"
       } >> $GITHUB_ENV
       echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
 
       # Set repository context
-      REPOSITORY_CONTEXT=$(bun run jq -n \
+      REPOSITORY_CONTEXT=$(jq -n \
         --argjson repoMetadata "$REPO_METADATA" \
         --argjson config "$CONFIG_DATA" \
         --arg branch "${GITHUB_REF#refs/heads/}" \
         --arg commit "$GITHUB_SHA" \
         --arg packageManager "$PACKAGE_MANAGER" \
-        --argjson changedFiles "$(echo "$CHANGED_FILES" | bun run jq -R . | bun run jq -s .)" \
+        --argjson changedFiles "$(echo "$CHANGED_FILES" | jq -R . | jq -s .)" \
         '{
           repoMetadata: $repoMetadata,
           config: $config,
@@ -133,7 +143,7 @@ runs:
       echo "repository-context=$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
 
       # Set apps configuration
-      echo "apps_configuration=$(echo "$CONFIG_DATA" | bun run jq -r '.packages.package_specific')" >> $GITHUB_OUTPUT
+      echo "apps_configuration=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific')" >> $GITHUB_OUTPUT
 
       # Set GitHub Pages URLs
       PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
