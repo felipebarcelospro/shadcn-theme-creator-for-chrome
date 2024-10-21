@@ -34,8 +34,12 @@ runs:
   - name: Install jq
     shell: bash
     run: |
-      sudo apt-get update
-      sudo apt-get install -y jq
+      if ! command -v jq &> /dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y jq
+      else
+        echo "jq is already installed"
+      fi
 
   - name: Load and parse config.yml
     shell: bash
@@ -44,7 +48,7 @@ runs:
         echo "Error: config.yml is missing"
         exit 1
       fi
-      CONFIG_DATA=$(cat .github/config.yml | yq eval -o=json .)
+      CONFIG_DATA=$(yq eval -o=json .github/config.yml)
       echo "config-data<<EOF" >> $GITHUB_OUTPUT
       echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
@@ -110,13 +114,18 @@ runs:
   - name: Set repository context
     shell: bash
     run: |
+      REPO_METADATA=$(cat $GITHUB_OUTPUT | sed -n '/^repo-metadata<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      CHANGED_FILES=$(cat $GITHUB_OUTPUT | sed -n '/^changed_files<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      PACKAGE_MANAGER=$(cat $GITHUB_OUTPUT | grep '^package-manager=' | cut -d'=' -f2)
+
       REPOSITORY_CONTEXT=$(jq -n \
-        --argjson repoMetadata "$(cat $GITHUB_OUTPUT | sed -n '/^repo-metadata<<EOF$/,/^EOF$/p' | sed '1d;$d')" \
-        --argjson config "$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')" \
+        --argjson repoMetadata "$REPO_METADATA" \
+        --argjson config "$CONFIG_DATA" \
         --arg branch "${GITHUB_REF#refs/heads/}" \
         --arg commit "$GITHUB_SHA" \
-        --arg packageManager "$(cat $GITHUB_OUTPUT | grep '^package-manager=' | cut -d'=' -f2)" \
-        --slurpfile changedFiles <(cat $GITHUB_OUTPUT | sed -n '/^changed_files<<EOF$/,/^EOF$/p' | sed '1d;$d') \
+        --arg packageManager "$PACKAGE_MANAGER" \
+        --argjson changedFiles "$(echo "$CHANGED_FILES" | jq -R -s 'split("\n")[:-1]')" \
         '{
           repoMetadata: $repoMetadata,
           config: $config,
@@ -128,7 +137,7 @@ runs:
           mergeStrategy: ($config.repository.version_control.merge_strategy // null),
           protectedBranches: ($config.repository.version_control.protected_branches // []),
           packageManager: $packageManager,
-          changedFiles: $changedFiles[0]
+          changedFiles: $changedFiles
         }')
       echo "repository-context<<EOF" >> $GITHUB_OUTPUT
       echo "$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
