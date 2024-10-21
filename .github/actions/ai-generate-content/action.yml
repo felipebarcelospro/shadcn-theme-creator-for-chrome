@@ -67,44 +67,33 @@ runs:
 
   - name: Generate content
     id: generate-content
-    run: |
-      # Prepare the JSON payload
-      payload=$(jq -n \
-        --arg prompt "$(cat prompt.txt)" \
-        --arg max_length "${{ inputs.max-length }}" \
-        '{
-          contents: [{
-            parts: [{ text: $prompt }]
+    uses: fjogeleit/http-request-action@v1
+    with:
+      url: 'https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent'
+      method: 'POST'
+      customHeaders: '{"Authorization": "Bearer ${{ inputs.ai-api-key }}", "Content-Type": "application/json"}'
+      data: |
+        {
+          "contents": [{
+            "parts": [{ "text": "${{ steps.prepare-prompt.outputs.prompt }}" }]
           }],
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: ($max_length | tonumber)
+          "generationConfig": {
+            "temperature": 0.2,
+            "topK": 20,
+            "topP": 0.8
           }
-        }'
-      )
+        }
 
-      # Make the API request
-      response=$(curl -s -X POST \
-        "https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent" \
-        -H "Authorization: Bearer ${{ inputs.ai-api-key }}" \
-        -H "Content-Type: application/json" \
-        -H "Accept: application/json" \
-        -d "$payload"
-      )
-
-      # Process the response
-      echo "$response" > response.json
-
+  - name: Process response
+    id: process-response
+    run: |
+      echo '${{ steps.generate-content.outputs.response }}' > response.json
       content=$(jq -r '.candidates[0].content.parts[0].text // empty' response.json)
       metadata=$(jq -r '.candidates[0].safetyRatings // empty' response.json)
 
-      # Save content and metadata
       echo "$content" > generated_content.txt
       echo "$metadata" > generation_metadata.json
 
-      # Set outputs
       echo "generated-content<<EOF" >> $GITHUB_OUTPUT
       cat generated_content.txt >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
@@ -112,20 +101,7 @@ runs:
       echo "generation-metadata<<EOF" >> $GITHUB_OUTPUT
       cat generation_metadata.json >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
-    shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
-    env:
-      GH_TOKEN: ${{ inputs.ai-api-key }}
-      REPO_NAME: ${{ github.repository }}
-      REPO_OWNER: ${{ github.repository_owner }}
-      GITHUB_SHA: ${{ github.sha }}
-      GITHUB_REF: ${{ github.ref }}
-      REPO_TYPE: monorepo
-      MAIN_BRANCHES: main,develop
-      BRANCH_PREFIXES: feature=feature/,release=release/,hotfix=hotfix/
-      MERGE_STRATEGY: '{"develop_to_main":"squash","feature_to_develop":"merge"}'
-      PROTECTED_BRANCHES: main,develop
-      PR_CREATION_WAIT_TIME: 15
-      STALE_BRANCH_THRESHOLD: 30
+    shell: bash
 
   - name: Debug - Generated content
     run: |
