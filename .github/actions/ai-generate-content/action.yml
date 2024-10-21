@@ -54,7 +54,9 @@ runs:
       If a template is provided, use it as a guide for the structure and format of the content.
       EOF
       )
-      echo "$prompt" > prompt.txt
+      echo "prompt<<EOF" >> $GITHUB_OUTPUT
+      echo "$prompt" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
     shell: bash
 
   - name: Load template
@@ -62,7 +64,9 @@ runs:
     if: inputs.template-path
     run: |
       template=$(cat ${{ inputs.template-path }})
-      echo "$template" > template.txt
+      echo "template<<EOF" >> $GITHUB_OUTPUT
+      echo "$template" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
     shell: bash
 
   - name: Generate content
@@ -91,22 +95,19 @@ runs:
       content=$(jq -r '.candidates[0].content.parts[0].text // empty' response.json)
       metadata=$(jq -r '.candidates[0].safetyRatings // empty' response.json)
 
-      echo "$content" > generated_content.txt
-      echo "$metadata" > generation_metadata.json
-
       echo "generated-content<<EOF" >> $GITHUB_OUTPUT
-      cat generated_content.txt >> $GITHUB_OUTPUT
+      echo "$content" >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
 
       echo "generation-metadata<<EOF" >> $GITHUB_OUTPUT
-      cat generation_metadata.json >> $GITHUB_OUTPUT
+      echo "$metadata" >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
     shell: bash
 
   - name: Debug - Generated content
     run: |
       echo "Generated content:"
-      cat generated_content.txt
+      echo "${{ steps.process-response.outputs.generated-content }}"
       echo "Generation metadata:"
-      cat generation_metadata.json
+      echo "${{ steps.process-response.outputs.generation-metadata }}"
     shell: bash
