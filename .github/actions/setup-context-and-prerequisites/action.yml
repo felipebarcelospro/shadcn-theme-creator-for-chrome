@@ -42,11 +42,23 @@ runs:
   - name: Load and parse config.yml
     shell: bash
     run: |
-      if [ ! -f ".github/config.yml" ]; then
+      echo "Current directory: $(pwd)"
+      echo "Contents of .github directory:"
+      ls -la .github/
+      echo "Attempting to read config.yml..."
+      cat "$GITHUB_WORKSPACE/.github/config.yml" || echo "Failed to read config.yml"
+
+      if [ ! -f "$GITHUB_WORKSPACE/.github/config.yml" ]; then
         echo "Error: config.yml is missing"
         exit 1
       fi
-      CONFIG_DATA=$(yq eval -o=json .github/config.yml)
+
+      CONFIG_DATA=$(yq eval -o=json "$GITHUB_WORKSPACE/.github/config.yml")
+      if [ -z "$CONFIG_DATA" ]; then
+        echo "Error: Failed to parse config.yml"
+        exit 1
+      fi
+
       echo "config-data<<EOF" >> $GITHUB_OUTPUT
       echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
@@ -60,6 +72,11 @@ runs:
   - name: Detect package manager
     shell: bash
     run: |
+      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      if [ -z "$CONFIG_DATA" ]; then
+        echo "Error: Failed to read config-data from GITHUB_OUTPUT"
+        exit 1
+      fi
       PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager // "unknown"')
       echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
 
@@ -68,6 +85,10 @@ runs:
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
+      if [ -z "$GITHUB_TOKEN" ]; then
+        echo "Error: GITHUB_TOKEN is not set"
+        exit 1
+      fi
       REPO_METADATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
         "https://api.github.com/repos/$GITHUB_REPOSITORY")
       if [ -z "$REPO_METADATA" ]; then
@@ -83,6 +104,10 @@ runs:
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
     run: |
+      if [ -z "$GITHUB_TOKEN" ]; then
+        echo "Error: GITHUB_TOKEN is not set"
+        exit 1
+      fi
       if [[ $GITHUB_REF == refs/pull/* ]]; then
         PR_NUMBER=${GITHUB_REF#refs/pull/}
         PR_NUMBER=${PR_NUMBER%/merge}
@@ -103,6 +128,10 @@ runs:
     shell: bash
     run: |
       CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      if [ -z "$CONFIG_DATA" ]; then
+        echo "Error: Failed to read config-data from GITHUB_OUTPUT"
+        exit 1
+      fi
       {
         echo "REPO_NAME=${GITHUB_REPOSITORY}"
         echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
@@ -123,6 +152,11 @@ runs:
       CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
       CHANGED_FILES=$(cat $GITHUB_OUTPUT | sed -n '/^changed_files<<EOF$/,/^EOF$/p' | sed '1d;$d')
       PACKAGE_MANAGER=$(cat $GITHUB_OUTPUT | grep '^package-manager=' | cut -d'=' -f2)
+
+      if [ -z "$REPO_METADATA" ] || [ -z "$CONFIG_DATA" ] || [ -z "$CHANGED_FILES" ] || [ -z "$PACKAGE_MANAGER" ]; then
+        echo "Error: Failed to read required data from GITHUB_OUTPUT"
+        exit 1
+      fi
 
       REPOSITORY_CONTEXT=$(jq -n \
         --argjson repoMetadata "$REPO_METADATA" \
@@ -152,6 +186,10 @@ runs:
     shell: bash
     run: |
       CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      if [ -z "$CONFIG_DATA" ]; then
+        echo "Error: Failed to read config-data from GITHUB_OUTPUT"
+        exit 1
+      fi
       APPS_CONFIG=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific // {}')
       echo "apps_configuration<<EOF" >> $GITHUB_OUTPUT
       echo "$APPS_CONFIG" >> $GITHUB_OUTPUT
@@ -161,6 +199,10 @@ runs:
     shell: bash
     run: |
       CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      if [ -z "$CONFIG_DATA" ]; then
+        echo "Error: Failed to read config-data from GITHUB_OUTPUT"
+        exit 1
+      fi
       PAGES_URL=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific.web.ci_cd.deployment.production.url // empty')
       if [ -z "$PAGES_URL" ]; then
         PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
