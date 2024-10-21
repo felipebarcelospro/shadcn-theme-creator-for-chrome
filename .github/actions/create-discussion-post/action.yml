@@ -22,67 +22,58 @@ outputs:
     description: 'Status of the discussion creation process'
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
   - name: Create Discussion
-    shell: bash
+    id: create-discussion
+    uses: fjogeleit/http-request-action@v1
+    with:
+      url: https://api.github.com/graphql
+      method: 'POST'
+      bearerToken: ${{ inputs.github-token }}
+      contentType: 'application/json'
+      data: >
+        {
+          "query": "mutation($input: CreateDiscussionInput!) { createDiscussion(input: $input) { discussion { id url } } }",
+          "variables": {
+            "input": {
+              "repositoryId": "${{ github.repository_id }}",
+              "title": "${{ inputs.discussion-title }}",
+              "body": "${{ inputs.discussion-content }}",
+              "categoryId": "${{ inputs.category }}"
+            }
+          }
+        }
+
+  - name: Process and validate response
+    id: process-response
+    uses: actions/github-script@v6
+    with:
+      script: |
+        const response = JSON.parse(process.env.CREATE_DISCUSSION_RESPONSE);
+        const discussion = response.data?.createDiscussion?.discussion;
+
+        if (!discussion) {
+          core.setFailed('Failed to create discussion');
+          return;
+        }
+
+        core.setOutput('created-discussion-url', discussion.url);
+        core.setOutput('creation-status', 'success');
+
+        console.log('Created discussion:', discussion.url);
     env:
-      GH_TOKEN: ${{ inputs.github-token }}
-      DISCUSSION_TITLE: ${{ inputs.discussion-title }}
-      DISCUSSION_CONTENT: ${{ inputs.discussion-content }}
-      CATEGORY: ${{ inputs.category }}
+      CREATE_DISCUSSION_RESPONSE: ${{ steps.create-discussion.outputs.response }}
+
+  - name: Verify outputs
+    if: success()
     run: |
-      # Validate inputs
-      if [ -z "$DISCUSSION_TITLE" ] || [ -z "$DISCUSSION_CONTENT" ] || [ -z "$CATEGORY" ]; then
-        echo "Error: All inputs (discussion-title, discussion-content, category) are required."
+      if [ -z "${{ steps.process-response.outputs.created-discussion-url }}" ]; then
+        echo "Error: Created discussion URL is empty"
         exit 1
       fi
-
-      # Get repository information
-      REPO_INFO=$(gh repo view --json owner,name)
-      OWNER=$(echo $REPO_INFO | jq -r .owner)
-      REPO=$(echo $REPO_INFO | jq -r .name)
-
-      # Get category ID
-      CATEGORY_ID=$(gh api graphql -f query='
-        query($owner:String!, $repo:String!, $category:String!) {
-          repository(owner:$owner, name:$repo) {
-            discussionCategories(first: 100) {
-              nodes {
-                id
-                name
-              }
-            }
-          }
-        }' -f owner=$OWNER -f repo=$REPO -f category=$CATEGORY | jq -r ".data.repository.discussionCategories.nodes[] | select(.name == \"$CATEGORY\") | .id")
-
-      if [ -z "$CATEGORY_ID" ]; then
-        echo "Error: Category not found."
+      if [ "${{ steps.process-response.outputs.creation-status }}" != "success" ]; then
+        echo "Error: Discussion creation failed"
         exit 1
       fi
-
-      # Create discussion
-      RESPONSE=$(gh api graphql -f query='
-        mutation($input: CreateDiscussionInput!) {
-          createDiscussion(input: $input) {
-            discussion {
-              id
-              url
-            }
-          }
-        }' -f input="{\"repositoryId\":\"$(gh api graphql -f query='query($owner:String!, $repo:String!) { repository(owner:$owner, name:$repo) { id } }' -F owner=$OWNER -F repo=$REPO | jq -r .data.repository.id)\",\"title\":\"$DISCUSSION_TITLE\",\"body\":\"$DISCUSSION_CONTENT\",\"categoryId\":\"$CATEGORY_ID\"}")
-
-      # Extract discussion URL and ID
-      DISCUSSION_URL=$(echo $RESPONSE | jq -r '.data.createDiscussion.discussion.url')
-      DISCUSSION_ID=$(echo $RESPONSE | jq -r '.data.createDiscussion.discussion.id')
-
-      if [ -n "$DISCUSSION_URL" ] && [ -n "$DISCUSSION_ID" ]; then
-        echo "created-discussion-url=$DISCUSSION_URL" >> $GITHUB_OUTPUT
-        echo "creation-status=success" >> $GITHUB_OUTPUT
-        echo "Discussion created successfully: $DISCUSSION_URL"
-      else
-        echo "created-discussion-url=" >> $GITHUB_OUTPUT
-        echo "creation-status=failed" >> $GITHUB_OUTPUT
-        echo "Error: Failed to create discussion."
-        exit 1
-      fi
+    shell: bash
