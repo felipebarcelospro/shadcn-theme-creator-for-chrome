@@ -31,102 +31,92 @@ outputs:
 runs:
   using: "composite"
   steps:
-  - name: Setup Bun
-    uses: oven-sh/setup-bun@v2
-    with:
-      bun-version: latest
-
-  - name: Cache dependencies and config
-    uses: actions/cache@v3
-    id: cache
-    with:
-      path: |
-        ~/.bun
-        .github/config.yml
-      key: ${{ runner.os }}-deps-${{ hashFiles('**/bun.lockb', '.github/config.yml') }}
-
-  - name: Install action dependencies
-    if: steps.cache.outputs.cache-hit != 'true'
+  - name: Install jq
     shell: bash
     run: |
-      bun add js-yaml @octokit/rest@latest
+      sudo apt-get update
+      sudo apt-get install -y jq
 
-  - name: Setup Context and Prerequisites
+  - name: Load and parse config.yml
     shell: bash
-    env:
-      GITHUB_TOKEN: ${{ inputs.github-token }}
-      DEBUG: ${{ inputs.debug }}
     run: |
-      set -e
-
-      function debug() {
-        if [ "$DEBUG" = "true" ]; then
-          echo "DEBUG: $1"
-        fi
-      }
-
-      # Load and parse config.yml
       if [ ! -f ".github/config.yml" ]; then
         echo "Error: config.yml is missing"
         exit 1
       fi
-      CONFIG_DATA=$(cat .github/config.yml | bun run js-yaml -j)
-      echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
-      debug "Config data loaded and parsed"
+      CONFIG_DATA=$(cat .github/config.yml | yq eval -o=json .)
+      echo "config-data<<EOF" >> $GITHUB_OUTPUT
+      echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
-      # Detect package manager (always Bun in this case)
-      PACKAGE_MANAGER="bun"
-      echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
-      debug "Package manager detected: $PACKAGE_MANAGER"
-
-      # Install dependencies if cache miss
-      if [ "${{ steps.cache.outputs.cache-hit }}" != "true" ]; then
-        bun install
-        echo "installation-status=success" >> $GITHUB_OUTPUT
-        debug "Dependencies installed successfully"
+  - name: Detect package manager
+    shell: bash
+    run: |
+      if [ -f "package-lock.json" ]; then
+        echo "package-manager=npm" >> $GITHUB_OUTPUT
+      elif [ -f "yarn.lock" ]; then
+        echo "package-manager=yarn" >> $GITHUB_OUTPUT
+      elif [ -f "pnpm-lock.yaml" ]; then
+        echo "package-manager=pnpm" >> $GITHUB_OUTPUT
       else
-        echo "installation-status=cached" >> $GITHUB_OUTPUT
-        debug "Using cached dependencies"
+        echo "package-manager=unknown" >> $GITHUB_OUTPUT
       fi
 
-      # Fetch repository metadata and changed files using GitHub CLI
-      REPO_METADATA=$(gh api repos/${GITHUB_REPOSITORY} --jq .)
+  - name: Fetch repository metadata
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+    run: |
+      REPO_METADATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+        "https://api.github.com/repos/$GITHUB_REPOSITORY")
+      echo "repo-metadata<<EOF" >> $GITHUB_OUTPUT
+      echo "$REPO_METADATA" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
-      # Check if we're in a PR context
+  - name: Get changed files
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+    run: |
       if [[ $GITHUB_REF == refs/pull/* ]]; then
         PR_NUMBER=${GITHUB_REF#refs/pull/}
         PR_NUMBER=${PR_NUMBER%/merge}
-        CHANGED_FILES=$(gh pr view $PR_NUMBER --json files --jq '.files[].path')
+        CHANGED_FILES=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+          | jq -r '.[].filename')
       else
-        # If not in a PR, get changed files from the last commit
         CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r $GITHUB_SHA)
       fi
+      echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+      echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
-      echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
-
-      # Set up environment variables
+  - name: Set environment variables
+    shell: bash
+    run: |
       {
         echo "REPO_NAME=${GITHUB_REPOSITORY}"
         echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
         echo "GITHUB_SHA=${GITHUB_SHA}"
         echo "GITHUB_REF=${GITHUB_REF}"
-        echo "PACKAGE_MANAGER=$PACKAGE_MANAGER"
         echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')"
-        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches')"
-        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes')"
+        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches | join(",")')"
+        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes | join(",")')"
         echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy')"
-        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches')"
+        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches | join(",")')"
       } >> $GITHUB_ENV
       echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
 
-      # Set repository context
+  - name: Set repository context
+    shell: bash
+    run: |
       REPOSITORY_CONTEXT=$(jq -n \
-        --argjson repoMetadata "$REPO_METADATA" \
-        --argjson config "$CONFIG_DATA" \
+        --argjson repoMetadata "$(cat $GITHUB_OUTPUT | sed -n '/^repo-metadata<<EOF$/,/^EOF$/p' | sed '1d;$d')" \
+        --argjson config "$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')" \
         --arg branch "${GITHUB_REF#refs/heads/}" \
         --arg commit "$GITHUB_SHA" \
-        --arg packageManager "$PACKAGE_MANAGER" \
-        --argjson changedFiles "$(echo "$CHANGED_FILES" | jq -R . | jq -s .)" \
+        --arg packageManager "$(cat $GITHUB_OUTPUT | grep '^package-manager=' | cut -d'=' -f2)" \
+        --argjson changedFiles "$(cat $GITHUB_OUTPUT | sed -n '/^changed_files<<EOF$/,/^EOF$/p' | sed '1d;$d' | jq -R . | jq -s .)" \
         '{
           repoMetadata: $repoMetadata,
           config: $config,
@@ -140,13 +130,24 @@ runs:
           packageManager: $packageManager,
           changedFiles: $changedFiles
         }')
-      echo "repository-context=$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
+      echo "repository-context<<EOF" >> $GITHUB_OUTPUT
+      echo "$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
-      # Set apps configuration
-      echo "apps_configuration=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific')" >> $GITHUB_OUTPUT
+  - name: Set apps configuration
+    shell: bash
+    run: |
+      APPS_CONFIG=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific')
+      echo "apps_configuration<<EOF" >> $GITHUB_OUTPUT
+      echo "$APPS_CONFIG" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
-      # Set GitHub Pages URLs
+  - name: Set GitHub Pages URLs
+    shell: bash
+    run: |
       PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
       echo "github_pages_urls=[\"$PAGES_URL\"]" >> $GITHUB_OUTPUT
 
-      echo "Setup context and prerequisites completed successfully"
+  - name: Completion message
+    shell: bash
+    run: echo "Setup context and prerequisites completed successfully"
