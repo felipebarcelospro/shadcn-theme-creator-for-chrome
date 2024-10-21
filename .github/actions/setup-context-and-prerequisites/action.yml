@@ -50,121 +50,119 @@ runs:
       npm install --no-save @octokit/rest@latest
 
   - name: Setup Context and Prerequisites
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ inputs.github-token }}
-      script: |
-        const fs = require('fs');
-        const yaml = require('js-yaml');
-        const { execSync } = require('child_process');
-        const { Octokit } = require('@octokit/rest');
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      DEBUG: ${{ inputs.debug }}
+    run: |
+      set -e
 
-        const DEBUG = '${{ inputs.debug }}' === 'true';
+      function debug() {
+        if [ "$DEBUG" = "true" ]; then
+          echo "DEBUG: $1"
+        fi
+      }
 
-        function debug(message) {
-          if (DEBUG) console.log(`DEBUG: ${message}`);
-        }
+      # Load and parse config.yml
+      if [ ! -f ".github/config.yml" ]; then
+        echo "Error: config.yml is missing"
+        exit 1
+      fi
+      CONFIG_DATA=$(cat .github/config.yml | yq eval -j .)
+      echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
+      debug "Config data loaded and parsed"
 
-        try {
-          // Load and parse config.yml
-          const configPath = '.github/config.yml';
-          if (!fs.existsSync(configPath)) throw new Error('config.yml is missing');
-          const configData = yaml.load(fs.readFileSync(configPath, 'utf8'));
-          core.setOutput('config-data', JSON.stringify(configData));
-          debug('Config data loaded and parsed');
+      # Detect package manager
+      if [ -n "$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager')" ]; then
+        PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager')
+      elif [ -f "package-lock.json" ]; then
+        PACKAGE_MANAGER="npm"
+      elif [ -f "yarn.lock" ]; then
+        PACKAGE_MANAGER="yarn"
+      elif [ -f "pnpm-lock.yaml" ]; then
+        PACKAGE_MANAGER="pnpm"
+      else
+        echo "Error: No supported package manager lock file found"
+        exit 1
+      fi
+      echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
+      debug "Package manager detected: $PACKAGE_MANAGER"
 
-          // Detect package manager
-          const packageManager = (() => {
-            const configuredManager = configData.packages?.global_settings?.ci_cd?.package_manager;
-            if (configuredManager) return configuredManager;
-            if (fs.existsSync('package-lock.json')) return 'npm';
-            if (fs.existsSync('yarn.lock')) return 'yarn';
-            if (fs.existsSync('pnpm-lock.yaml')) return 'pnpm';
-            throw new Error('No supported package manager lock file found');
-          })();
-          core.setOutput('package-manager', packageManager);
-          debug(`Package manager detected: ${packageManager}`);
+      # Install dependencies if cache miss
+      if [ "${{ steps.cache.outputs.cache-hit }}" != "true" ]; then
+        case $PACKAGE_MANAGER in
+          npm)
+            npm ci
+            ;;
+          yarn)
+            yarn install --frozen-lockfile
+            ;;
+          pnpm)
+            pnpm install --frozen-lockfile
+            ;;
+          *)
+            echo "Error: Unsupported package manager: $PACKAGE_MANAGER"
+            exit 1
+            ;;
+        esac
+        echo "installation-status=success" >> $GITHUB_OUTPUT
+        debug "Dependencies installed successfully"
+      else
+        echo "installation-status=cached" >> $GITHUB_OUTPUT
+        debug "Using cached dependencies"
+      fi
 
-          // Install dependencies if cache miss
-          if ('${{ steps.cache.outputs.cache-hit }}' !== 'true') {
-            const installCommands = {
-              npm: 'npm ci',
-              yarn: 'yarn install --frozen-lockfile',
-              pnpm: 'pnpm install --frozen-lockfile'
-            };
-            if (!installCommands[packageManager]) throw new Error(`Unsupported package manager: ${packageManager}`);
-            execSync(installCommands[packageManager], { stdio: 'inherit' });
-            core.setOutput('installation-status', 'success');
-            debug('Dependencies installed successfully');
-          } else {
-            core.setOutput('installation-status', 'cached');
-            debug('Using cached dependencies');
-          }
+      # Fetch repository metadata and changed files using GitHub CLI
+      REPO_METADATA=$(gh api repos/${GITHUB_REPOSITORY} --jq .)
+      CHANGED_FILES=$(gh pr view ${GITHUB_REF#refs/pull/} --json files --jq '.files[].path')
+      echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
 
-          // Initialize Octokit
-          const octokit = new Octokit({ auth: '${{ inputs.github-token }}' });
+      # Set up environment variables
+      {
+        echo "REPO_NAME=${GITHUB_REPOSITORY}"
+        echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
+        echo "GITHUB_SHA=${GITHUB_SHA}"
+        echo "GITHUB_REF=${GITHUB_REF}"
+        echo "PACKAGE_MANAGER=$PACKAGE_MANAGER"
+        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')"
+        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches')"
+        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes')"
+        echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy')"
+        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches')"
+      } >> $GITHUB_ENV
+      echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
 
-          // Fetch repository metadata
-          const repoMetadata = await octokit.repos.get({
-            owner: context.repo.owner,
-            repo: context.repo.repo
-          });
+      # Set repository context
+      REPOSITORY_CONTEXT=$(jq -n \
+        --argjson repoMetadata "$REPO_METADATA" \
+        --argjson config "$CONFIG_DATA" \
+        --arg branch "${GITHUB_REF#refs/heads/}" \
+        --arg commit "$GITHUB_SHA" \
+        --arg packageManager "$PACKAGE_MANAGER" \
+        --argjson changedFiles "$(echo "$CHANGED_FILES" | jq -R . | jq -s .)" \
+        '{
+          repoMetadata: $repoMetadata,
+          config: $config,
+          branch: $branch,
+          commit: $commit,
+          repoType: $config.repository.type,
+          mainBranches: $config.repository.version_control.main_branches,
+          branchPrefixes: $config.repository.version_control.branch_prefixes,
+          mergeStrategy: $config.repository.version_control.merge_strategy,
+          protectedBranches: $config.repository.version_control.protected_branches,
+          packageManager: $packageManager,
+          changedFiles: $changedFiles
+        }')
+      echo "repository-context=$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
 
-          // Get changed files
-          const changedFiles = await octokit.pulls.listFiles({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            pull_number: context.issue.number
-          }).then(response => response.data.map(file => file.filename));
-          core.setOutput('changed_files', JSON.stringify(changedFiles));
+      # Set apps configuration
+      echo "apps_configuration=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific')" >> $GITHUB_OUTPUT
 
-          // Set up environment variables
-          const envVars = {
-            REPO_NAME: `${context.repo.owner}/${context.repo.repo}`,
-            REPO_OWNER: context.repo.owner,
-            GITHUB_SHA: context.sha,
-            GITHUB_REF: context.ref,
-            PACKAGE_MANAGER: packageManager,
-            REPO_TYPE: configData.repository.type,
-            MAIN_BRANCHES: JSON.stringify(configData.repository.version_control.main_branches),
-            BRANCH_PREFIXES: JSON.stringify(configData.repository.version_control.branch_prefixes),
-            MERGE_STRATEGY: JSON.stringify(configData.repository.version_control.merge_strategy),
-            PROTECTED_BRANCHES: JSON.stringify(configData.repository.version_control.protected_branches)
-          };
-          Object.entries(envVars).forEach(([key, value]) => {
-            core.exportVariable(key, value);
-            debug(`Environment variable set: ${key}`);
-          });
-          core.setOutput('environment-variables', 'Environment variables set');
+      # Set GitHub Pages URLs
+      PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+      echo "github_pages_urls=[\"$PAGES_URL\"]" >> $GITHUB_OUTPUT
 
-          // Set repository context
-          const repositoryContext = {
-            repoMetadata: repoMetadata.data,
-            config: configData,
-            branch: context.ref.replace('refs/heads/', ''),
-            commit: context.sha,
-            repoType: configData.repository.type,
-            mainBranches: configData.repository.version_control.main_branches,
-            branchPrefixes: configData.repository.version_control.branch_prefixes,
-            mergeStrategy: configData.repository.version_control.merge_strategy,
-            protectedBranches: configData.repository.version_control.protected_branches,
-            packageManager,
-            changedFiles
-          };
-          core.setOutput('repository-context', JSON.stringify(repositoryContext));
-
-          // Set apps configuration
-          core.setOutput('apps_configuration', JSON.stringify(configData.packages.package_specific));
-
-          // Set GitHub Pages URLs
-          const pagesUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
-          core.setOutput('github_pages_urls', JSON.stringify([pagesUrl]));
-
-          console.log('Setup context and prerequisites completed successfully');
-        } catch (error) {
-          core.setFailed(`Action failed: ${error.message}`);
-          if (DEBUG) console.error(error);
-        }
+      echo "Setup context and prerequisites completed successfully"
 
   - name: Cleanup
     if: always()
