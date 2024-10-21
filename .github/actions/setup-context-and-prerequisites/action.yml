@@ -173,21 +173,21 @@ runs:
     id: set_env_vars
     shell: bash
     run: |
-      NORMALIZED_CONFIG=$(echo '${{ steps.normalize_config.outputs.normalized-config }}' | jq -r)
-      {
-        echo "REPO_NAME=${GITHUB_REPOSITORY}"
-        echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
-        echo "GITHUB_SHA=${GITHUB_SHA}"
-        echo "GITHUB_REF=${GITHUB_REF}"
-        echo "REPO_TYPE=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.type')"
-        echo "MAIN_BRANCHES=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.main_branches | join(",")')"
-        echo "BRANCH_PREFIXES=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.branch_prefixes | to_entries | map("\(.key)=\(.value)") | join(",")')"
-        echo "MERGE_STRATEGY=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.merge_strategy')"
-        echo "PROTECTED_BRANCHES=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.protected_branches | join(",")')"
-        echo "PR_CREATION_WAIT_TIME=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.pr_creation_wait_time')"
-        echo "STALE_BRANCH_THRESHOLD=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.stale_branch_threshold')"
-      } >> $GITHUB_ENV
-      echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
+      echo "REPO_NAME=$GITHUB_REPOSITORY" >> $GITHUB_ENV
+      echo "REPO_OWNER=${GITHUB_REPOSITORY%%/*}" >> $GITHUB_ENV
+      echo "GITHUB_SHA=$GITHUB_SHA" >> $GITHUB_ENV
+      echo "GITHUB_REF=$GITHUB_REF" >> $GITHUB_ENV
+
+      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+
+      echo "REPO_TYPE=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.type')" >> $GITHUB_ENV
+      echo "MAIN_BRANCHES=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.main_branches | join(",")')" >> $GITHUB_ENV
+      echo "BRANCH_PREFIXES=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.branch_prefixes | to_entries | map("\(.key)=\(.value)") | join(",")')" >> $GITHUB_ENV
+      echo "MERGE_STRATEGY=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.merge_strategy | @json' | sed 's/"/\\"/g')" >> $GITHUB_ENV
+      echo "PROTECTED_BRANCHES=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.protected_branches | join(",")')" >> $GITHUB_ENV
+      echo "PR_CREATION_WAIT_TIME=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.pr_creation_wait_time')" >> $GITHUB_ENV
+      echo "STALE_BRANCH_THRESHOLD=$(echo "$NORMALIZED_CONFIG" | jq -r '.repository.version_control.stale_branch_threshold')" >> $GITHUB_ENV
+
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Environment variables set"
         cat $GITHUB_ENV
@@ -303,3 +303,4 @@ runs:
         echo "Debug: Repository Context"
         echo '${{ steps.set_repo_context.outputs.repository-context }}' | jq '.'
       fi
+
