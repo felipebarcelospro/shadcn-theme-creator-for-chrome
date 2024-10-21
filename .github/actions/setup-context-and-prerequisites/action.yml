@@ -62,7 +62,9 @@ runs:
         echo "Error: Failed to parse config.yml"
         exit 1
       fi
-      echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
+      echo "config-data<<EOF" >> $GITHUB_OUTPUT
+      echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Config data loaded and parsed"
         echo "$CONFIG_DATA" | jq '.'
@@ -72,7 +74,7 @@ runs:
     id: normalize_config
     shell: bash
     run: |
-      CONFIG_DATA="${{ steps.load_config.outputs.config-data }}"
+      CONFIG_DATA=$(echo '${{ steps.load_config.outputs.config-data }}' | sed -e 's/^EOF$//' -e '$d')
       NORMALIZED_CONFIG=$(echo "$CONFIG_DATA" | jq -c '{
         repository: {
           type: (.repository.type // "monorepo"),
@@ -127,7 +129,9 @@ runs:
         echo "Error: Failed to fetch repository metadata"
         exit 1
       fi
-      echo "repo-metadata=$REPO_METADATA" >> $GITHUB_OUTPUT
+      cat <<EOF >> $GITHUB_OUTPUT
+repo-metadata=$REPO_METADATA
+EOF
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Repository metadata fetched"
         echo "$REPO_METADATA" | jq '.'
