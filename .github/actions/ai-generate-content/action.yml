@@ -40,32 +40,40 @@ runs:
   using: "composite"
   steps:
   - name: Generate AI Content
-    uses: google-github-actions/generative-ai-action@v0
-    with:
-      model: ${{ inputs.ai-model }}
-      prompt: |
-        Generate ${{ inputs.content-type }} content with the following context:
-        ${{ inputs.context-data }}
-
-        Additional instructions:
-        ${{ inputs.additional-context }}
-
-        Please use a ${{ inputs.tone }} tone and limit the response to ${{ inputs.max-length }} characters.
-
-        If a template is provided, use it as a guide for the structure and format of the content.
-      temperature: 0.2
-      top_k: 20
-      top_p: 0.8
-      max_output_tokens: 1000
-    env:
-      GOOGLE_API_KEY: ${{ inputs.ai-api-key }}
     id: generate-content
+    uses: tyrrrz/action-http-request@master
+    with:
+      url: https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent
+      method: POST
+      headers: |
+        Content-Type: application/json
+        Authorization: Bearer ${{ inputs.ai-api-key }}
+      body: |
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Generate ${{ inputs.content-type }} content with the following context:\n${{ inputs.context-data }}\n\nAdditional instructions:\n${{ inputs.additional-context }}\n\nPlease use a ${{ inputs.tone }} tone and limit the response to ${{ inputs.max-length }} characters.\n\nIf a template is provided, use it as a guide for the structure and format of the content."
+                }
+              ]
+            }
+          ],
+          "generationConfig": {
+            "temperature": 0.2,
+            "topK": 20,
+            "topP": 0.8,
+            "maxOutputTokens": 1000
+          }
+        }
+      retry-count: 3
+      retry-delay: 1000
 
   - name: Process response
     id: process-response
     run: |
-      content="${{ steps.generate-content.outputs.response }}"
-      metadata="${{ steps.generate-content.outputs.metadata }}"
+      content=$(echo '${{ steps.generate-content.outputs.body }}' | jq -r '.candidates[0].content.parts[0].text')
+      metadata=$(echo '${{ steps.generate-content.outputs.body }}' | jq -c '.candidates[0].safetyRatings')
 
       echo "generated-content<<EOF" >> $GITHUB_OUTPUT
       echo "$content" >> $GITHUB_OUTPUT

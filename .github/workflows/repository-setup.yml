@@ -33,6 +33,15 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
+    strategy:
+      matrix:
+        protected_branches: ${{ fromJson(needs.check-repository-setup.outputs.protected_branches) }}
+        initial_labels: ${{ fromJson(needs.check-repository-setup.outputs.initial_labels) }}
+        project_board_columns: ${{ fromJson(needs.check-repository-setup.outputs.project_board_columns) }}
+        dependabot_ecosystems: ${{ fromJson(needs.check-repository-setup.outputs.dependabot_ecosystems) }}
+        default_code_owners: ${{ fromJson(needs.check-repository-setup.outputs.default_code_owners) }}
+        initial_files: ${{ fromJson(needs.check-repository-setup.outputs.initial_files) }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -75,7 +84,7 @@ jobs:
         uses: ./.github/actions/apply-branch-protection
         with:
           github-token: ${{ env.GH_TOKEN }}
-          branch-patterns: ${{ steps.setup-context.outputs.protected_branches }}
+          branch-patterns: ${{ matrix.protected_branches }}
           protection-rules: ${{ steps.setup-context.outputs.branch_protection_rules }}
 
       - name: Create Wiki Pages
@@ -97,13 +106,13 @@ jobs:
         uses: ./.github/actions/setup-issue-labels
         with:
           github-token: ${{ env.GH_TOKEN }}
-          labels: ${{ steps.setup-context.outputs.initial_labels }}
+          labels: ${{ toJson(matrix.initial_labels) }}
 
       - name: Setup Project Board
         uses: ./.github/actions/setup-project-board
         with:
           github-token: ${{ env.GH_TOKEN }}
-          columns: ${{ steps.setup-context.outputs.project_board_columns }}
+          columns: ${{ toJson(matrix.project_board_columns) }}
 
       - name: Setup Repository Settings
         uses: ./.github/actions/setup-repository-settings
@@ -121,20 +130,20 @@ jobs:
         uses: ./.github/actions/setup-dependabot
         with:
           github-token: ${{ env.GH_TOKEN }}
-          ecosystems: ${{ steps.setup-context.outputs.dependabot_ecosystems }}
+          ecosystems: ${{ toJson(matrix.dependabot_ecosystems) }}
           config: ${{ steps.setup-context.outputs.dependabot_config }}
 
       - name: Setup CODEOWNERS
         uses: ./.github/actions/setup-codeowners
         with:
           github-token: ${{ env.GH_TOKEN }}
-          repository-admins: ${{ steps.setup-context.outputs.default_code_owners }}
+          repository-admins: ${{ toJson(matrix.default_code_owners) }}
 
       - name: Commit Changes
         uses: ./.github/actions/commit-changes
         with:
           commit-message: "chore: initial repository setup"
-          files: ${{ steps.setup-context.outputs.initial_files }}
+          files: ${{ toJson(matrix.initial_files) }}
           github-token: ${{ env.GH_TOKEN }}
 
       - name: Create Pull Request
