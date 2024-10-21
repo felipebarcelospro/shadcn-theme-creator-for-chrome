@@ -13,6 +13,8 @@ jobs:
     outputs:
       apps_configuration: ${{ steps.setup-context.outputs.apps_configuration }}
       performance_monitoring: ${{ steps.setup-context.outputs.performance_monitoring }}
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -21,7 +23,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
   monitor:
     needs: setup
@@ -30,6 +32,8 @@ jobs:
       matrix:
         package: ${{ needs.setup.outputs.apps_configuration }}
       fail-fast: false
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
     steps:
       - name: Checkout code
@@ -40,14 +44,14 @@ jobs:
         uses: ./.github/actions/check-site-availability
         with:
           urls: ${{ matrix.package.ci_cd.performance_monitoring.urls_to_monitor }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Measure Performance
         id: measure-performance
         uses: ./.github/actions/measure-site-performance
         with:
           urls: ${{ matrix.package.ci_cd.performance_monitoring.urls_to_monitor }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Analyze Results
         id: analyze-results
@@ -56,7 +60,7 @@ jobs:
           availability-status: ${{ steps.check-availability.outputs.availability_status }}
           performance-metrics: ${{ steps.measure-performance.outputs.performance_metrics }}
           thresholds: ${{ needs.setup.outputs.performance_monitoring }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Create Issues (if needed)
         id: create-issues
@@ -66,7 +70,7 @@ jobs:
           issue-type: ${{ steps.analyze-results.outputs.issue_type }}
           issue-details: ${{ steps.analyze-results.outputs.issue_details }}
           labels: ${{ needs.setup.outputs.performance_monitoring }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Send Notifications
         id: send-notifications
@@ -78,7 +82,7 @@ jobs:
               "analysis-report": ${{ steps.analyze-results.outputs.analysis_report }},
               "issue-url": "${{ steps.create-issues.outputs.issue_url }}"
             }
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Send Webhook
         id: send-webhook
@@ -91,12 +95,14 @@ jobs:
               "availability-data": ${{ steps.check-availability.outputs.availability_status }}
             }
           webhook-url: ${{ matrix.package.plugins.webhook.url }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
   create-monitoring-failure-issue:
     needs: [setup, monitor]
     if: failure()
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -107,4 +113,4 @@ jobs:
           issue-title: "Performance Monitoring Failed"
           issue-body: "The performance and availability monitoring workflow encountered an error. Manual check required."
           labels: '["high-priority", "monitoring-error"]'
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}

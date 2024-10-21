@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       affected_packages: ${{ steps.determine-affected-packages.outputs.affected_apps }}
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -23,7 +25,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Determine Affected Packages
         id: determine-affected-packages
@@ -31,11 +33,13 @@ jobs:
         with:
           changed_files: ${{ steps.setup-context.outputs.changed_files }}
           apps_configuration: ${{ steps.setup-context.outputs.apps_configuration }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
   code-review:
     needs: setup
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
     strategy:
       matrix:
         package: ${{ fromJson(needs.setup.outputs.affected_packages) }}
@@ -48,14 +52,14 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Assign Reviewers
         uses: ./.github/actions/auto-assign
         with:
           item-type: 'pr'
           item-number: ${{ github.event.pull_request.number }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Run Code Quality Checks
         id: run-code-quality
@@ -63,14 +67,14 @@ jobs:
         with:
           package-name: ${{ matrix.package }}
           config-file: ${{ steps.setup-context.outputs.config-data }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Post Code Quality Results
         uses: ./.github/actions/post-pr-comment
         with:
           pr-number: ${{ github.event.pull_request.number }}
           comment-content: ${{ steps.run-code-quality.outputs.quality-report }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Check Review Guidelines
         uses: ./.github/actions/check-review-guidelines
@@ -78,7 +82,7 @@ jobs:
           pr-description: ${{ github.event.pull_request.body }}
           review-comments: ${{ github.event.review.body || '' }}
           guideline-rules: ${{ steps.setup-context.outputs.config-data }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Enforce Review Approval
         id: enforce-review-approval
@@ -86,7 +90,7 @@ jobs:
         with:
           pr-number: ${{ github.event.pull_request.number }}
           approval-requirements: ${{ steps.setup-context.outputs.config-data }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Update PR Status
         uses: ./.github/actions/update-pr-status
@@ -94,7 +98,7 @@ jobs:
           pr-number: ${{ github.event.pull_request.number }}
           review-status: ${{ steps.enforce-review-approval.outputs.approval-status }}
           code-quality-results: ${{ steps.run-code-quality.outputs.quality-report }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Notify Reviewers
         uses: ./.github/actions/send-notification
@@ -105,4 +109,4 @@ jobs:
               "pr-url": "${{ github.event.pull_request.html_url }}",
               "assigned-reviewers": ${{ toJson(github.event.pull_request.requested_reviewers) }}
             }
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}

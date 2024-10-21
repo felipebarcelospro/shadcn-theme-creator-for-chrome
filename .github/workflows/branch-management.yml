@@ -14,6 +14,8 @@ permissions: {}
 jobs:
   branch-management:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
     steps:
       - name: Checkout code
@@ -24,7 +26,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Validate Branch Name
         id: validate-branch
@@ -32,7 +34,7 @@ jobs:
         with:
           branch-name: ${{ github.ref }}
           branch-naming-rules: ${{ steps.setup-context.outputs.branch-prefixes }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Create or Update Branch
         id: create-update-branch
@@ -41,7 +43,7 @@ jobs:
           branch-name: ${{ github.ref_name }}
           base-branch: ${{ github.base_ref || steps.setup-context.outputs.main-branch }}
           commit-changes: ${{ toJson(github.event.commits) }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Apply Branch Protection
         id: apply-protection
@@ -49,7 +51,7 @@ jobs:
         with:
           branch-name: ${{ github.ref }}
           protection-rules: ${{ steps.setup-context.outputs.branch-protection-rules }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Wait for Manual PR Creation
         id: wait-for-pr
@@ -57,7 +59,7 @@ jobs:
         with:
           branch-name: ${{ github.ref }}
           wait-time: ${{ steps.setup-context.outputs.pr-creation-wait-time }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Generate PR Description
         id: generate-pr-description
@@ -71,7 +73,7 @@ jobs:
               "commit-messages": ${{ toJson(github.event.commits) }}
             }
           template-path: .github/templates/BASE/PULL_REQUEST_TEMPLATE.md
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Create or Update PR
         id: create-or-update-pr
@@ -81,7 +83,7 @@ jobs:
           pr-title: ${{ github.event.pull_request.title || format('Update {0}', github.ref) }}
           pr-body: ${{ steps.generate-pr-description.outputs.generated-content }}
           base-branch: ${{ github.base_ref || steps.setup-context.outputs.main-branch }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Merge Branch
         id: merge-branch
@@ -91,7 +93,7 @@ jobs:
           source-branch: ${{ github.head_ref }}
           target-branch: ${{ github.base_ref }}
           merge-strategy: ${{ steps.setup-context.outputs.merge-strategy }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Clean Up Branch
         id: clean-up-branch
@@ -100,7 +102,7 @@ jobs:
         with:
           branch-name: ${{ github.head_ref }}
           force-delete: ${{ steps.setup-context.outputs.delete-branch-on-merge }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Send Notification
         id: send-notification
@@ -113,7 +115,7 @@ jobs:
               "action": "${{ github.event_name == 'push' && 'pushed' || github.event.action }}",
               "pr_url": "${{ steps.create-or-update-pr.outputs.pr-url }}"
             }
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Cleanup Stale Branches
         id: cleanup-stale-branches
@@ -122,4 +124,4 @@ jobs:
         with:
           stale-threshold: ${{ steps.setup-context.outputs.stale-branch-threshold }}
           exclude-branches: ${{ steps.setup-context.outputs.protected-branches }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}

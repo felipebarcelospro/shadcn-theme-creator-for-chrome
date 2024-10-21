@@ -30,18 +30,20 @@ jobs:
     needs: check-repository-setup
     if: needs.check-repository-setup.outputs.is-configured == 'false'
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.GH_TOKEN }}
+          token: ${{ env.GH_TOKEN }}
 
       - name: Setup Context and Prerequisites
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
           debug: 'true'
 
       - name: Create Git Flow Branches
@@ -49,7 +51,7 @@ jobs:
         with:
           branch-name: ${{ steps.setup-context.outputs.main_branch }}
           base-branch: 'main'
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
         continue-on-error: true
 
       - name: Debug Branch Creation
@@ -72,14 +74,14 @@ jobs:
       - name: Setup Branch Protection Rules
         uses: ./.github/actions/apply-branch-protection
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
           branch-patterns: ${{ steps.setup-context.outputs.protected_branches }}
           protection-rules: ${{ steps.setup-context.outputs.branch_protection_rules }}
 
       - name: Create Wiki Pages
         uses: ./.github/actions/create-wiki-page
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
           page-name: "Git Flow Process"
           page-content: ${{ steps.generate-content.outputs.generated-content }}
 
@@ -89,24 +91,24 @@ jobs:
           discussion-title: "Welcome to the Repository"
           discussion-content: ${{ steps.generate-content.outputs.generated-content }}
           category: ${{ steps.setup-context.outputs.initial_discussion_category }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Setup Issue Labels
         uses: ./.github/actions/setup-issue-labels
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
           labels: ${{ steps.setup-context.outputs.initial_labels }}
 
       - name: Setup Project Board
         uses: ./.github/actions/setup-project-board
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
           columns: ${{ steps.setup-context.outputs.project_board_columns }}
 
       - name: Setup Repository Settings
         uses: ./.github/actions/setup-repository-settings
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
           has-wiki: ${{ steps.setup-context.outputs.has_wiki }}
           has-issues: ${{ steps.setup-context.outputs.has_issues }}
           has-projects: ${{ steps.setup-context.outputs.has_projects }}
@@ -118,14 +120,14 @@ jobs:
       - name: Setup Dependabot
         uses: ./.github/actions/setup-dependabot
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
           ecosystems: ${{ steps.setup-context.outputs.dependabot_ecosystems }}
           config: ${{ steps.setup-context.outputs.dependabot_config }}
 
       - name: Setup CODEOWNERS
         uses: ./.github/actions/setup-codeowners
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
           repository-admins: ${{ steps.setup-context.outputs.default_code_owners }}
 
       - name: Commit Changes
@@ -133,7 +135,7 @@ jobs:
         with:
           commit-message: "chore: initial repository setup"
           files: ${{ steps.setup-context.outputs.initial_files }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Create Pull Request
         uses: ./.github/actions/create-or-update-branch
@@ -144,7 +146,7 @@ jobs:
             chore: initial repository setup
             
             - feat: add initial repository files and configurations
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Send Notification
         uses: ./.github/actions/send-notification
@@ -154,7 +156,7 @@ jobs:
             {
               "setup-details": ${{ toJson(steps) }}
             }
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Mark repository as configured
         run: |
@@ -165,4 +167,4 @@ jobs:
           git commit -m "chore: mark repository as configured"
           git push
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}

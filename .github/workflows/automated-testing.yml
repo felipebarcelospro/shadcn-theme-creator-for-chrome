@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       packages: ${{ steps.get-packages.outputs.packages }}
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -26,7 +28,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Get Packages
         id: get-packages
@@ -41,6 +43,8 @@ jobs:
       matrix:
         package: ${{ fromJson(needs.setup.outputs.packages) }}
       fail-fast: false
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
     steps:
       - name: Checkout code
@@ -51,7 +55,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Install Dependencies
         id: install-dependencies
@@ -59,7 +63,7 @@ jobs:
         with:
           package-manager: ${{ steps.setup-context.outputs.package-manager }}
           working-directory: ${{ steps.setup-context.outputs.package-path }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Run Tests
         id: run-tests
@@ -67,7 +71,7 @@ jobs:
         with:
           test-command: ${{ steps.setup-context.outputs.test-command }}
           working-directory: ${{ steps.setup-context.outputs.package-path }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Generate Test Report
         id: generate-test-report
@@ -75,7 +79,7 @@ jobs:
         with:
           test-results: ${{ steps.run-tests.outputs.test-results }}
           package-name: ${{ matrix.package }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
           
       - name: Upload Test Results
         id: upload-test-results
@@ -98,4 +102,4 @@ jobs:
               "details": "Check the workflow run for more information."
             }
           config-path: '.github/config.yml'
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
