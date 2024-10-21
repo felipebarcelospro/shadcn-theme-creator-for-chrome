@@ -60,30 +60,40 @@ runs:
           "generationConfig": {
             "temperature": 0.2,
             "topK": 20,
-            "topP": 0.8,
-            "maxOutputTokens": 1000
+            "topP": 0.8
           }
         }
 
-  - name: Process response
+  - name: Process and validate response
     id: process-response
+    uses: actions/github-script@v6
+    with:
+      script: |
+        const response = JSON.parse(process.env.GENERATE_CONTENT_RESPONSE);
+        const content = response.candidates[0]?.content?.parts[0]?.text;
+        const metadata = response.candidates[0]?.safetyRatings;
+
+        if (!content) {
+          core.setFailed('No content generated');
+          return;
+        }
+
+        core.setOutput('generated-content', content);
+        core.setOutput('generation-metadata', JSON.stringify(metadata));
+
+        console.log('Generated content:', content);
+        console.log('Generation metadata:', JSON.stringify(metadata, null, 2));
+    env:
+      GENERATE_CONTENT_RESPONSE: ${{ steps.generate-content.outputs.response }}
+
+  - name: Verify outputs
+    if: success()
     run: |
-      content=$(echo '${{ fromJson(steps.generate-content.outputs.response).candidates[0].content.parts[0].text }}')
-      metadata=$(echo '${{ toJson(fromJson(steps.generate-content.outputs.response).candidates[0].safetyRatings) }}')
-
-      echo "generated-content<<EOF" >> $GITHUB_OUTPUT
-      echo "$content" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
-
-      echo "generation-metadata<<EOF" >> $GITHUB_OUTPUT
-      echo "$metadata" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
-    shell: bash
-
-  - name: Debug - Generated content
-    run: |
-      echo "Generated content:"
-      echo "${{ steps.process-response.outputs.generated-content }}"
-      echo "Generation metadata:"
-      echo "${{ steps.process-response.outputs.generation-metadata }}"
+      if [ -z "${{ steps.process-response.outputs.generated-content }}" ]; then
+        echo "Error: Generated content is empty"
+        exit 1
+      fi
+      if [ -z "${{ steps.process-response.outputs.generation-metadata }}" ]; then
+        echo "Warning: Generation metadata is empty"
+      fi
     shell: bash
