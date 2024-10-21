@@ -99,11 +99,11 @@ runs:
         echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
         echo "GITHUB_SHA=${GITHUB_SHA}"
         echo "GITHUB_REF=${GITHUB_REF}"
-        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')"
-        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches | join(",")')"
-        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes | join(",")')"
-        echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy')"
-        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches | join(",")')"
+        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type // empty')"
+        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches // [] | join(",")')"
+        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes // [] | join(",")')"
+        echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy // empty')"
+        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches // [] | join(",")')"
       } >> $GITHUB_ENV
       echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
 
@@ -122,11 +122,11 @@ runs:
           config: $config,
           branch: $branch,
           commit: $commit,
-          repoType: $config.repository.type,
-          mainBranches: $config.repository.version_control.main_branches,
-          branchPrefixes: $config.repository.version_control.branch_prefixes,
-          mergeStrategy: $config.repository.version_control.merge_strategy,
-          protectedBranches: $config.repository.version_control.protected_branches,
+          repoType: ($config.repository.type // null),
+          mainBranches: ($config.repository.version_control.main_branches // []),
+          branchPrefixes: ($config.repository.version_control.branch_prefixes // []),
+          mergeStrategy: ($config.repository.version_control.merge_strategy // null),
+          protectedBranches: ($config.repository.version_control.protected_branches // []),
           packageManager: $packageManager,
           changedFiles: $changedFiles
         }')
@@ -137,7 +137,7 @@ runs:
   - name: Set apps configuration
     shell: bash
     run: |
-      APPS_CONFIG=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific')
+      APPS_CONFIG=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific // {}')
       echo "apps_configuration<<EOF" >> $GITHUB_OUTPUT
       echo "$APPS_CONFIG" >> $GITHUB_OUTPUT
       echo "EOF" >> $GITHUB_OUTPUT
