@@ -41,13 +41,12 @@ runs:
   steps:
   - name: Generate AI Content
     id: generate-content
-    uses: tyrrrz/action-http-request@master
+    uses: fjogeleit/http-request-action@v1
     with:
       url: https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent?key=${{ inputs.ai-api-key }}
-      method: POST
-      headers: |
-        Content-Type: application/json
-      body: |
+      method: 'POST'
+      contentType: 'application/json'
+      data: >
         {
           "contents": [
             {
@@ -65,14 +64,12 @@ runs:
             "maxOutputTokens": 1000
           }
         }
-      retry-count: 3
-      retry-delay: 1000
 
   - name: Process response
     id: process-response
     run: |
-      content=$(echo '${{ steps.generate-content.outputs.body }}' | jq -r '.candidates[0].content.parts[0].text')
-      metadata=$(echo '${{ steps.generate-content.outputs.body }}' | jq -c '.candidates[0].safetyRatings')
+      content=$(echo '${{ fromJson(steps.generate-content.outputs.response).candidates[0].content.parts[0].text }}')
+      metadata=$(echo '${{ toJson(fromJson(steps.generate-content.outputs.response).candidates[0].safetyRatings) }}')
 
       echo "generated-content<<EOF" >> $GITHUB_OUTPUT
       echo "$content" >> $GITHUB_OUTPUT
