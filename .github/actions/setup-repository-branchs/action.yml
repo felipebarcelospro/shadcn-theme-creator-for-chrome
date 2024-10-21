@@ -29,23 +29,28 @@ runs:
       echo "branches=$(echo '${{ inputs.branches }}' | jq -c '.')" >> $GITHUB_OUTPUT
 
   - name: Setup branches
-    uses: ./.github/actions/create-or-update-branch
-    strategy:
-      matrix:
-        branch: ${{ fromJson(steps.parse-branches.outputs.branches) }}
-    with:
-      github-token: ${{ inputs.github-token }}
-      branch-name: ${{ matrix.branch }}
-      base-branch: ${{ inputs.base-branch }}
+    shell: bash
+    run: |
+      for branch in $(echo '${{ inputs.branches }}' | jq -r '.[]'); do
+        if git ls-remote --exit-code --heads origin $branch; then
+          echo "Branch $branch already exists. Updating..."
+          git checkout $branch
+          git pull origin ${{ inputs.base-branch }}
+        else
+          echo "Creating new branch $branch..."
+          git checkout -b $branch ${{ inputs.base-branch }}
+        fi
+        git push -u origin $branch
+      done
 
   - name: Check branch setup status
     if: failure()
     shell: bash
     run: |
-      echo "An error occurred during branch setup for ${{ matrix.branch }}"
+      echo "An error occurred during branch setup"
 
   - name: Summarize branch setup
     shell: bash
     run: |
       echo "Branch setup completed"
-      echo "Successfully processed branches: ${{ steps.parse-branches.outputs.branches }}"
+      echo "Successfully processed branches: ${{ inputs.branches }}"

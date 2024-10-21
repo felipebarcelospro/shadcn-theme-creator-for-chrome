@@ -16,31 +16,27 @@ runs:
   using: "composite"
   steps:
   - name: Apply branch protection rules
+    id: apply-protection-rules
+    uses: fjogeleit/http-request-action@v1
+    with:
+      url: https://api.github.com/repos/${{ github.repository }}/branches/${{ inputs.branch-patterns }}/protection
+      method: 'PUT'
+      customHeaders: '{"Authorization": "token ${{ inputs.github-token }}", "Accept": "application/vnd.github.v3+json"}'
+      data: ${{ inputs.protection-rules }}
+
+  - name: Process response
     shell: bash
-    env:
-      GITHUB_TOKEN: ${{ inputs.github-token }}
-      BRANCH_PATTERNS: ${{ inputs.branch-patterns }}
-      PROTECTION_RULES: ${{ inputs.protection-rules }}
     run: |
-      branchPatterns=$(echo "$BRANCH_PATTERNS" | jq -r '.[]')
-      for pattern in $branchPatterns; do
-        echo "Applying protection rules to branch pattern: $pattern"
-
-        response=$(curl -s -X PUT \
-          -H "Authorization: token $GITHUB_TOKEN" \
-          -H "Accept: application/vnd.github.v3+json" \
-          "https://api.github.com/repos/$GITHUB_REPOSITORY/branches/$pattern/protection" \
-          -d "$PROTECTION_RULES")
-
-        if [[ $(echo "$response" | jq -r '.message') == "null" ]]; then
-          echo "Successfully applied protection rules to $pattern"
-        else
-          echo "Error applying protection rules to $pattern: $(echo "$response" | jq -r '.message')"
-        fi
-      done
+      response='${{ steps.apply-protection-rules.outputs.response }}'
+      if [[ $(echo "$response" | jq -r '.message') == "null" ]]; then
+        echo "Successfully applied protection rules to ${{ inputs.branch-patterns }}"
+      else
+        echo "Error applying protection rules to ${{ inputs.branch-patterns }}: $(echo "$response" | jq -r '.message')"
+        exit 1
+      fi
 
   - name: Generate summary
     id: generate-summary
     shell: bash
     run: |
-      echo "Branch protection rules applied to patterns: ${{ inputs.branch-patterns }}" >> $GITHUB_OUTPUT
+      echo "branch-patterns=${{ inputs.branch-patterns }}" >> $GITHUB_OUTPUT

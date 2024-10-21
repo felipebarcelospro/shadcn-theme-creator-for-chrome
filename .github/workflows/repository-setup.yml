@@ -60,13 +60,15 @@ jobs:
           echo "Debug: An error occurred during branch creation/update"
           echo "operation-status=failed" >> $GITHUB_OUTPUT
 
-  generate-content:
+  generate-wiki-content:
     needs: check-repository-setup
     if: needs.check-repository-setup.outputs.is-configured == 'false'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
       SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+    outputs:
+      wiki-content: ${{ steps.generate-wiki-content.outputs.generated-content }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -81,6 +83,19 @@ jobs:
           template-path: .github/templates/wiki_template.md
           tone: ${{ env.SETUP_CONTEXT.config.repository.documentation_tone }}
           max-length: ${{ env.SETUP_CONTEXT.config.repository.documentation_max_length }}
+
+  generate-discussion-content:
+    needs: check-repository-setup
+    if: needs.check-repository-setup.outputs.is-configured == 'false'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+    outputs:
+      discussion-content: ${{ steps.generate-discussion-content.outputs.generated-content }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Generate Discussion Content
         id: generate-discussion-content
@@ -111,8 +126,8 @@ jobs:
           branch-patterns: ${{ env.SETUP_CONTEXT.protectedBranches }}
           protection-rules: ${{ env.SETUP_CONTEXT.config.repository.version_control.branch_protection }}
 
-  create-wiki-and-discussions:
-    needs: [check-repository-setup, generate-content]
+  create-wiki:
+    needs: [check-repository-setup, generate-wiki-content]
     if: needs.check-repository-setup.outputs.is-configured == 'false'
     runs-on: ubuntu-latest
     env:
@@ -127,14 +142,25 @@ jobs:
         with:
           github-token: ${{ env.GH_TOKEN }}
           page-name: "Git Flow Process"
-          page-content: ${{ needs.generate-content.outputs.generate-wiki-content }}
+          page-content: ${{ needs.generate-wiki-content.outputs.wiki-content }}
+
+  create-discussions:
+    needs: [check-repository-setup, generate-discussion-content]
+    if: needs.check-repository-setup.outputs.is-configured == 'false'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Create Discussion Posts
         uses: ./.github/actions/create-discussion-post
         with:
           github-token: ${{ env.GH_TOKEN }}
           discussion-title: "Welcome to the Repository"
-          discussion-content: ${{ needs.generate-content.outputs.generate-discussion-content }}
+          discussion-content: ${{ needs.generate-discussion-content.outputs.discussion-content }}
           category: ${{ env.SETUP_CONTEXT.config.repository.initial_discussion_category }}
 
   setup-repository-features:
@@ -190,7 +216,7 @@ jobs:
           repository-admins: ${{ env.SETUP_CONTEXT.config.repository.setup.default_code_owners }}
 
   finalize-setup:
-    needs: [setup-branches, setup-repository-rules, create-wiki-and-discussions, setup-repository-features, setup-security-features]
+    needs: [setup-branches, setup-repository-rules, create-wiki, create-discussions, setup-repository-features, setup-security-features]
     if: needs.check-repository-setup.outputs.is-configured == 'false'
     runs-on: ubuntu-latest
     env:

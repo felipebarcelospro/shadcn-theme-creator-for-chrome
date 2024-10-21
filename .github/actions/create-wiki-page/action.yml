@@ -3,7 +3,7 @@ description: 'Creates a new wiki page in the repository using GitHub API'
 
 inputs:
   github-token:
-    description: 'GitHub token for authentication'
+    description: 'GitHub token for API access'
     required: true
   page-name:
     description: 'Name of the wiki page to create'
@@ -12,35 +12,37 @@ inputs:
     description: 'Content of the wiki page'
     required: true
 
-runs:
-  using: "composite"
-  steps:
-  - name: Create wiki page
-    shell: bash
-    env:
-      GH_TOKEN: ${{ inputs.github-token }}
-    run: |
-      # Encode page content for API request
-      ENCODED_CONTENT=$(echo "${{ inputs.page-content }}" | jq -sRr @uri)
-
-      # Create wiki page using GitHub API
-      RESPONSE=$(curl -s -X PUT \
-        -H "Authorization: token $GH_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/${{ github.repository }}/wiki/${{ inputs.page-name }}" \
-        -d "{\"message\":\"Create ${{ inputs.page-name }} wiki page\",\"content\":\"$ENCODED_CONTENT\"}")
-
-      # Check if the page was created successfully
-      if [[ $(echo "$RESPONSE" | jq -r '.html_url') != "null" ]]; then
-        echo "Wiki page created successfully"
-        echo "page-url=$(echo "$RESPONSE" | jq -r '.html_url')" >> $GITHUB_OUTPUT
-      else
-        echo "Failed to create wiki page"
-        echo "Error: $(echo "$RESPONSE" | jq -r '.message')"
-        exit 1
-      fi
-
 outputs:
   page-url:
     description: 'URL of the created wiki page'
-    value: ${{ steps.create-wiki-page.outputs.page-url }}
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Create Wiki Page
+    id: create-wiki-page
+    uses: fjogeleit/http-request-action@v1
+    with:
+      url: https://api.github.com/repos/${{ github.repository }}/wiki/${{ inputs.page-name }}
+      method: 'PUT'
+      bearerToken: ${{ inputs.github-token }}
+      customHeaders: '{"Accept": "application/vnd.github.v3+json"}'
+      data: >
+        {
+          "message": "Create ${{ inputs.page-name }} wiki page",
+          "content": "${{ inputs.page-content }}"
+        }
+
+  - name: Process response
+    shell: bash
+    run: |
+      response='${{ steps.create-wiki-page.outputs.response }}'
+      html_url=$(echo "$response" | jq -r '.html_url')
+      if [[ "$html_url" != "null" ]]; then
+        echo "Wiki page created successfully"
+        echo "page-url=$html_url" >> $GITHUB_OUTPUT
+      else
+        echo "Failed to create wiki page"
+        echo "Error: $(echo "$response" | jq -r '.message')"
+        exit 1
+      fi
