@@ -17,7 +17,7 @@
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
-    "@types/chrome": "^0.0.237",
+    "@types/chrome": "^0.0.278",
     "@types/lodash": "^4.17.11",
     "@types/react": "^18.2.14",
     "@types/react-dom": "^18.2.6",
