@@ -25,6 +25,10 @@ inputs:
   github-token:
     description: 'GitHub token for API access'
     required: true
+  debug:
+    description: 'Enable debug mode'
+    required: false
+    default: 'false'
 
 outputs:
   generated-content:
@@ -33,90 +37,96 @@ outputs:
     description: 'Metadata about the generation process (model used, confidence score, etc.)'
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
-
-  - name: Setup Node.js
-    uses: actions/setup-node@v4
+  - name: Cache dependencies
+    uses: actions/cache@v3
+    id: cache
     with:
-      node-version: '20'
+      path: ~/.npm
+      key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+      restore-keys: |
+        ${{ runner.os }}-node-
 
   - name: Install dependencies
+    if: steps.cache.outputs.cache-hit != 'true'
+    shell: bash
     run: npm ci
-    shell: bash
 
-  - name: Prepare AI prompt
-    id: prepare-prompt
-    run: |
-      prompt=$(cat << EOF
-      Generate ${{ inputs.content-type }} content with the following context:
-      ${{ inputs.context-data }}
+  - name: AI Generate Content
+    uses: actions/github-script@v6
+    with:
+      github-token: ${{ inputs.github-token }}
+      script: |
+        const fs = require('fs');
+        const axios = require('axios');
 
-      Additional instructions:
-      ${{ inputs.additional-context }}
+        const DEBUG = '${{ inputs.debug }}' === 'true';
 
-      Please use a ${{ inputs.tone }} tone and limit the response to ${{ inputs.max-length }} characters.
+        function debug(message) {
+          if (DEBUG) console.log(`DEBUG: ${message}`);
+        }
 
-      If a template is provided, use it as a guide for the structure and format of the content.
-      EOF
-      )
-      echo "PROMPT<<EOF" >> $GITHUB_ENV
-      echo "$prompt" >> $GITHUB_ENV
-      echo "EOF" >> $GITHUB_ENV
-    shell: bash
+        try {
+          // Prepare AI prompt
+          const prompt = `
+            Generate ${{ inputs.content-type }} content with the following context:
+            ${{ inputs.context-data }}
 
-  - name: Load template
-    id: load-template
-    if: inputs.template-path
-    run: |
-      template=$(cat ${{ inputs.template-path }})
-      echo "TEMPLATE<<EOF" >> $GITHUB_ENV
-      echo "$template" >> $GITHUB_ENV
-      echo "EOF" >> $GITHUB_ENV
-    shell: bash
+            Additional instructions:
+            ${{ inputs.additional-context }}
 
-  - name: Generate content
-    id: generate-content
-    run: |
-      response=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent" \
-        -H "Authorization: Bearer ${{ secrets.GOOGLE_AI_API_KEY }}" \
-        -H "Content-Type: application/json" \
-        -d '{
-          "contents": [
-            {
-              "parts": [
-                {
-                  "text": "'"${PROMPT}"'"
-                }
-              ]
-            }
-          ],
-          "generationConfig": {
-            "temperature": 0.7,
-            "topK": 40,
-            "topP": 0.95,
-            "maxOutputTokens": $((${{ inputs.max-length }} / 4))
+            Please use a ${{ inputs.tone }} tone and limit the response to ${{ inputs.max-length }} characters.
+
+            If a template is provided, use it as a guide for the structure and format of the content.
+          `;
+          debug('Prompt prepared');
+
+          // Load template if provided
+          let template = '';
+          if ('${{ inputs.template-path }}') {
+            template = fs.readFileSync('${{ inputs.template-path }}', 'utf8');
+            debug('Template loaded');
           }
-        }')
 
-      content=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text')
-      metadata=$(echo "$response" | jq -r '.candidates[0].safetyRatings')
+          // Generate content
+          const response = await axios.post(
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent',
+            {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.7,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: Math.floor(${{ inputs.max-length }} / 4)
+              }
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${process.env.GOOGLE_AI_API_KEY}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
 
-      echo "GENERATED_CONTENT<<EOF" >> $GITHUB_OUTPUT
-      echo "$content" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+          const content = response.data.candidates[0].content.parts[0].text;
+          const metadata = JSON.stringify(response.data.candidates[0].safetyRatings);
 
-      echo "GENERATION_METADATA<<EOF" >> $GITHUB_OUTPUT
-      echo "$metadata" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+          core.setOutput('generated-content', content);
+          core.setOutput('generation-metadata', metadata);
+
+          debug('Content generated successfully');
+          debug(`Generated content: ${content}`);
+          debug(`Generation metadata: ${metadata}`);
+
+        } catch (error) {
+          core.setFailed(`Action failed: ${error.message}`);
+          if (DEBUG) console.error(error);
+        }
+
+  - name: Cleanup
+    if: always()
     shell: bash
-
-  - name: Debug - Generated content
     run: |
-      echo "Generated content:"
-      echo "${{ steps.generate-content.outputs.GENERATED_CONTENT }}"
-      echo "Generation metadata:"
-      echo "${{ steps.generate-content.outputs.GENERATION_METADATA }}"
-    shell: bash
+      rm -rf node_modules
+      npm cache clean --force

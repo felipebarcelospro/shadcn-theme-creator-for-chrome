@@ -12,7 +12,7 @@ on:
         default: 'patch'
 
 env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
 jobs:
   setup:
@@ -29,7 +29,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Determine Affected Packages
         id: determine-affected-packages
@@ -37,7 +37,7 @@ jobs:
         with:
           changed_files: ${{ steps.setup-context.outputs.changed_files }}
           apps_configuration: ${{ steps.setup-context.outputs.apps_configuration }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
   release-management:
     needs: setup
@@ -57,14 +57,14 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Get Version
         id: get-version
         uses: ./.github/actions/get-version
         with:
           release_type: ${{ github.event.inputs.release_type || 'patch' }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Bump Version
         id: bump-version
@@ -72,7 +72,7 @@ jobs:
         with:
           new_version: ${{ steps.get-version.outputs.new_version }}
           affected_apps: '["${{ matrix.package }}"]'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Changelog
         id: generate-changelog
@@ -80,29 +80,29 @@ jobs:
         with:
           from_tag: ${{ steps.get-version.outputs.previous_version }}
           to_tag: ${{ steps.get-version.outputs.new_version }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Build App
         id: build-app
         uses: ./.github/actions/build-app
         with:
-          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
-          build-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.build }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: ${{ fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].path }}
+          build-command: ${{ fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].ci_cd.commands.build }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Run Tests
         id: run-tests
         uses: ./.github/actions/run-tests
         with:
-          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
-          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.test }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: ${{ fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].path }}
+          test-command: ${{ fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].ci_cd.commands.test }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Create Release
         id: create-release
         uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           tag_name: v${{ steps.get-version.outputs.new_version }}
           release_name: Release ${{ steps.get-version.outputs.new_version }}
@@ -122,7 +122,7 @@ jobs:
               "affected_apps": ["${{ matrix.package }}"]
             }
           template_path: .github/templates/release_notes_changelog.md
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Deploy App
         id: deploy-app
@@ -130,9 +130,9 @@ jobs:
         with:
           package-name: ${{ matrix.package }}
           artifacts-path: ${{ steps.build-app.outputs.artifacts-path }}
-          deployment-type: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.deployment.type }}
-          deployment-config: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.deployment) }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deployment-type: ${{ fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].ci_cd.deployment.type }}
+          deployment-config: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.packages.package_specific[matrix.package].ci_cd.deployment) }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Update Project Documentation
         id: update-documentation
@@ -140,7 +140,7 @@ jobs:
         with:
           affected_apps: '["${{ matrix.package }}"]'
           new_version: ${{ steps.get-version.outputs.new_version }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Create Release PR
         id: create-release-pr
@@ -150,7 +150,7 @@ jobs:
           pr_title: "Release ${{ steps.get-version.outputs.new_version }}"
           pr_body: ${{ steps.generate-release-notes.outputs.generated_content }}
           base_branch: "main"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Send Notifications
         id: send-notifications
@@ -163,7 +163,7 @@ jobs:
               "affected_apps": ["${{ matrix.package }}"],
               "release_url": "${{ steps.create-release.outputs.html_url }}"
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Update Release Branch
         id: update-release-branch
@@ -171,5 +171,5 @@ jobs:
         uses: ./.github/actions/update-release-branch
         with:
           release_branch: ${{ github.ref }}
-          main_branch: "main"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          main_branch: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.version_control.main_branches[0] }}
+          github-token: ${{ secrets.GH_TOKEN }}

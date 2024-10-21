@@ -19,7 +19,7 @@ jobs:
       - name: Check repository configuration
         id: check-config
         run: |
-          if [ -f ".github/repository-config.json" ]; then
+          if [ -f ".github/config.yml" ]; then
             echo "is-configured=true" >> $GITHUB_OUTPUT
           else
             echo "is-configured=false" >> $GITHUB_OUTPUT
@@ -39,16 +39,16 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Create Git Flow Branches
         id: create-git-flow-branches
         uses: ./.github/actions/create-or-update-branch
         with:
-          branch-name: ${{ fromJson(steps.setup-context.outputs.config-data).version_control.main_branches[0] }}
+          branch-name: ${{ fromJson(steps.setup-context.outputs.repository-context).mainBranches[0] }}
           base-branch: 'main'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
+          github-token: ${{ secrets.GH_TOKEN }}
+          
       - name: Generate Content
         id: generate-content
         uses: ./.github/actions/ai-generate-content
@@ -56,23 +56,23 @@ jobs:
           content-type: "repository_docs"
           context-data: ${{ steps.setup-context.outputs.repository-context }}
           template-path: .github/templates/repository_setup_template.md
-          tone: ${{ fromJson(steps.setup-context.outputs.config-data).documentation.tone }}
-          max-length: ${{ fromJson(steps.setup-context.outputs.config-data).documentation.max_length }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          tone: ${{ fromJson(steps.setup-context.outputs.repository-context).config.documentation.tone }}
+          max-length: ${{ fromJson(steps.setup-context.outputs.repository-context).config.documentation.max_length }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Setup Branch Protection Rules
         id: setup-branch-protection
         uses: ./.github/actions/apply-branch-protection
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          branch-patterns: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).version_control.protected_branches) }}
-          protection-rules: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).version_control.branch_protection_rules) }}
+          github-token: ${{ secrets.GH_TOKEN }}
+          branch-patterns: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).protectedBranches) }}
+          protection-rules: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.branch_protection_rules) }}
 
       - name: Create Wiki Pages
         id: create-wiki-pages
         uses: ./.github/actions/create-wiki-page
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           page-name: "Git Flow Process"
           page-content: ${{ steps.generate-content.outputs.generated-content }}
 
@@ -82,58 +82,58 @@ jobs:
         with:
           discussion-title: "Welcome to the Repository"
           discussion-content: ${{ steps.generate-content.outputs.generated-content }}
-          category: ${{ fromJson(steps.setup-context.outputs.config-data).community.discussion_categories[0] }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          category: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.initial_discussions[0] }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Setup Issue Labels
         id: setup-issue-labels
         uses: ./.github/actions/setup-issue-labels
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          labels: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).issue_management.labels) }}
+          github-token: ${{ secrets.GH_TOKEN }}
+          labels: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.initial_labels) }}
 
       - name: Setup Project Board
         id: setup-project-board
         uses: ./.github/actions/setup-project-board
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          columns: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).project_management.board_columns) }}
+          github-token: ${{ secrets.GH_TOKEN }}
+          columns: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.project_board.columns) }}
 
       - name: Setup Repository Settings
         id: setup-repository-settings
         uses: ./.github/actions/setup-repository-settings
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          has-wiki: ${{ fromJson(steps.setup-context.outputs.config-data).repository.features.wiki }}
-          has-issues: ${{ fromJson(steps.setup-context.outputs.config-data).repository.features.issues }}
-          has-projects: ${{ fromJson(steps.setup-context.outputs.config-data).repository.features.projects }}
-          allow-squash-merge: ${{ fromJson(steps.setup-context.outputs.config-data).repository.merge_strategies.allow_squash_merge }}
-          allow-merge-commit: ${{ fromJson(steps.setup-context.outputs.config-data).repository.merge_strategies.allow_merge_commit }}
-          allow-rebase-merge: ${{ fromJson(steps.setup-context.outputs.config-data).repository.merge_strategies.allow_rebase_merge }}
-          delete-branch-on-merge: ${{ fromJson(steps.setup-context.outputs.config-data).repository.branch_management.delete_head_branches }}
+          github-token: ${{ secrets.GH_TOKEN }}
+          has-wiki: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.has_wiki }}
+          has-issues: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.has_issues }}
+          has-projects: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.has_projects }}
+          allow-squash-merge: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.allow_squash_merge }}
+          allow-merge-commit: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.allow_merge_commit }}
+          allow-rebase-merge: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.allow_rebase_merge }}
+          delete-branch-on-merge: ${{ fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.repository_settings.delete_branch_on_merge }}
 
       - name: Setup Dependabot
         id: setup-dependabot
         uses: ./.github/actions/setup-dependabot
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          ecosystems: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).security.dependency_ecosystems) }}
-          config: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).security.dependabot_config) }}
+          github-token: ${{ secrets.GH_TOKEN }}
+          ecosystems: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.dependabot_setup.package_ecosystems) }}
+          config: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.dependabot_setup) }}
 
       - name: Setup CODEOWNERS
         id: setup-codeowners
         uses: ./.github/actions/setup-codeowners
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          repository-admins: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).repository.admins) }}
+          github-token: ${{ secrets.GH_TOKEN }}
+          repository-admins: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.code_owners.default_owners) }}
 
       - name: Commit Changes
         id: commit-changes
         uses: ./.github/actions/commit-changes
         with:
           commit-message: "chore: initial repository setup"
-          files: 'CONTRIBUTING.md CODE_OF_CONDUCT.md README.md CHANGELOG.md .github/dependabot.yml CODEOWNERS'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          files: ${{ toJson(fromJson(steps.setup-context.outputs.repository-context).config.repository.setup.initial_files) }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Create Pull Request
         id: create-pull-request
@@ -144,13 +144,8 @@ jobs:
           commit-changes: |
             chore: initial repository setup
             
-            - feat: add CONTRIBUTING.md
-            - feat: add CODE_OF_CONDUCT.md
-            - docs: update README.md
-            - feat: add CHANGELOG.md
-            - chore: configure Dependabot
-            - chore: add CODEOWNERS file
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+            - feat: add initial repository files and configurations
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Send Notification
         id: send-notification
@@ -161,16 +156,16 @@ jobs:
             {
               "setup-details": ${{ toJson(steps) }}
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Mark repository as configured
         id: mark-configured
         run: |
-          echo '{"configured": true}' > .github/repository-config.json
+          echo '{"configured": true}' > .github/config.yml
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add .github/repository-config.json
+          git add .github/config.yml
           git commit -m "chore: mark repository as configured"
           git push
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}

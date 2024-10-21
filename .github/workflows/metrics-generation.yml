@@ -20,7 +20,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Metrics
         id: generate-metrics
@@ -28,7 +28,7 @@ jobs:
         with:
           repository-context: ${{ steps.setup-context.outputs.repository-context }}
           metrics-to-collect: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.metrics_to_collect }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Metrics Report
         id: generate-metrics-report
@@ -42,17 +42,17 @@ jobs:
               "improvement-areas": ${{ steps.generate-metrics.outputs.improvement-areas }}
             }
           template-path: .github/templates/performance_metrics_report_template.md
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Create Discussion Post
         id: create-discussion-post
-        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.create_discussion_post }}
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output[0].create_discussion_post }}
         uses: ./.github/actions/create-discussion-post
         with:
-          discussion-category: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.create_discussion_post.category }}
-          discussion-title: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.create_discussion_post.title }}
+          discussion-category: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output[0].create_discussion_post.category }}
+          discussion-title: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output[0].create_discussion_post.title }}
           discussion-content: ${{ steps.generate-metrics-report.outputs.generated-content }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Contributor Engagement Content
         id: generate-contributor-engagement-content
@@ -65,7 +65,7 @@ jobs:
               "top-contributors": ${{ steps.generate-metrics.outputs.top-contributors }},
               "top-contributors-count": ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.contributor_engagement.top_contributors_count }}
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Send Contributor Engagement Messages
         id: send-contributor-engagement-messages
@@ -74,32 +74,32 @@ jobs:
         with:
           notification-type: "contributor_engagement"
           notification-data: ${{ steps.generate-contributor-engagement-content.outputs.generated-content }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Send Notification
         id: send-notification
-        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.send_notification }}
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output[1].send_notification }}
         uses: ./.github/actions/send-notification
         with:
-          notification-type: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.send_notification.type }}
+          notification-type: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output[1].send_notification.type }}
           notification-data: |
             {
               "metrics-report-url": "${{ steps.create-discussion-post.outputs.created-discussion-url }}"
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Send Webhook
         id: send-webhook
-        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.send_webhook }}
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output[2].send_webhook }}
         uses: ./.github/actions/send-webhook
         with:
-          webhook-type: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output.send_webhook.type }}
+          webhook-type: ${{ fromJson(steps.setup-context.outputs.config-data).metrics_generation.output[2].send_webhook.type }}
           webhook-data: |
             {
               "metrics-data": ${{ steps.generate-metrics.outputs.metrics-data }},
               "metrics-report": ${{ steps.generate-metrics-report.outputs.generated-content }}
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Improvement Suggestions
         id: generate-improvement-suggestions
@@ -111,7 +111,7 @@ jobs:
             {
               "improvement-needs": ${{ steps.generate-metrics.outputs.improvement-areas }}
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Create Improvement Issues
         id: create-improvement-issues
@@ -119,4 +119,4 @@ jobs:
         uses: ./.github/actions/create-issues
         with:
           issues-data: ${{ steps.generate-improvement-suggestions.outputs.generated-content }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}

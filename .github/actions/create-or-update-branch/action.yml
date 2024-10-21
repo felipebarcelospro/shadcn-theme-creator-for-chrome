@@ -27,6 +27,15 @@ runs:
   - name: Checkout repository
     uses: actions/checkout@v3
 
+  - name: Debug Input Values
+    shell: bash
+    run: |
+      echo "Debug: Input Values"
+      echo "github-token: ${{ inputs.github-token }}"
+      echo "branch-name: ${{ inputs.branch-name }}"
+      echo "base-branch: ${{ inputs.base-branch }}"
+      echo "commit-changes: ${{ inputs.commit-changes }}"
+
   - name: Create or update branch
     id: branch-operation
     shell: bash -l {0}
@@ -38,20 +47,26 @@ runs:
     run: |
       set -e
 
+      echo "Debug: Starting branch operation"
+
       # Check if branch exists
       if git ls-remote --exit-code --heads origin $BRANCH_NAME > /dev/null 2>&1; then
         BRANCH_EXISTS=true
+        echo "Debug: Branch $BRANCH_NAME exists"
       else
         BRANCH_EXISTS=false
+        echo "Debug: Branch $BRANCH_NAME does not exist"
       fi
 
       if [ "$BRANCH_EXISTS" = false ]; then
         # Create new branch
+        echo "Debug: Creating new branch $BRANCH_NAME"
         git checkout -b $BRANCH_NAME origin/$BASE_BRANCH
         git push origin $BRANCH_NAME
         echo "operation-status=created" >> $GITHUB_OUTPUT
       else
         # Update existing branch
+        echo "Debug: Updating existing branch $BRANCH_NAME"
         git checkout $BRANCH_NAME
         git reset --hard origin/$BASE_BRANCH
         git push --force origin $BRANCH_NAME
@@ -60,21 +75,32 @@ runs:
 
       # Apply commit changes if provided
       if [ -n "$COMMIT_CHANGES" ]; then
+        echo "Debug: Applying commit changes"
         echo "$COMMIT_CHANGES" > changes.patch
         git apply changes.patch
         git add .
         git commit -m "Apply changes from action"
         git push origin $BRANCH_NAME
+      else
+        echo "Debug: No commit changes provided"
       fi
 
       # Generate branch URL
       REPO_URL=$(git config --get remote.origin.url | sed 's/\.git$//')
       BRANCH_URL="${REPO_URL}/tree/${BRANCH_NAME}"
       echo "branch-url=$BRANCH_URL" >> $GITHUB_OUTPUT
+      echo "Debug: Branch URL: $BRANCH_URL"
 
   - name: Error handling
     if: failure()
     shell: bash -l {0}
     run: |
-      echo "An error occurred during branch creation/update"
+      echo "Debug: An error occurred during branch creation/update"
       echo "operation-status=failed" >> $GITHUB_OUTPUT
+
+  - name: Debug Output Values
+    shell: bash
+    run: |
+      echo "Debug: Output Values"
+      echo "branch-url: ${{ steps.branch-operation.outputs.branch-url }}"
+      echo "operation-status: ${{ steps.branch-operation.outputs.operation-status }}"

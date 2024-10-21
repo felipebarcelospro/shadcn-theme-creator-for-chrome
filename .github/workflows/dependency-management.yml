@@ -2,10 +2,10 @@ name: Dependency Management Workflow
 
 on:
   schedule:
-    - cron: '0 0 * * 1'  # Run every Monday at midnight UTC
+    - cron: '0 2 * * 1'  # Run every Monday at 2 AM UTC
   push:
     branches:
-      - main  # Assuming 'main' is the default main branch
+      - main
   workflow_dispatch:
 
 jobs:
@@ -20,23 +20,23 @@ jobs:
         uses: ./.github/actions/setup-context-and-prerequisites
         id: setup-context
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Check for Updates
         id: check-updates
         uses: ./.github/actions/check-dependency-updates
         with:
-          package-manager-type: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_manager }}
+          package-manager-type: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.package_manager }}
           current-dependencies: ${{ steps.setup-context.outputs.current-dependencies }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Run Security Vulnerability Scan
         id: security-scan
         uses: ./.github/actions/security-vulnerability-scan
         with:
           current-dependencies: ${{ steps.setup-context.outputs.current-dependencies }}
-          vulnerability-databases: ${{ fromJson(steps.setup-context.outputs.config-data).security_dependency_management.vulnerability_databases }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          vulnerability-databases: ${{ fromJson(steps.setup-context.outputs.config-data).security_dependency_management.security_check.tools }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Create Update PRs
         id: create-dependency-update-prs
@@ -44,17 +44,17 @@ jobs:
         with:
           update-report: ${{ steps.check-updates.outputs.update-report }}
           vulnerability-report: ${{ steps.security-scan.outputs.vulnerability-report }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Run Tests on Update PRs
         id: run-tests
         uses: ./.github/actions/run-tests
         with:
           pr-changes: ${{ steps.create-dependency-update-prs.outputs.created-prs }}
-          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).automated_testing.test_command }}
-          coverage-command: ${{ fromJson(steps.setup-context.outputs.config-data).automated_testing.coverage_command }}
-          coverage-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).automated_testing.coverage_threshold }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.commands.test }}
+          coverage-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.commands.coverage }}
+          coverage-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.test_requirements.coverage_threshold }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Update PR Descriptions
         uses: ./.github/actions/create-or-update-pr
@@ -64,17 +64,17 @@ jobs:
             Test Results: ${{ steps.run-tests.outputs.test-status }}
             Coverage Report: ${{ steps.run-tests.outputs.coverage-report }}
             Update Details: ${{ steps.check-updates.outputs.update-report }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Auto-merge Minor/Patch Updates
         uses: ./.github/actions/auto-merge-updates
         with:
           pr-details: ${{ steps.create-dependency-update-prs.outputs.created-prs }}
           auto-merge-settings: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.auto_merge }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Notify Team
-        if: ${{ fromJson(steps.setup-context.outputs.config-data).security_dependency_management.notifications.enabled }}
+        if: ${{ fromJson(steps.setup-context.outputs.config-data).security_dependency_management.vulnerability_reporting.enabled }}
         uses: ./.github/actions/send-notification
         with:
           notification-type: "dependency_updates"
@@ -83,4 +83,4 @@ jobs:
               "created-prs": ${{ steps.create-dependency-update-prs.outputs.created-prs }},
               "security-vulnerabilities": ${{ steps.security-scan.outputs.vulnerability-report }}
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}

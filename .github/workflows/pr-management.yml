@@ -22,14 +22,14 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Check Existing PR
         id: check-existing-pr
         uses: ./.github/actions/check-existing-pr
         with:
           branch-name: ${{ github.head_ref }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Auto Label
         id: auto-label
@@ -37,7 +37,7 @@ jobs:
         with:
           item-type: 'pr'
           item-number: ${{ github.event.pull_request.number }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Auto Assign
         id: auto-assign
@@ -45,22 +45,21 @@ jobs:
         with:
           item-type: 'pr'
           item-number: ${{ github.event.pull_request.number }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Analyze Code
         id: analyze-code
         uses: ./.github/actions/analyze-code
         with:
           source-dir: '.'
-          previous-results: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.previous_analysis_results_path }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Run Tests
         id: run-tests
         uses: ./.github/actions/run-tests
         with:
-          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).automated_testing.test_command }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.commands.test }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Review Comments
         id: generate-review-comments
@@ -73,9 +72,9 @@ jobs:
               "analysis-results": "${{ steps.analyze-code.outputs.quality-report }}",
               "test-results": "${{ steps.run-tests.outputs.test-results }}"
             }
-          template-path: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.review_template_path }}
-          tone: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.review_tone }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          template-path: .github/templates/pr_review_template.md
+          tone: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.code_review.review_guidelines }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Update PR
         id: update-pr
@@ -87,17 +86,17 @@ jobs:
           base-branch: ${{ github.base_ref }}
           labels: ${{ steps.auto-label.outputs.applied-labels }}
           reviewers: ${{ steps.auto-assign.outputs.assigned-reviewers }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Check PR Status
         id: check-pr-status
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const prNumber = context.issue.number;
-            const staleThreshold = ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.stale_threshold }};
+            const staleThreshold = ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.stale_pr.threshold }};
             
             const { data: pr } = await github.rest.pulls.get({
               owner,
@@ -124,15 +123,15 @@ jobs:
               "pr-title": "${{ github.event.pull_request.title }}",
               "pr-status": "${{ steps.check-pr-status.outputs.result }}"
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Review Stale PRs
         id: review-stale-prs
         if: github.event_name == 'schedule'
         uses: ./.github/actions/review-stale-prs
         with:
-          stale-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.stale_threshold }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.stale_pr.threshold }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate PR Health Report
         id: generate-pr-health-report
@@ -140,4 +139,4 @@ jobs:
         uses: ./.github/actions/generate-pr-health-report
         with:
           repository-context: ${{ steps.setup-context.outputs.repository-context }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}

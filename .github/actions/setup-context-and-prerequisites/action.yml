@@ -8,7 +8,7 @@ inputs:
   debug:
     description: 'Enable debug mode'
     required: false
-    default: 'true'
+    default: 'false'
 
 outputs:
   repository-context:
@@ -21,6 +21,12 @@ outputs:
     description: 'Detected package manager'
   installation-status:
     description: 'Status of the installation process'
+  changed_files:
+    description: 'List of changed files in the current commit or PR'
+  apps_configuration:
+    description: 'Configuration for all apps in the repository'
+  github_pages_urls:
+    description: 'URLs of GitHub Pages for the repository'
 
 runs:
   using: "composite"
@@ -39,7 +45,7 @@ runs:
   - name: Install action dependencies
     if: steps.cache.outputs.cache-hit != 'true'
     shell: bash
-    run: npm install --no-save fs js-yaml
+    run: npm install --no-save fs js-yaml @octokit/rest
 
   - name: Setup Context and Prerequisites
     uses: actions/github-script@v6
@@ -49,6 +55,7 @@ runs:
         const fs = require('fs');
         const yaml = require('js-yaml');
         const { execSync } = require('child_process');
+        const { Octokit } = require("@octokit/rest");
 
         const DEBUG = '${{ inputs.debug }}' === 'true';
 
@@ -92,20 +99,22 @@ runs:
             debug('Using cached dependencies');
           }
 
-          // Fetch repository metadata (consider caching this as well)
-          const cacheKey = `repo-metadata-${context.repo.owner}-${context.repo.repo}`;
-          let repoMetadata = core.getState(cacheKey);
-          if (!repoMetadata) {
-            repoMetadata = await github.rest.repos.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            });
-            core.saveState(cacheKey, JSON.stringify(repoMetadata));
-            debug('Repository metadata fetched and cached');
-          } else {
-            repoMetadata = JSON.parse(repoMetadata);
-            debug('Using cached repository metadata');
-          }
+          // Initialize Octokit
+          const octokit = new Octokit({ auth: '${{ inputs.github-token }}' });
+
+          // Fetch repository metadata
+          const repoMetadata = await octokit.repos.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo
+          });
+
+          // Get changed files
+          const changedFiles = await octokit.pulls.listFiles({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.issue.number
+          }).then(response => response.data.map(file => file.filename));
+          core.setOutput('changed_files', JSON.stringify(changedFiles));
 
           // Set up environment variables
           const envVars = {
@@ -126,14 +135,6 @@ runs:
           });
           core.setOutput('environment-variables', 'Environment variables set');
 
-          // Validate repository settings
-          if (!repoMetadata.data.has_issues && configData.issue_management.auto_label.enabled) {
-            core.warning('Issues are not enabled for this repository, but issue management is configured');
-          }
-          if (!repoMetadata.data.has_projects && configData.repository.type === 'monorepo') {
-            core.warning('Projects are not enabled for this repository, but it is configured as a monorepo');
-          }
-
           // Set repository context
           const repositoryContext = {
             repoMetadata: repoMetadata.data,
@@ -145,10 +146,17 @@ runs:
             branchPrefixes: configData.repository.version_control.branch_prefixes,
             mergeStrategy: configData.repository.version_control.merge_strategy,
             protectedBranches: configData.repository.version_control.protected_branches,
-            packageManager
+            packageManager,
+            changedFiles
           };
           core.setOutput('repository-context', JSON.stringify(repositoryContext));
-          debug('Repository context set');
+
+          // Set apps configuration
+          core.setOutput('apps_configuration', JSON.stringify(configData.packages.package_specific));
+
+          // Set GitHub Pages URLs
+          const pagesUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}`;
+          core.setOutput('github_pages_urls', JSON.stringify([pagesUrl]));
 
           console.log('Setup context and prerequisites completed successfully');
         } catch (error) {

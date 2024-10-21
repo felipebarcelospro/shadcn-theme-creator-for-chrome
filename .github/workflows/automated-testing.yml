@@ -55,33 +55,14 @@ jobs:
         id: install-dependencies
         uses: ./.github/actions/install-dependencies
         with:
-          package-manager: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.package_manager }}
+          package-manager: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.package_manager }}
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run Unit Tests
-        id: run-unit-tests
+      - name: Run Tests
+        id: run-tests
         uses: ./.github/actions/run-tests
         with:
-          test-type: 'unit'
-          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.test }}
-          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run Integration Tests
-        id: run-integration-tests
-        uses: ./.github/actions/run-tests
-        with:
-          test-type: 'integration'
-          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.test }}
-          working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run E2E Tests
-        id: run-e2e-tests
-        uses: ./.github/actions/run-tests
-        with:
-          test-type: 'e2e'
           test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.test }}
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -90,9 +71,7 @@ jobs:
         id: generate-test-report
         uses: ./.github/actions/generate-test-report
         with:
-          unit-test-results: ${{ steps.run-unit-tests.outputs.test-results }}
-          integration-test-results: ${{ steps.run-integration-tests.outputs.test-results }}
-          e2e-test-results: ${{ steps.run-e2e-tests.outputs.test-results }}
+          test-results: ${{ steps.run-tests.outputs.test-results }}
           package-name: ${{ matrix.package }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           
