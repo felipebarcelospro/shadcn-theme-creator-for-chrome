@@ -75,7 +75,7 @@ runs:
   using: 'composite'
   steps:
   - name: Debug inputs
-    shell: bash -l {0}
+    shell: bash
     run: |
       echo "Debug: Input values"
       echo "branch-name: ${{ inputs.branch-name }}"
@@ -112,6 +112,11 @@ runs:
       script: |
         const { owner, repo } = context.repo;
         const branch = '${{ inputs.branch-name }}';
+        if (!branch) {
+          console.error('Error: Branch name is empty');
+          core.setFailed('Branch name is required');
+          return null;
+        }
         console.log(`Debug: Fetching protection settings for ${branch}`);
         try {
           const { data } = await github.rest.repos.getBranchProtection({
@@ -127,7 +132,8 @@ runs:
             return null;
           }
           console.error(`Error fetching protection: ${error.message}`);
-          throw error;
+          core.setFailed(`Failed to fetch branch protection: ${error.message}`);
+          return null;
         }
 
   - name: Prepare update payload
@@ -176,6 +182,11 @@ runs:
       script: |
         const { owner, repo } = context.repo;
         const branch = '${{ inputs.branch-name }}';
+        if (!branch) {
+          console.error('Error: Branch name is empty');
+          core.setFailed('Branch name is required');
+          return 'failure';
+        }
         const payload = ${{ steps.prepare-payload.outputs.result }};
         console.log(`Debug: Applying protection rules to ${branch}`);
         try {
@@ -201,6 +212,11 @@ runs:
       script: |
         const { owner, repo } = context.repo;
         const branch = '${{ inputs.branch-name }}';
+        if (!branch) {
+          console.error('Error: Branch name is empty');
+          core.setFailed('Branch name is required');
+          return 'verification-failed';
+        }
         console.log(`Debug: Verifying applied settings for ${branch}`);
         try {
           const { data } = await github.rest.repos.getBranchProtection({
@@ -232,18 +248,18 @@ runs:
       echo "- Allow force pushes: ${{ inputs.allow-force-pushes }}" >> rules_summary.txt
       echo "- Allow deletions: ${{ inputs.allow-deletions }}" >> rules_summary.txt
       cat rules_summary.txt
-    shell: bash -l {0}
+    shell: bash
 
   - name: Set outputs
     run: |
       echo "Debug: Setting action outputs"
       echo "protection-status=${{ steps.apply-rules.outputs.result }}" >> $GITHUB_OUTPUT
       echo "applied-rules=$(cat rules_summary.txt)" >> $GITHUB_OUTPUT
-    shell: bash -l {0}
+    shell: bash
 
   - name: Error handling
     if: failure()
     run: |
       echo "Debug: Error occurred during branch protection application"
       echo "protection-status=failed" >> $GITHUB_OUTPUT
-    shell: bash -l {0}
+    shell: bash

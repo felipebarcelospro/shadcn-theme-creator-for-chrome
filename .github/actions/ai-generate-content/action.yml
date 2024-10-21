@@ -28,7 +28,7 @@ inputs:
   ai-model:
     description: 'AI model to use for content generation'
     required: true
-    default: 'gemini-1.5-pro-002'
+    default: 'gemini-1.5-pro'
 
 outputs:
   generated-content:
@@ -69,9 +69,9 @@ runs:
     id: generate-content
     uses: fjogeleit/http-request-action@v1
     with:
-      url: 'https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent'
+      url: 'https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent?key=${{ inputs.ai-api-key }}'
       method: 'POST'
-      customHeaders: '{"Authorization": "Bearer ${{ inputs.ai-api-key }}", "Content-Type": "application/json"}'
+      customHeaders: '{"Content-Type": "application/json"}'
       data: |
         {
           "contents": [{
