@@ -69,7 +69,7 @@ runs:
       if [ ! -f ".github/config.yml" ]; then
         echo "Error: config.yml is missing"
         exit 1
-      }
+      fi
       CONFIG_DATA=$(cat .github/config.yml | bun run js-yaml -j)
       echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
       debug "Config data loaded and parsed"
@@ -90,8 +90,8 @@ runs:
       fi
 
       # Fetch repository metadata and changed files using GitHub CLI
-      REPO_METADATA=$(gh api repos/${GITHUB_REPOSITORY} --jq .)
-      CHANGED_FILES=$(gh pr view ${GITHUB_REF#refs/pull/} --json files --jq '.files[].path')
+      REPO_METADATA=$(bun run gh api repos/${GITHUB_REPOSITORY} --jq .)
+      CHANGED_FILES=$(bun run gh pr view ${GITHUB_REF#refs/pull/} --json files --jq '.files[].path')
       echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
 
       # Set up environment variables
