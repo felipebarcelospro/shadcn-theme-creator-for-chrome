@@ -76,11 +76,17 @@ runs:
       url: 'https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent?key=${{ inputs.ai-api-key }}'
       method: 'POST'
       customHeaders: '{"Content-Type": "application/json"}'
-      data: |
+      data: >
         {
-          "contents": [{
-            "parts": [{ "text": "${{ steps.prepare-prompt.outputs.prompt }}" }]
-          }],
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "${{ steps.prepare-prompt.outputs.prompt }}"
+                }
+              ]
+            }
+          ],
           "generationConfig": {
             "temperature": 0.2,
             "topK": 20,
