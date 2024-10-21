@@ -22,14 +22,14 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Run Security Checks
         id: security-checks
         uses: ./.github/actions/run-security-checks
         with:
           working-directory: ${{ steps.setup-context.outputs.repository_root_directory }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: AI Analysis of Security Report
         id: ai-analysis
@@ -48,7 +48,7 @@ jobs:
         uses: ./.github/actions/update-dependencies
         with:
           repository-context: ${{ steps.setup-context.outputs.repository-context }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: AI Generate Update Summary
         id: ai-update-summary
@@ -71,7 +71,7 @@ jobs:
           pr-body: ${{ steps.ai-update-summary.outputs.generated-content }}
           base-branch: ${{ steps.setup-context.outputs.main_branch }}
           labels: ${{ steps.setup-context.outputs.security_update_labels }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Update Security Policy
         id: update-security-policy
@@ -79,7 +79,7 @@ jobs:
         with:
           security-report: ${{ steps.security-checks.outputs.vulnerability-report }}
           ai-analysis: ${{ steps.ai-analysis.outputs.generated-content }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Create Critical Security Issue
         id: create-critical-issue
@@ -91,7 +91,7 @@ jobs:
           issue-template: .github/templates/critical_security_issue_template.md
           issue-title: "Critical Security Vulnerabilities Detected"
           labels: ${{ steps.setup-context.outputs.security_critical_labels }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Send Notification
         id: send-notification
@@ -105,4 +105,4 @@ jobs:
               "pr-url": ${{ steps.create-pr.outputs.pr-url }},
               "critical-issues": ${{ steps.security-checks.outputs.critical_vulnerabilities }}
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}

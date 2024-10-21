@@ -22,7 +22,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Metrics
         id: generate-metrics
@@ -30,7 +30,7 @@ jobs:
         with:
           repository-context: ${{ steps.setup-context.outputs.repository-context }}
           metrics-to-collect: ${{ steps.setup-context.outputs.metrics-to-collect }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Metrics Report
         id: generate-metrics-report
@@ -54,7 +54,7 @@ jobs:
           discussion-category: ${{ steps.setup-context.outputs.discussion-category }}
           discussion-title: ${{ steps.setup-context.outputs.discussion-title }}
           discussion-content: ${{ steps.generate-metrics-report.outputs.generated-content }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Contributor Engagement Content
         id: generate-contributor-engagement-content
@@ -68,7 +68,7 @@ jobs:
               "top-contributors": ${{ steps.generate-metrics.outputs.top-contributors }},
               "top-contributors-count": ${{ steps.setup-context.outputs.top-contributors-count }}
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Send Contributor Engagement Messages
         id: send-contributor-engagement-messages
@@ -77,7 +77,7 @@ jobs:
         with:
           notification-type: "contributor_engagement"
           notification-data: ${{ steps.generate-contributor-engagement-content.outputs.generated-content }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Send Notification
         id: send-notification
@@ -89,7 +89,7 @@ jobs:
             {
               "metrics-report-url": "${{ steps.create-discussion-post.outputs.created-discussion-url }}"
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Send Webhook
         id: send-webhook
@@ -102,7 +102,7 @@ jobs:
               "metrics-data": ${{ steps.generate-metrics.outputs.metrics-data }},
               "metrics-report": ${{ steps.generate-metrics-report.outputs.generated-content }}
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Improvement Suggestions
         id: generate-improvement-suggestions
@@ -115,7 +115,7 @@ jobs:
             {
               "improvement-needs": ${{ steps.generate-metrics.outputs.improvement-areas }}
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Create Improvement Issues
         id: create-improvement-issues
@@ -123,4 +123,4 @@ jobs:
         uses: ./.github/actions/create-issues
         with:
           issues-data: ${{ steps.generate-improvement-suggestions.outputs.generated-content }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}

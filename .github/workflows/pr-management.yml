@@ -23,7 +23,7 @@ jobs:
         id: setup
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           debug: 'false'
 
       - name: Check Existing PR
@@ -31,14 +31,14 @@ jobs:
         uses: ./.github/actions/check-existing-pr
         with:
           branch-name: ${{ github.head_ref }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Auto Label
         uses: ./.github/actions/auto-label
         with:
           item-type: 'pr'
           item-number: ${{ github.event.pull_request.number }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           config-data: ${{ steps.setup.outputs.config-data }}
 
       - name: Auto Assign
@@ -46,7 +46,7 @@ jobs:
         with:
           item-type: 'pr'
           item-number: ${{ github.event.pull_request.number }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           config-data: ${{ steps.setup.outputs.config-data }}
 
       - name: Analyze Code
@@ -54,7 +54,7 @@ jobs:
         uses: ./.github/actions/analyze-code
         with:
           source-dir: '.'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           config-data: ${{ steps.setup.outputs.config-data }}
 
       - name: Run Tests
@@ -63,7 +63,7 @@ jobs:
         with:
           package-manager: ${{ steps.setup.outputs.package-manager }}
           config-data: ${{ steps.setup.outputs.config-data }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Review Comments
         id: review-comments
@@ -78,7 +78,7 @@ jobs:
             }
           template-path: .github/templates/pr_review_template.md
           config-data: ${{ steps.setup.outputs.config-data }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Update PR
         uses: ./.github/actions/create-or-update-pr
@@ -89,14 +89,14 @@ jobs:
           base-branch: ${{ github.base_ref }}
           labels: ${{ steps.auto-label.outputs.applied-labels }}
           reviewers: ${{ steps.auto-assign.outputs.assigned-reviewers }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           config-data: ${{ steps.setup.outputs.config-data }}
 
       - name: Check PR Status
         id: pr-status
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const prNumber = context.issue.number;
@@ -125,14 +125,14 @@ jobs:
               "pr-title": "${{ github.event.pull_request.title }}",
               "pr-status": "${{ steps.pr-status.outputs.result }}"
             }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           config-data: ${{ steps.setup.outputs.config-data }}
 
       - name: Review Stale PRs
         if: github.event_name == 'schedule'
         uses: ./.github/actions/review-stale-prs
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           config-data: ${{ steps.setup.outputs.config-data }}
 
       - name: Generate PR Health Report
@@ -140,5 +140,5 @@ jobs:
         uses: ./.github/actions/generate-pr-health-report
         with:
           repository-context: ${{ steps.setup.outputs.repository-context }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           config-data: ${{ steps.setup.outputs.config-data }}
