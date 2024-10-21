@@ -140,10 +140,3 @@ runs:
       echo "github_pages_urls=[\"$PAGES_URL\"]" >> $GITHUB_OUTPUT
 
       echo "Setup context and prerequisites completed successfully"
-
-  - name: Cleanup
-    if: always()
-    shell: bash
-    run: |
-      rm -rf node_modules
-      bun cache clean
