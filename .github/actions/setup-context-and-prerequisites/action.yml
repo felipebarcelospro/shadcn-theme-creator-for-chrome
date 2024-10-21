@@ -57,7 +57,7 @@ runs:
         const fs = require('fs');
         const yaml = require('js-yaml');
         const { execSync } = require('child_process');
-        const { Octokit } = await import('@octokit/rest');
+        const { Octokit } = require('@octokit/rest');
 
         const DEBUG = '${{ inputs.debug }}' === 'true';
 
