@@ -34,18 +34,10 @@ runs:
   - name: Install jq and yq
     shell: bash
     run: |
-      if ! command -v jq &> /dev/null; then
-        sudo apt-get update
-        sudo apt-get install -y jq
-      else
-        echo "jq is already installed"
-      fi
-      if ! command -v yq &> /dev/null; then
-        sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
-        sudo chmod +x /usr/bin/yq
-      else
-        echo "yq is already installed"
-      fi
+      sudo apt-get update
+      sudo apt-get install -y jq
+      sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+      sudo chmod +x /usr/bin/yq
 
   - name: Load and parse config.yml
     shell: bash
@@ -55,9 +47,7 @@ runs:
         exit 1
       fi
       CONFIG_DATA=$(yq eval -o=json .github/config.yml)
-      echo "config-data<<EOF" >> $GITHUB_OUTPUT
-      echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
 
   - name: Detect package manager
     shell: bash
@@ -79,9 +69,7 @@ runs:
     run: |
       REPO_METADATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
         "https://api.github.com/repos/$GITHUB_REPOSITORY")
-      echo "repo-metadata<<EOF" >> $GITHUB_OUTPUT
-      echo "$REPO_METADATA" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "repo-metadata=$REPO_METADATA" >> $GITHUB_OUTPUT
 
   - name: Get changed files
     shell: bash
@@ -97,14 +85,12 @@ runs:
       else
         CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r $GITHUB_SHA)
       fi
-      echo "changed_files<<EOF" >> $GITHUB_OUTPUT
-      echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
 
   - name: Set environment variables
     shell: bash
     run: |
-      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      CONFIG_DATA=$(cat $GITHUB_OUTPUT | grep '^config-data=' | cut -d'=' -f2-)
       {
         echo "REPO_NAME=${GITHUB_REPOSITORY}"
         echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
@@ -121,9 +107,9 @@ runs:
   - name: Set repository context
     shell: bash
     run: |
-      REPO_METADATA=$(cat $GITHUB_OUTPUT | sed -n '/^repo-metadata<<EOF$/,/^EOF$/p' | sed '1d;$d')
-      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
-      CHANGED_FILES=$(cat $GITHUB_OUTPUT | sed -n '/^changed_files<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      REPO_METADATA=$(cat $GITHUB_OUTPUT | grep '^repo-metadata=' | cut -d'=' -f2-)
+      CONFIG_DATA=$(cat $GITHUB_OUTPUT | grep '^config-data=' | cut -d'=' -f2-)
+      CHANGED_FILES=$(cat $GITHUB_OUTPUT | grep '^changed_files=' | cut -d'=' -f2-)
       PACKAGE_MANAGER=$(cat $GITHUB_OUTPUT | grep '^package-manager=' | cut -d'=' -f2)
 
       REPOSITORY_CONTEXT=$(jq -n \
@@ -146,17 +132,14 @@ runs:
           packageManager: $packageManager,
           changedFiles: $changedFiles
         }')
-      echo "repository-context<<EOF" >> $GITHUB_OUTPUT
-      echo "$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "repository-context=$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
 
   - name: Set apps configuration
     shell: bash
     run: |
+      CONFIG_DATA=$(cat $GITHUB_OUTPUT | grep '^config-data=' | cut -d'=' -f2-)
       APPS_CONFIG=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific // {}')
-      echo "apps_configuration<<EOF" >> $GITHUB_OUTPUT
-      echo "$APPS_CONFIG" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "apps_configuration=$APPS_CONFIG" >> $GITHUB_OUTPUT
 
   - name: Set GitHub Pages URLs
     shell: bash
