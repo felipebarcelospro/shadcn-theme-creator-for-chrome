@@ -19,7 +19,7 @@ jobs:
       - name: Check repository configuration
         id: check-config
         run: |
-          if [ -f ".github/config.yml" ]; then
+          if [ -f ".github/enabled" ]; then
             echo "is-configured=true" >> $GITHUB_OUTPUT
           else
             echo "is-configured=false" >> $GITHUB_OUTPUT
