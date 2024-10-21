@@ -62,9 +62,7 @@ runs:
         echo "Error: Failed to parse config.yml"
         exit 1
       fi
-      echo "config-data<<EOF" >> $GITHUB_OUTPUT
-      echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
+      echo "config-data=$(echo "$CONFIG_DATA" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Config data loaded and parsed"
         echo "$CONFIG_DATA" | jq '.'
@@ -74,7 +72,7 @@ runs:
     id: normalize_config
     shell: bash
     run: |
-      CONFIG_DATA=$(echo '${{ steps.load_config.outputs.config-data }}' | sed -e 's/^EOF$//' -e '$d')
+      CONFIG_DATA=$(echo '${{ steps.load_config.outputs.config-data }}' | jq -r)
       NORMALIZED_CONFIG=$(echo "$CONFIG_DATA" | jq -c '{
         repository: {
           type: (.repository.type // "monorepo"),
@@ -99,7 +97,7 @@ runs:
         metrics_generation: (.metrics_generation // {}),
         security_dependency_management: (.security_dependency_management // {})
       }')
-      echo "normalized-config=$NORMALIZED_CONFIG" >> $GITHUB_OUTPUT
+      echo "normalized-config=$(echo "$NORMALIZED_CONFIG" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Config data normalized"
         echo "$NORMALIZED_CONFIG" | jq '.'
@@ -109,7 +107,7 @@ runs:
     id: detect_package_manager
     shell: bash
     run: |
-      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
+      NORMALIZED_CONFIG=$(echo '${{ steps.normalize_config.outputs.normalized-config }}' | jq -r)
       PACKAGE_MANAGER=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.global_settings.ci_cd.package_manager')
       echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
@@ -129,9 +127,7 @@ runs:
         echo "Error: Failed to fetch repository metadata"
         exit 1
       fi
-      cat <<EOF >> $GITHUB_OUTPUT
-repo-metadata=$REPO_METADATA
-EOF
+      echo "repo-metadata=$(echo "$REPO_METADATA" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Repository metadata fetched"
         echo "$REPO_METADATA" | jq '.'
@@ -152,7 +148,7 @@ EOF
       else
         CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r $GITHUB_SHA)
       fi
-      echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+      echo "changed_files=$(echo "$CHANGED_FILES" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Changed files detected"
         echo "$CHANGED_FILES"
@@ -162,7 +158,7 @@ EOF
     id: set_env_vars
     shell: bash
     run: |
-      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
+      NORMALIZED_CONFIG=$(echo '${{ steps.normalize_config.outputs.normalized-config }}' | jq -r)
       {
         echo "REPO_NAME=${GITHUB_REPOSITORY}"
         echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
@@ -186,10 +182,10 @@ EOF
     id: set_repo_context
     shell: bash
     run: |
-      REPO_METADATA="${{ steps.fetch_repo_metadata.outputs.repo-metadata }}"
-      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
-      CHANGED_FILES="${{ steps.get_changed_files.outputs.changed_files }}"
-      PACKAGE_MANAGER="${{ steps.detect_package_manager.outputs.package-manager }}"
+      REPO_METADATA=$(echo '${{ steps.fetch_repo_metadata.outputs.repo-metadata }}' | jq -r)
+      NORMALIZED_CONFIG=$(echo '${{ steps.normalize_config.outputs.normalized-config }}' | jq -r)
+      CHANGED_FILES=$(echo '${{ steps.get_changed_files.outputs.changed_files }}' | jq -r)
+      PACKAGE_MANAGER=$(echo '${{ steps.detect_package_manager.outputs.package-manager }}' | jq -r)
 
       REPOSITORY_CONTEXT=$(jq -n \
         --argjson repoMetadata "$REPO_METADATA" \
@@ -213,7 +209,7 @@ EOF
           prCreationWaitTime: $config.repository.version_control.pr_creation_wait_time,
           staleBranchThreshold: $config.repository.version_control.stale_branch_threshold
         }')
-      echo "repository-context=$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
+      echo "repository-context=$(echo "$REPOSITORY_CONTEXT" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Repository context set"
         echo "$REPOSITORY_CONTEXT" | jq '.'
@@ -223,9 +219,9 @@ EOF
     id: set_apps_config
     shell: bash
     run: |
-      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
+      NORMALIZED_CONFIG=$(echo '${{ steps.normalize_config.outputs.normalized-config }}' | jq -r)
       APPS_CONFIG=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.package_specific')
-      echo "apps_configuration=$APPS_CONFIG" >> $GITHUB_OUTPUT
+      echo "apps_configuration=$(echo "$APPS_CONFIG" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Apps configuration set"
         echo "$APPS_CONFIG" | jq '.'
@@ -235,12 +231,12 @@ EOF
     id: set_github_pages_urls
     shell: bash
     run: |
-      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
+      NORMALIZED_CONFIG=$(echo '${{ steps.normalize_config.outputs.normalized-config }}' | jq -r)
       PAGES_URL=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.package_specific.web.ci_cd.deployment.production.url // empty')
       if [ -z "$PAGES_URL" ]; then
         PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
       fi
-      echo "github_pages_urls=[\"$PAGES_URL\"]" >> $GITHUB_OUTPUT
+      echo "github_pages_urls=$(echo "[\"$PAGES_URL\"]" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: GitHub Pages URLs set"
         echo "$PAGES_URL"
@@ -250,9 +246,9 @@ EOF
     id: set_metrics_data
     shell: bash
     run: |
-      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
+      NORMALIZED_CONFIG=$(echo '${{ steps.normalize_config.outputs.normalized-config }}' | jq -r)
       METRICS_DATA=$(echo "$NORMALIZED_CONFIG" | jq -r '.metrics_generation')
-      echo "metrics_data=$METRICS_DATA" >> $GITHUB_OUTPUT
+      echo "metrics_data=$(echo "$METRICS_DATA" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Metrics data set"
         echo "$METRICS_DATA" | jq '.'
@@ -262,9 +258,9 @@ EOF
     id: set_security_checks
     shell: bash
     run: |
-      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
+      NORMALIZED_CONFIG=$(echo '${{ steps.normalize_config.outputs.normalized-config }}' | jq -r)
       SECURITY_CHECKS=$(echo "$NORMALIZED_CONFIG" | jq -r '.security_dependency_management')
-      echo "security_checks=$SECURITY_CHECKS" >> $GITHUB_OUTPUT
+      echo "security_checks=$(echo "$SECURITY_CHECKS" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Security checks configuration set"
         echo "$SECURITY_CHECKS" | jq '.'
@@ -274,9 +270,9 @@ EOF
     id: set_performance_monitoring
     shell: bash
     run: |
-      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
+      NORMALIZED_CONFIG=$(echo '${{ steps.normalize_config.outputs.normalized-config }}' | jq -r)
       PERFORMANCE_MONITORING=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.global_settings.performance_monitoring')
-      echo "performance_monitoring=$PERFORMANCE_MONITORING" >> $GITHUB_OUTPUT
+      echo "performance_monitoring=$(echo "$PERFORMANCE_MONITORING" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Performance monitoring configuration set"
         echo "$PERFORMANCE_MONITORING" | jq '.'
