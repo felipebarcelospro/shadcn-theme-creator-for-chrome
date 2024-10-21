@@ -10,6 +10,18 @@ on:
       - main
       - develop
 
+permissions:
+  actions: read
+  checks: write
+  contents: read
+  deployments: write
+  issues: write
+  packages: read
+  pull-requests: write
+  repository-projects: read
+  security-events: read
+  statuses: write
+
 jobs:
   setup:
     runs-on: ubuntu-latest
@@ -60,25 +72,25 @@ jobs:
         id: install-dependencies
         uses: ./.github/actions/install-dependencies
         with:
-          package-manager: ${{ fromJson(steps.setup-context.outputs.repository-context).packageManager }}
-          cache-key: ${{ runner.os }}-${{ matrix.package }}-${{ hashFiles(format('{0}/package-lock.json', fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].path)) }}
-          working-directory: ${{ fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].path }}
+          package-manager: ${{ steps.setup-context.outputs.repository-context.packageManager }}
+          cache-key: ${{ runner.os }}-${{ matrix.package }}-${{ hashFiles(format('{0}/package-lock.json', steps.setup-context.outputs.apps_configuration[matrix.package].path)) }}
+          working-directory: ${{ steps.setup-context.outputs.apps_configuration[matrix.package].path }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Linting
         id: run-linting
         uses: ./.github/actions/run-linting
         with:
-          working-directory: ${{ fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].path }}
-          lint-command: ${{ fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].ci_cd.commands.lint }}
+          working-directory: ${{ steps.setup-context.outputs.apps_configuration[matrix.package].path }}
+          lint-command: ${{ steps.setup-context.outputs.apps_configuration[matrix.package].ci_cd.commands.lint }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Tests
         id: run-tests
         uses: ./.github/actions/run-tests
         with:
-          working-directory: ${{ fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].path }}
-          test-command: ${{ fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].ci_cd.commands.test }}
+          working-directory: ${{ steps.setup-context.outputs.apps_configuration[matrix.package].path }}
+          test-command: ${{ steps.setup-context.outputs.apps_configuration[matrix.package].ci_cd.commands.test }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Code Coverage
@@ -86,7 +98,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.package }}-code-coverage-report
-          path: ${{ fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].path }}/coverage
+          path: ${{ steps.setup-context.outputs.apps_configuration[matrix.package].path }}/coverage
           if-no-files-found: warn
           retention-days: 14
 
@@ -94,8 +106,8 @@ jobs:
         id: build-app
         uses: ./.github/actions/build-app
         with:
-          build-command: ${{ fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].ci_cd.commands.build }}
-          working-directory: ${{ fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].path }}
+          build-command: ${{ steps.setup-context.outputs.apps_configuration[matrix.package].ci_cd.commands.build }}
+          working-directory: ${{ steps.setup-context.outputs.apps_configuration[matrix.package].path }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy Application
@@ -105,17 +117,17 @@ jobs:
         with:
           package-name: ${{ matrix.package }}
           artifacts-path: ${{ steps.build-app.outputs.artifacts-path }}
-          deployment-type: ${{ fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].ci_cd.deployment.type }}
-          deployment-config: ${{ toJson(fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].ci_cd.deployment.config) }}
+          deployment-type: ${{ steps.setup-context.outputs.apps_configuration[matrix.package].ci_cd.deployment.type }}
+          deployment-config: ${{ toJson(steps.setup-context.outputs.apps_configuration[matrix.package].ci_cd.deployment.config) }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Post-Deployment Tests
         id: post-deployment-tests
-        if: github.event_name == 'push' && fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].ci_cd.post_deployment_tests.enabled
+        if: github.event_name == 'push' && steps.setup-context.outputs.apps_configuration[matrix.package].ci_cd.post_deployment_tests.enabled == 'true'
         uses: ./.github/actions/run-post-deployment-tests
         with:
           app-url: ${{ steps.deploy-app.outputs.deployed-url }}
-          test-suite: ${{ fromJson(steps.setup-context.outputs.apps_configuration)[matrix.package].ci_cd.post_deployment_tests.url }}
+          test-suite: ${{ steps.setup-context.outputs.apps_configuration[matrix.package].ci_cd.post_deployment_tests.url }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Notifications

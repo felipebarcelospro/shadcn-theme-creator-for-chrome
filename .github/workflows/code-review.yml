@@ -6,6 +6,13 @@ on:
   pull_request_review:
     types: [submitted]
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: write
+  statuses: write
+
 jobs:
   setup:
     runs-on: ubuntu-latest
@@ -60,7 +67,7 @@ jobs:
         uses: ./.github/actions/run-code-quality
         with:
           package-name: ${{ matrix.package }}
-          config-file: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.pr_analysis.tools[0] }}
+          config-file: ${{ steps.setup-context.outputs.config-data }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post Code Quality Results
@@ -75,7 +82,7 @@ jobs:
         with:
           pr-description: ${{ github.event.pull_request.body }}
           review-comments: ${{ github.event.review.body || '' }}
-          guideline-rules: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.code_review.review_guidelines }}
+          guideline-rules: ${{ steps.setup-context.outputs.config-data }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enforce Review Approval
@@ -83,7 +90,7 @@ jobs:
         uses: ./.github/actions/enforce-review-approval
         with:
           pr-number: ${{ github.event.pull_request.number }}
-          approval-requirements: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.code_review.required_approvals }}
+          approval-requirements: ${{ steps.setup-context.outputs.config-data }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update PR Status

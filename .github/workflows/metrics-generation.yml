@@ -7,6 +7,20 @@ on:
     types: [created]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  discussions: write
+  actions: read
+  checks: read
+  deployments: read
+  packages: read
+  pages: read
+  repository-projects: read
+  security-events: read
+  statuses: read
+
 jobs:
   generate-metrics:
     runs-on: ubuntu-latest

@@ -9,6 +9,18 @@ on:
   schedule:
     - cron: '0 0 * * *'  # Daily at 00:00 UTC
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: write
+  actions: read
+  deployments: read
+  packages: read
+  repository-projects: read
+  security-events: read
+  statuses: read
+
 jobs:
   branch-management:
     runs-on: ubuntu-latest

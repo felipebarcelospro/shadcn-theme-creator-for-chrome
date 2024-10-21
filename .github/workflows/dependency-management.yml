@@ -8,6 +8,12 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  security-events: read
+
 jobs:
   dependency-management:
     runs-on: ubuntu-latest
@@ -26,7 +32,7 @@ jobs:
         id: check-updates
         uses: ./.github/actions/check-dependency-updates
         with:
-          package-manager-type: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.package_manager }}
+          package-manager-type: ${{ steps.setup-context.outputs.package-manager }}
           current-dependencies: ${{ steps.setup-context.outputs.current-dependencies }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -35,7 +41,7 @@ jobs:
         uses: ./.github/actions/security-vulnerability-scan
         with:
           current-dependencies: ${{ steps.setup-context.outputs.current-dependencies }}
-          vulnerability-databases: ${{ fromJson(steps.setup-context.outputs.config-data).security_dependency_management.security_check.tools }}
+          vulnerability-databases: ${{ steps.setup-context.outputs.vulnerability-databases }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Update PRs
@@ -51,9 +57,9 @@ jobs:
         uses: ./.github/actions/run-tests
         with:
           pr-changes: ${{ steps.create-dependency-update-prs.outputs.created-prs }}
-          test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.commands.test }}
-          coverage-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.commands.coverage }}
-          coverage-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.test_requirements.coverage_threshold }}
+          test-command: ${{ steps.setup-context.outputs.test-command }}
+          coverage-command: ${{ steps.setup-context.outputs.coverage-command }}
+          coverage-threshold: ${{ steps.setup-context.outputs.coverage-threshold }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update PR Descriptions
@@ -70,11 +76,11 @@ jobs:
         uses: ./.github/actions/auto-merge-updates
         with:
           pr-details: ${{ steps.create-dependency-update-prs.outputs.created-prs }}
-          auto-merge-settings: ${{ fromJson(steps.setup-context.outputs.config-data).pr_management.auto_merge }}
+          auto-merge-settings: ${{ steps.setup-context.outputs.auto-merge-settings }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify Team
-        if: ${{ fromJson(steps.setup-context.outputs.config-data).security_dependency_management.vulnerability_reporting.enabled }}
+        if: ${{ steps.setup-context.outputs.notify-team == 'true' }}
         uses: ./.github/actions/send-notification
         with:
           notification-type: "dependency_updates"

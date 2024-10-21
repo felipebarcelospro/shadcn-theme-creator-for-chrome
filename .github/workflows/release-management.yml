@@ -11,8 +11,17 @@ on:
         required: true
         default: 'patch'
 
-env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+permissions:
+  actions: read
+  checks: write
+  contents: read
+  deployments: write
+  issues: write
+  packages: read
+  pull-requests: write
+  repository-projects: read
+  security-events: read
+  statuses: write
 
 jobs:
   setup:

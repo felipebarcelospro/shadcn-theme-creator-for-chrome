@@ -6,6 +6,14 @@ on:
   schedule:
     - cron: '0 1 * * *'  # Daily at 01:00 UTC
 
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+  actions: read
+  checks: write
+  repository-projects: write
+
 jobs:
   issue-management:
     runs-on: ubuntu-latest
