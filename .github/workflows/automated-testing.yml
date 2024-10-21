@@ -24,7 +24,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Get Packages
         id: get-packages
@@ -49,7 +49,7 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Install Dependencies
         id: install-dependencies
@@ -57,7 +57,7 @@ jobs:
         with:
           package-manager: ${{ fromJson(steps.setup-context.outputs.config-data).packages.global_settings.ci_cd.package_manager }}
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Run Tests
         id: run-tests
@@ -65,7 +65,7 @@ jobs:
         with:
           test-command: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].ci_cd.commands.test }}
           working-directory: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific[matrix.package].path }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Generate Test Report
         id: generate-test-report
@@ -73,7 +73,7 @@ jobs:
         with:
           test-results: ${{ steps.run-tests.outputs.test-results }}
           package-name: ${{ matrix.package }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
           
       - name: Upload Test Results
         id: upload-test-results
@@ -96,4 +96,4 @@ jobs:
               "details": "Check the workflow run for more information."
             }
           config-path: '.github/config.yml'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
