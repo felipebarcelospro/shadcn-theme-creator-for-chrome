@@ -7,17 +7,7 @@ on:
   repository_dispatch:
     types: [security_alert]
 
-permissions:
-  actions: read
-  checks: write
-  contents: read
-  deployments: write
-  issues: write
-  packages: read
-  pull-requests: write
-  repository-projects: read
-  security-events: read
-  statuses: write
+permissions: {}
 
 jobs:
   security-dependency-management:

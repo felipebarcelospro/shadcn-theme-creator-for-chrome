@@ -11,17 +11,7 @@ on:
         required: true
         default: 'patch'
 
-permissions:
-  actions: read
-  checks: write
-  contents: read
-  deployments: write
-  issues: write
-  packages: read
-  pull-requests: write
-  repository-projects: read
-  security-events: read
-  statuses: write
+permissions: {}
 
 jobs:
   setup:

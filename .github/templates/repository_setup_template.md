@@ -1,68 +1,65 @@
-# Repository Setup Guide
+# Repository Setup Guide for {{REPOSITORY_NAME}}
 
-Welcome to the repository setup guide. This document outlines the initial configuration and structure of our project. Please follow these guidelines to ensure consistency and efficiency in our development process.
-
-## Table of Contents
-1. [Git Flow Branches](#git-flow-branches)
-2. [Branch Protection Rules](#branch-protection-rules)
-3. [Wiki Pages](#wiki-pages)
-4. [Discussion Categories](#discussion-categories)
-5. [Issue Labels](#issue-labels)
-6. [Project Board](#project-board)
-7. [Repository Settings](#repository-settings)
-8. [Dependabot Configuration](#dependabot-configuration)
-9. [CODEOWNERS](#codeowners)
+## Overview
+[Brief description of the repository setup and its significance]
 
 ## Git Flow Branches
-Our repository follows the Git Flow branching model. The main branches are:
-{{ fromJson(steps.setup-context.outputs.config-data).version_control.main_branches | join(', ') }}
+- Main Branches: {{main_branches}}
+- [Brief explanation of the Git Flow model used]
 
 ## Branch Protection Rules
-We have set up branch protection rules for the following branches:
-{{ fromJson(steps.setup-context.outputs.config-data).version_control.protected_branches | join(', ') }}
-
-The protection rules include:
-{{ fromJson(steps.setup-context.outputs.config-data).version_control.branch_protection_rules | to_json }}
+- Protected Branches: {{protected_branches}}
+- Rules:
+  {{branch_protection_rules}}
 
 ## Wiki Pages
-We have created a Wiki page for "Git Flow Process" to document our version control workflow.
+- [List of created Wiki pages, e.g., "Git Flow Process"]
+- [Brief description of each Wiki page's purpose]
 
 ## Discussion Categories
-Our primary discussion category is:
-{{ fromJson(steps.setup-context.outputs.config-data).community.discussion_categories[0] }}
+- Primary Category: {{primary_discussion_category}}
+- [Other categories if applicable]
 
 ## Issue Labels
-We have set up the following issue labels:
-{{ fromJson(steps.setup-context.outputs.config-data).issue_management.labels | to_json }}
+{{issue_labels}}
 
 ## Project Board
-Our project board has the following columns:
-{{ fromJson(steps.setup-context.outputs.config-data).project_management.board_columns | join(', ') }}
+Columns:
+{{project_board_columns}}
 
 ## Repository Settings
-- Wiki: {{ fromJson(steps.setup-context.outputs.config-data).repository.features.wiki }}
-- Issues: {{ fromJson(steps.setup-context.outputs.config-data).repository.features.issues }}
-- Projects: {{ fromJson(steps.setup-context.outputs.config-data).repository.features.projects }}
+- Wiki: {{wiki_enabled}}
+- Issues: {{issues_enabled}}
+- Projects: {{projects_enabled}}
 
-Merge strategies:
-- Squash merge: {{ fromJson(steps.setup-context.outputs.config-data).repository.merge_strategies.allow_squash_merge }}
-- Merge commit: {{ fromJson(steps.setup-context.outputs.config-data).repository.merge_strategies.allow_merge_commit }}
-- Rebase merge: {{ fromJson(steps.setup-context.outputs.config-data).repository.merge_strategies.allow_rebase_merge }}
+Merge Strategies:
+- Squash merge: {{allow_squash_merge}}
+- Merge commit: {{allow_merge_commit}}
+- Rebase merge: {{allow_rebase_merge}}
 
-Branch management:
-- Delete head branches on merge: {{ fromJson(steps.setup-context.outputs.config-data).repository.branch_management.delete_head_branches }}
+Branch Management:
+- Delete head branches on merge: {{delete_head_branches}}
 
 ## Dependabot Configuration
-Ecosystems monitored:
-{{ fromJson(steps.setup-context.outputs.config-data).security.dependency_ecosystems | join(', ') }}
-
-Configuration:
-{{ fromJson(steps.setup-context.outputs.config-data).security.dependabot_config | to_json }}
+- Monitored Ecosystems: {{dependency_ecosystems}}
+- Configuration Details:
+  {{dependabot_config}}
 
 ## CODEOWNERS
-Repository admins:
-{{ fromJson(steps.setup-context.outputs.config-data).repository.admins | join(', ') }}
+Repository Admins:
+{{repository_admins}}
 
-Please refer to the CODEOWNERS file for specific file ownership details.
+[Brief explanation of CODEOWNERS file and its importance]
 
-This setup provides a solid foundation for our project. As we progress, we may update these configurations to better suit our evolving needs.
+## Setup Instructions
+[Step-by-step instructions for completing the repository setup]
+
+## Contributors
+[List of contributors to the initial setup]
+
+## Additional Resources
+- [Link to Git Flow documentation]
+- [Link to branch protection documentation]
+- [Other relevant resources]
+
+Thank you to all contributors for their efforts in setting up this repository!

@@ -6,17 +6,7 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  actions: read
-  checks: write
-  contents: write
-  deployments: write
-  issues: write
-  packages: read
-  pull-requests: write
-  repository-projects: read
-  security-events: read
-  statuses: write
+permissions: {}
 
 jobs:
   check-repository-setup:

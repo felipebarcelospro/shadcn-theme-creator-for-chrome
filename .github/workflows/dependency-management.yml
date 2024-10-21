@@ -8,11 +8,7 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: read
-  issues: write
-  pull-requests: write
-  security-events: read
+permissions: {}
 
 jobs:
   dependency-management:
