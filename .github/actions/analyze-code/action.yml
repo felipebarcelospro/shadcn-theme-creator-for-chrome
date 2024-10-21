@@ -12,142 +12,115 @@ inputs:
   github-token:
     description: 'GitHub token for authentication'
     required: true
-  debug:
-    description: 'Enable debug mode'
-    required: false
-    default: 'false'
 
 outputs:
   quality-report:
     description: 'JSON object containing the code quality report'
+    value: ${{ steps.analyze.outputs.quality-report }}
   issues:
     description: 'List of potential issues and recommendations'
+    value: ${{ steps.analyze.outputs.issues }}
   diff:
     description: 'Diff from previous analysis'
+    value: ${{ steps.analyze.outputs.diff }}
   visualizations:
     description: 'Graphs of code metrics'
+    value: ${{ steps.analyze.outputs.visualizations }}
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
-  - name: Cache dependencies
-    uses: actions/cache@v3
-    id: cache
-    with:
-      path: ~/.npm
-      key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-      restore-keys: |
-        ${{ runner.os }}-node-
-
-  - name: Install dependencies
-    if: steps.cache.outputs.cache-hit != 'true'
-    shell: bash
-    run: |
-      npm install -g eslint typescript @typescript-eslint/parser @typescript-eslint/eslint-plugin jscpd cloc
-      npm install --no-save fs path
-
   - name: Prepare Analysis Environment
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ inputs.github-token }}
-      script: |
-        const fs = require('fs');
-        const path = require('path');
-        const DEBUG = '${{ inputs.debug }}' === 'true';
+    shell: bash -l {0}
+    run: |
+      npm install -g eslint typescript @typescript-eslint/parser @typescript-eslint/eslint-plugin
+      npm install -g jscpd
+      npm install -g cloc
 
-        function debug(message) {
-          if (DEBUG) console.log(`DEBUG: ${message}`);
-        }
-
-        try {
-          const previousResults = '${{ inputs.previous-results }}';
-          if (previousResults) {
-            debug(`Using provided previous results: ${previousResults}`);
-            fs.copyFileSync(previousResults, 'previous_results.json');
-          } else if (fs.existsSync('.github/analysis_results.json')) {
-            debug('Using results from previous run');
-            fs.copyFileSync('.github/analysis_results.json', 'previous_results.json');
-          } else {
-            debug('No previous results found');
-          }
-        } catch (error) {
-          core.setFailed(`Failed to prepare analysis environment: ${error.message}`);
-          if (DEBUG) console.error(error);
-        }
+  - name: Fetch Previous Results
+    id: fetch-previous
+    shell: bash -l {0}
+    run: |
+      if [ -n "${{ inputs.previous-results }}" ]; then
+        echo "Using provided previous results: ${{ inputs.previous-results }}"
+        cp ${{ inputs.previous-results }} previous_results.json
+      elif [ -f ".github/analysis_results.json" ]; then
+        echo "Using results from previous run"
+        cp .github/analysis_results.json previous_results.json
+      else
+        echo "No previous results found"
+      fi
 
   - name: Run Static Code Analysis
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ inputs.github-token }}
-      script: |
-        const fs = require('fs');
-        const path = require('path');
-        const { execSync } = require('child_process');
-        const DEBUG = '${{ inputs.debug }}' === 'true';
+    id: analyze
+    shell: bash -l {0}
+    run: |
+      cd ${{ inputs.source-dir }}
 
-        function debug(message) {
-          if (DEBUG) console.log(`DEBUG: ${message}`);
-        }
+      # Run ESLint
+      eslint_output=$(eslint . --format=json || true)
+      echo "$eslint_output" > eslint_report.json
 
-        try {
-          const sourceDir = '${{ inputs.source-dir }}';
-          process.chdir(sourceDir);
-          debug(`Changed directory to: ${sourceDir}`);
+      # Run TypeScript compiler for type checking
+      tsc_output=$(tsc --noEmit --pretty false || true)
+      echo "$tsc_output" > tsc_report.txt
 
-          // Run ESLint
-          debug('Running ESLint');
-          const eslintOutput = execSync('eslint . --format=json', { encoding: 'utf8' });
-          fs.writeFileSync('eslint_report.json', eslintOutput);
+      # Run JSCPD for code duplication
+      jscpd_output=$(jscpd . --format=json || true)
+      echo "$jscpd_output" > jscpd_report.json
 
-          // Run TypeScript compiler
-          debug('Running TypeScript compiler');
-          const tscOutput = execSync('tsc --noEmit --pretty false', { encoding: 'utf8' });
-          fs.writeFileSync('tsc_report.txt', tscOutput);
+      # Run CLOC for code metrics
+      cloc_output=$(cloc . --json || true)
+      echo "$cloc_output" > cloc_report.json
 
-          // Run JSCPD
-          debug('Running JSCPD');
-          const jscpdOutput = execSync('jscpd . --format=json', { encoding: 'utf8' });
-          fs.writeFileSync('jscpd_report.json', jscpdOutput);
+      # Generate comprehensive report
+      echo "{" > report.json
+      echo "  \"eslint\": $(cat eslint_report.json)," >> report.json
+      echo "  \"typescript\": $(cat tsc_report.txt | jq -R -s .)," >> report.json
+      echo "  \"jscpd\": $(cat jscpd_report.json)," >> report.json
+      echo "  \"cloc\": $(cat cloc_report.json)" >> report.json
+      echo "}" >> report.json
 
-          // Run CLOC
-          debug('Running CLOC');
-          const clocOutput = execSync('cloc . --json', { encoding: 'utf8' });
-          fs.writeFileSync('cloc_report.json', clocOutput);
+      # Generate issues list
+      jq -r '.eslint[] | .messages[] | "ESLint: \(.message) at \(.filePath):\(.line):\(.column)"' eslint_report.json > issues.txt
+      grep -n "error TS" tsc_report.txt | sed 's/^/TypeScript: /' >> issues.txt
+      jq -r '.duplicates[] | "Duplication: \(.firstFile.name) and \(.secondFile.name)"' jscpd_report.json >> issues.txt
 
-          debug('All analysis tools executed successfully');
-        } catch (error) {
-          core.setFailed(`Static code analysis failed: ${error.message}`);
-          if (DEBUG) console.error(error);
-        }
+      # Compare with previous results
+      if [ -f "previous_results.json" ]; then
+        diff_output=$(diff -u previous_results.json report.json || true)
+        echo "$diff_output" > diff.txt
+      else
+        echo "No previous results for comparison" > diff.txt
+      fi
 
-  - name: Generate Reports
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ inputs.github-token }}
-      script: "const fs = require('fs');\nconst path = require('path');\nconst DEBUG = '${{ inputs.debug }}' === 'true';\n    #magic___^_^___line\nfunction debug(message) {\n  if (DEBUG) console.log(`DEBUG: ${message}`);\n}\n    #magic___^_^___line\ntry {\n  // Generate comprehensive report\n  debug('Generating comprehensive report');\n  const report = {\n    eslint: JSON.parse(fs.readFileSync('eslint_report.json', 'utf8')),\n    typescript: fs.readFileSync('tsc_report.txt', 'utf8'),\n    jscpd: JSON.parse(fs.readFileSync('jscpd_report.json', 'utf8')),\n    cloc: JSON.parse(fs.readFileSync('cloc_report.json', 'utf8'))\n  };\n  fs.writeFileSync('report.json', JSON.stringify(report, null, 2));\n    #magic___^_^___line\n  // Generate issues list\n  debug('Generating issues list');\n  const eslintIssues = report.eslint.map(file => \n    file.messages.map(msg => `ESLint: ${msg.message} at ${file.filePath}:${msg.line}:${msg.column}`)\n  ).flat();\n  const tsIssues = report.typescript.split('\\n').filter(line => line.includes('error TS')).map(line => `TypeScript: ${line.trim()}`);\n  const jscpdIssues = report.jscpd.duplicates.map(dup => `Duplication: ${dup.firstFile.name} and ${dup.secondFile.name}`);\n  const issues = [...eslintIssues, ...tsIssues, ...jscpdIssues];\n  fs.writeFileSync('issues.txt', issues.join('\\n'));\n    #magic___^_^___line\n  // Compare with previous results\n  debug('Comparing with previous results');\n  if (fs.existsSync('previous_results.json')) {\n    const previousReport = JSON.parse(fs.readFileSync('previous_results.json', 'utf8'));\n    const diff = JSON.stringify(report) !== JSON.stringify(previousReport) ? 'Changes detected' : 'No changes';\n    fs.writeFileSync('diff.txt', diff);\n  } else {\n    fs.writeFileSync('diff.txt', 'No previous results for comparison');\n  }\n    #magic___^_^___line\n  // Prepare visualizations\n  debug('Preparing visualizations');\n  const visualizations = {\n    eslintIssues: report.eslint.reduce((sum, file) => sum + file.errorCount + file.warningCount, 0),\n    duplicatedLines: report.jscpd.statistics.total.duplicatedLines,\n    totalLines: report.cloc.SUM.code\n  };\n  fs.writeFileSync('visualizations.json', JSON.stringify(visualizations, null, 2));\n    #magic___^_^___line\n  // Set outputs\n  core.setOutput('quality-report', JSON.stringify(report));\n  core.setOutput('issues', fs.readFileSync('issues.txt', 'utf8'));\n  core.setOutput('diff', fs.readFileSync('diff.txt', 'utf8'));\n  core.setOutput('visualizations', JSON.stringify(visualizations));\n    #magic___^_^___line\n  // Save results for next run\n  fs.mkdirSync('.github', { recursive: true });\n  fs.copyFileSync('report.json', '.github/analysis_results.json');\n    #magic___^_^___line\n  debug('All reports generated successfully');\n} catch (error) {\n  core.setFailed(`Failed to generate reports: ${error.message}`);\n  if (DEBUG) console.error(error);\n}\n    #magic___^_^___line\n"
+      # Prepare visualizations (simplified example)
+      echo "{" > visualizations.json
+      echo "  \"eslintIssues\": $(jq '.eslint[].errorCount + .eslint[].warningCount' eslint_report.json | jq -s 'add')," >> visualizations.json
+      echo "  \"duplicatedLines\": $(jq '.statistics.total.duplicatedLines' jscpd_report.json)," >> visualizations.json
+      echo "  \"totalLines\": $(jq '.SUM.code' cloc_report.json)" >> visualizations.json
+      echo "}" >> visualizations.json
+
+      # Set outputs
+      echo "quality-report=$(cat report.json | jq -c .)" >> $GITHUB_OUTPUT
+      echo "issues<<EOF" >> $GITHUB_OUTPUT
+      cat issues.txt >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
+      echo "diff<<EOF" >> $GITHUB_OUTPUT
+      cat diff.txt >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
+      echo "visualizations=$(cat visualizations.json | jq -c .)" >> $GITHUB_OUTPUT
+
+      # Save results for next run
+      mkdir -p .github
+      cp report.json .github/analysis_results.json
+
   - name: Error Handling
     if: failure()
-    uses: actions/github-script@v6
-    with:
-      github-token: ${{ inputs.github-token }}
-      script: |
-        const DEBUG = '${{ inputs.debug }}' === 'true';
-
-        function debug(message) {
-          if (DEBUG) console.log(`DEBUG: ${message}`);
-        }
-
-        debug('Entering error handling step');
-        console.log("An error occurred during the analysis. Continuing with available results.");
-        core.setOutput('quality-report', JSON.stringify({error: "Analysis failed"}));
-        core.setOutput('issues', "Analysis failed");
-        core.setOutput('diff', "No diff available due to analysis failure");
-        core.setOutput('visualizations', "{}");
-        debug('Error handling complete');
-
-  - name: Cleanup
-    if: always()
-    shell: bash
+    shell: bash -l {0}
     run: |
-      rm -rf node_modules
-      npm cache clean --force
+      echo "An error occurred during the analysis. Continuing with available results."
+      echo "quality-report={\"error\":\"Analysis failed\"}" >> $GITHUB_OUTPUT
+      echo "issues=Analysis failed" >> $GITHUB_OUTPUT
+      echo "diff=No diff available due to analysis failure" >> $GITHUB_OUTPUT
+      echo "visualizations={}" >> $GITHUB_OUTPUT
