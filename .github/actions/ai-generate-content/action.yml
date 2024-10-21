@@ -43,11 +43,10 @@ runs:
     id: generate-content
     uses: tyrrrz/action-http-request@master
     with:
-      url: https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent
+      url: https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent?key=${{ inputs.ai-api-key }}
       method: POST
       headers: |
         Content-Type: application/json
-        Authorization: Bearer ${{ inputs.ai-api-key }}
       body: |
         {
           "contents": [
