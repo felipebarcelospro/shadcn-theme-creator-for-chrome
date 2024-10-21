@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       is-configured: ${{ steps.check-config.outputs.is-configured }}
+      setup-context: ${{ steps.setup-context.outputs.context }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -26,21 +27,20 @@ jobs:
             echo "is-configured=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Setup Context and Prerequisites
+        id: setup-context
+        uses: ./.github/actions/setup-context-and-prerequisites
+        with:
+          github-token: ${{ secrets.GH_TOKEN }}
+          debug: 'true'
+
   repository-setup:
     needs: check-repository-setup
     if: needs.check-repository-setup.outputs.is-configured == 'false'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-    strategy:
-      matrix:
-        protected_branches: ${{ fromJson(needs.check-repository-setup.outputs.protected_branches) }}
-        initial_labels: ${{ fromJson(needs.check-repository-setup.outputs.initial_labels) }}
-        project_board_columns: ${{ fromJson(needs.check-repository-setup.outputs.project_board_columns) }}
-        dependabot_ecosystems: ${{ fromJson(needs.check-repository-setup.outputs.dependabot_ecosystems) }}
-        default_code_owners: ${{ fromJson(needs.check-repository-setup.outputs.default_code_owners) }}
-        initial_files: ${{ fromJson(needs.check-repository-setup.outputs.initial_files) }}
+      SETUP_CONTEXT: ${{ needs.check-repository-setup.outputs.setup-context }}
 
     steps:
       - name: Checkout code
@@ -48,17 +48,10 @@ jobs:
         with:
           token: ${{ env.GH_TOKEN }}
 
-      - name: Setup Context and Prerequisites
-        id: setup-context
-        uses: ./.github/actions/setup-context-and-prerequisites
-        with:
-          github-token: ${{ env.GH_TOKEN }}
-          debug: 'true'
-
       - name: Setup Repository Branches
         uses: ./.github/actions/setup-repository-branchs
         with:
-          branches: ${{ toJson(matrix.protected_branches) }}
+          branches: ${{ fromJson(env.SETUP_CONTEXT).protected_branches }}
           base-branch: 'main'
           github-token: ${{ env.GH_TOKEN }}
         continue-on-error: true
@@ -75,17 +68,17 @@ jobs:
         with:
           ai-api-key: ${{ secrets.GOOGLE_AI_API_KEY }}
           content-type: "repository_docs"
-          context-data: ${{ steps.setup-context.outputs.repository-context }}
+          context-data: ${{ env.SETUP_CONTEXT }}
           template-path: .github/templates/repository_setup_template.md
-          tone: ${{ steps.setup-context.outputs.documentation_tone }}
-          max-length: ${{ steps.setup-context.outputs.documentation_max_length }}
+          tone: ${{ fromJson(env.SETUP_CONTEXT).documentation_tone }}
+          max-length: ${{ fromJson(env.SETUP_CONTEXT).documentation_max_length }}
 
       - name: Setup Branch Protection Rules
         uses: ./.github/actions/apply-branch-protection
         with:
           github-token: ${{ env.GH_TOKEN }}
-          branch-patterns: ${{ matrix.protected_branches }}
-          protection-rules: ${{ steps.setup-context.outputs.branch_protection_rules }}
+          branch-patterns: ${{ toJson(fromJson(env.SETUP_CONTEXT).protected_branches) }}
+          protection-rules: ${{ toJson(fromJson(env.SETUP_CONTEXT).branch_protection_rules) }}
 
       - name: Create Wiki Pages
         uses: ./.github/actions/create-wiki-page
@@ -99,51 +92,51 @@ jobs:
         with:
           discussion-title: "Welcome to the Repository"
           discussion-content: ${{ steps.generate-content.outputs.generated-content }}
-          category: ${{ steps.setup-context.outputs.initial_discussion_category }}
+          category: ${{ fromJson(env.SETUP_CONTEXT).initial_discussion_category }}
           github-token: ${{ env.GH_TOKEN }}
 
       - name: Setup Issue Labels
         uses: ./.github/actions/setup-issue-labels
         with:
           github-token: ${{ env.GH_TOKEN }}
-          labels: ${{ toJson(matrix.initial_labels) }}
+          labels: ${{ toJson(fromJson(env.SETUP_CONTEXT).initial_labels) }}
 
       - name: Setup Project Board
         uses: ./.github/actions/setup-project-board
         with:
           github-token: ${{ env.GH_TOKEN }}
-          columns: ${{ toJson(matrix.project_board_columns) }}
+          columns: ${{ toJson(fromJson(env.SETUP_CONTEXT).project_board_columns) }}
 
       - name: Setup Repository Settings
         uses: ./.github/actions/setup-repository-settings
         with:
           github-token: ${{ env.GH_TOKEN }}
-          has-wiki: ${{ steps.setup-context.outputs.has_wiki }}
-          has-issues: ${{ steps.setup-context.outputs.has_issues }}
-          has-projects: ${{ steps.setup-context.outputs.has_projects }}
-          allow-squash-merge: ${{ steps.setup-context.outputs.allow_squash_merge }}
-          allow-merge-commit: ${{ steps.setup-context.outputs.allow_merge_commit }}
-          allow-rebase-merge: ${{ steps.setup-context.outputs.allow_rebase_merge }}
-          delete-branch-on-merge: ${{ steps.setup-context.outputs.delete_branch_on_merge }}
+          has-wiki: ${{ fromJson(env.SETUP_CONTEXT).has_wiki }}
+          has-issues: ${{ fromJson(env.SETUP_CONTEXT).has_issues }}
+          has-projects: ${{ fromJson(env.SETUP_CONTEXT).has_projects }}
+          allow-squash-merge: ${{ fromJson(env.SETUP_CONTEXT).allow_squash_merge }}
+          allow-merge-commit: ${{ fromJson(env.SETUP_CONTEXT).allow_merge_commit }}
+          allow-rebase-merge: ${{ fromJson(env.SETUP_CONTEXT).allow_rebase_merge }}
+          delete-branch-on-merge: ${{ fromJson(env.SETUP_CONTEXT).delete_branch_on_merge }}
 
       - name: Setup Dependabot
         uses: ./.github/actions/setup-dependabot
         with:
           github-token: ${{ env.GH_TOKEN }}
-          ecosystems: ${{ toJson(matrix.dependabot_ecosystems) }}
-          config: ${{ steps.setup-context.outputs.dependabot_config }}
+          ecosystems: ${{ toJson(fromJson(env.SETUP_CONTEXT).dependabot_ecosystems) }}
+          config: ${{ toJson(fromJson(env.SETUP_CONTEXT).dependabot_config) }}
 
       - name: Setup CODEOWNERS
         uses: ./.github/actions/setup-codeowners
         with:
           github-token: ${{ env.GH_TOKEN }}
-          repository-admins: ${{ toJson(matrix.default_code_owners) }}
+          repository-admins: ${{ toJson(fromJson(env.SETUP_CONTEXT).default_code_owners) }}
 
       - name: Commit Changes
         uses: ./.github/actions/commit-changes
         with:
           commit-message: "chore: initial repository setup"
-          files: ${{ toJson(matrix.initial_files) }}
+          files: ${{ toJson(fromJson(env.SETUP_CONTEXT).initial_files) }}
           github-token: ${{ env.GH_TOKEN }}
 
       - name: Create Pull Request
