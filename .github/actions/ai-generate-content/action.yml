@@ -68,6 +68,7 @@ runs:
   - name: Generate content
     id: generate-content
     run: |
+      max_tokens=$(( ${inputs.max-length:-2000} / 4 ))
       response=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent" \
         -H "Authorization: Bearer ${{ inputs.ai-api-key }}" \
         -H "Content-Type: application/json" \
@@ -86,7 +87,7 @@ runs:
           "temperature": 0.7,
           "topK": 40,
           "topP": 0.95,
-          "maxOutputTokens": $(( ${{ inputs.max-length }} / 4 ))
+          "maxOutputTokens": $max_tokens
         }
       }
       EOF

@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
 
     steps:
       - name: Checkout code
@@ -37,7 +38,7 @@ jobs:
         id: ai-analysis
         uses: ./.github/actions/ai-generate-content
         with:
-          ai-api-key: ${{ secrets.GOOGLE_AI_API_KEY }}
+          ai-api-key: ${{ env.GOOGLE_AI_API_KEY }}
           content-type: "security_analysis"
           context-data: |
             {
@@ -62,7 +63,7 @@ jobs:
               "updates-list": ${{ steps.update-dependencies.outputs.updates-list }}
             }
           template-path: .github/templates/dependency_update_pr_description.md
-          ai-api-key: ${{ secrets.GOOGLE_AI_API_KEY }}
+          ai-api-key: ${{ env.GOOGLE_AI_API_KEY }}
 
       - name: Create PR for Updates
         id: create-pr

@@ -11,6 +11,8 @@ permissions: {}
 jobs:
   issue-management:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
     steps:
       - name: Checkout code
@@ -20,7 +22,7 @@ jobs:
         uses: ./.github/actions/setup-context-and-prerequisites
         id: setup-context
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Auto Label
         uses: ./.github/actions/auto-label
@@ -28,7 +30,7 @@ jobs:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
           labeling-rules: ${{ steps.setup-context.outputs.auto-label-rules }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Auto Assign
         uses: ./.github/actions/auto-assign
@@ -36,7 +38,7 @@ jobs:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
           assignment-rules: ${{ steps.setup-context.outputs.auto-assign-rules }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Generate Auto Response
         uses: ./.github/actions/ai-generate-content
@@ -50,14 +52,14 @@ jobs:
               "issue-body": "${{ github.event.issue.body }}"
             }
           template-path: ${{ steps.setup-context.outputs.auto-response-template-path }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Update Issue
         uses: ./.github/actions/update-issue
         with:
           issue-number: ${{ github.event.issue.number }}
           comment-body: ${{ steps.generate-auto-response.outputs.generated-content }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Create Related Project Card
         uses: ./.github/actions/create-project-card
@@ -65,21 +67,21 @@ jobs:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
           project-board-id: ${{ steps.setup-context.outputs.default-project-board }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Link Related Issues/PRs
         uses: ./.github/actions/link-related-items
         with:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Prioritize Issue
         uses: ./.github/actions/prioritize-issue
         with:
           issue-number: ${{ github.event.issue.number }}
           prioritization-rules: ${{ steps.setup-context.outputs.prioritization-rules }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Set Milestone
         uses: ./.github/actions/set-milestone
@@ -87,7 +89,7 @@ jobs:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
           milestone-rules: ${{ steps.setup-context.outputs.milestone-rules }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Send Notifications
         uses: ./.github/actions/send-notification
@@ -99,7 +101,7 @@ jobs:
               "issue-title": "${{ github.event.issue.title }}",
               "action": "${{ github.event.action }}"
             }
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Track SLA
         uses: ./.github/actions/track-sla
@@ -108,7 +110,7 @@ jobs:
           item-number: ${{ github.event.issue.number }}
           sla-timeframe: ${{ steps.setup-context.outputs.sla-timeframe }}
           warning-threshold: ${{ steps.setup-context.outputs.sla-warning-threshold }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
 
       - name: Close Stale Issues
         if: github.event_name == 'schedule'
@@ -116,4 +118,4 @@ jobs:
         with:
           stale-threshold: ${{ steps.setup-context.outputs.stale-issue-threshold }}
           exempt-labels: ${{ steps.setup-context.outputs.stale-exempt-labels }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ env.GH_TOKEN }}
