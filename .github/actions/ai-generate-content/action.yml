@@ -39,35 +39,37 @@ outputs:
 runs:
   using: 'composite'
   steps:
-  - name: Prepare AI prompt
-    id: prepare-prompt
-    run: |
-      prompt=$(cat << EOF
-      Generate ${{ inputs.content-type }} content with the following context:
-      ${{ inputs.context-data }}
+  - name: Prepare AI prompt and load template
+    id: prepare-data
+    uses: actions/github-script@v6
+    with:
+      script: |
+        const fs = require('fs');
 
-      Additional instructions:
-      ${{ inputs.additional-context }}
+        // Prepare prompt
+        const prompt = `
+        Generate ${context.inputs['content-type']} content with the following context:
+        ${context.inputs['context-data']}
 
-      Please use a ${{ inputs.tone }} tone and limit the response to ${{ inputs.max-length }} characters.
+        Additional instructions:
+        ${context.inputs['additional-context']}
 
-      If a template is provided, use it as a guide for the structure and format of the content.
-      EOF
-      )
-      echo "prompt<<EOF" >> $GITHUB_OUTPUT
-      echo "$prompt" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
-    shell: bash
+        Please use a ${context.inputs['tone']} tone and limit the response to ${context.inputs['max-length']} characters.
 
-  - name: Load template
-    id: load-template
-    if: inputs.template-path
-    run: |
-      template=$(cat ${{ inputs.template-path }})
-      echo "template<<EOF" >> $GITHUB_OUTPUT
-      echo "$template" >> $GITHUB_OUTPUT
-      echo "EOF" >> $GITHUB_OUTPUT
-    shell: bash
+        If a template is provided, use it as a guide for the structure and format of the content.
+        `;
+
+        core.setOutput('prompt', prompt);
+
+        // Load template if provided
+        if (context.inputs['template-path']) {
+          try {
+            const template = fs.readFileSync(context.inputs['template-path'], 'utf8');
+            core.setOutput('template', template);
+          } catch (error) {
+            core.setFailed(`Error reading template file: ${error.message}`);
+          }
+        }
 
   - name: Generate content
     id: generate-content
@@ -87,10 +89,18 @@ runs:
               ]
             }
           ],
+          "safetySettings": [
+            {
+              "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+              "threshold": "BLOCK_ONLY_HIGH"
+            }
+          ],
           "generationConfig": {
             "temperature": 0.2,
             "topK": 20,
-            "topP": 0.8
+            "topP": 0.8,
+            "maxOutputTokens": 1000,
+            "stopSequences": ["EOF"]
           }
         }
 
