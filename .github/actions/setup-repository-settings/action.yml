@@ -38,7 +38,8 @@ runs:
   using: "composite"
   steps:
   - name: Configure repository settings
-    shell: bash -l {0}
+    id: configure-settings
+    shell: bash
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       HAS_WIKI: ${{ inputs.has-wiki }}
@@ -49,40 +50,47 @@ runs:
       ALLOW_REBASE_MERGE: ${{ inputs.allow-rebase-merge }}
       DELETE_BRANCH_ON_MERGE: ${{ inputs.delete-branch-on-merge }}
     run: |
-      # Extract owner and repo from GITHUB_REPOSITORY
       IFS='/' read -r OWNER REPO <<< "$GITHUB_REPOSITORY"
-
-      # Construct the API URL
       API_URL="https://api.github.com/repos/$OWNER/$REPO"
 
-      # Prepare the JSON payload
-      PAYLOAD=$(cat << EOF
-      {
-        "has_wiki": $HAS_WIKI,
-        "has_issues": $HAS_ISSUES,
-        "has_projects": $HAS_PROJECTS,
-        "allow_squash_merge": $ALLOW_SQUASH_MERGE,
-        "allow_merge_commit": $ALLOW_MERGE_COMMIT,
-        "allow_rebase_merge": $ALLOW_REBASE_MERGE,
-        "delete_branch_on_merge": $DELETE_BRANCH_ON_MERGE
-      }
-      EOF
-      )
+      PAYLOAD=$(jq -n \
+        --arg hw "$HAS_WIKI" \
+        --arg hi "$HAS_ISSUES" \
+        --arg hp "$HAS_PROJECTS" \
+        --arg asm "$ALLOW_SQUASH_MERGE" \
+        --arg amc "$ALLOW_MERGE_COMMIT" \
+        --arg arm "$ALLOW_REBASE_MERGE" \
+        --arg dbom "$DELETE_BRANCH_ON_MERGE" \
+        '{
+          has_wiki: $hw | test("true"),
+          has_issues: $hi | test("true"),
+          has_projects: $hp | test("true"),
+          allow_squash_merge: $asm | test("true"),
+          allow_merge_commit: $amc | test("true"),
+          allow_rebase_merge: $arm | test("true"),
+          delete_branch_on_merge: $dbom | test("true")
+        }')
 
-      # Make the API call to update repository settings
       RESPONSE=$(curl -s -X PATCH \
         -H "Authorization: token $GITHUB_TOKEN" \
         -H "Accept: application/vnd.github.v3+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
         -d "$PAYLOAD" \
         "$API_URL")
 
-      # Check if the update was successful
       if [[ $(echo "$RESPONSE" | jq -r '.id') ]]; then
         echo "Repository settings updated successfully"
         echo "settings-updated=true" >> $GITHUB_OUTPUT
       else
-        echo "Error updating repository settings: $RESPONSE"
+        ERROR_MESSAGE=$(echo "$RESPONSE" | jq -r '.message')
+        echo "Error updating repository settings: $ERROR_MESSAGE"
         echo "settings-updated=false" >> $GITHUB_OUTPUT
+
+        if [[ "$ERROR_MESSAGE" == "Resource not accessible by personal access token" ]]; then
+          echo "The token does not have sufficient permissions. Please ensure it has 'repo' scope or 'Administration' write permission."
+          echo "For more information, see: https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api#resource-not-accessible"
+        fi
+
         exit 1
       fi
 
