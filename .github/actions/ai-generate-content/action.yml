@@ -23,7 +23,7 @@ inputs:
     required: false
     default: '2000'
   ai-api-key:
-    description: 'API key for the AI service'
+    description: 'API key for the Google AI service'
     required: true
   ai-model:
     description: 'AI model to use for content generation'
@@ -37,79 +37,35 @@ outputs:
     description: 'Metadata about the generation process (model used, confidence score, etc.)'
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
-  - name: Prepare AI prompt and load template
-    id: prepare-data
-    uses: actions/github-script@v6
+  - name: Generate AI Content
+    uses: google-github-actions/generative-ai-action@v0
     with:
-      script: |
-        const fs = require('fs');
-
-        // Prepare prompt
-        const prompt = `
-        Generate ${inputs['content-type']} content with the following context:
-        ${inputs['context-data']}
+      model: ${{ inputs.ai-model }}
+      prompt: |
+        Generate ${{ inputs.content-type }} content with the following context:
+        ${{ inputs.context-data }}
 
         Additional instructions:
-        ${inputs['additional-context']}
+        ${{ inputs.additional-context }}
 
-        Please use a ${inputs['tone']} tone and limit the response to ${inputs['max-length']} characters.
+        Please use a ${{ inputs.tone }} tone and limit the response to ${{ inputs.max-length }} characters.
 
         If a template is provided, use it as a guide for the structure and format of the content.
-        `;
-
-        core.setOutput('prompt', prompt);
-
-        // Load template if provided
-        if (inputs['template-path']) {
-          try {
-            const template = fs.readFileSync(inputs['template-path'], 'utf8');
-            core.setOutput('template', template);
-          } catch (error) {
-            core.setFailed(`Error reading template file: ${error.message}`);
-          }
-        }
-
-  - name: Generate content
+      temperature: 0.2
+      top_k: 20
+      top_p: 0.8
+      max_output_tokens: 1000
+    env:
+      GOOGLE_API_KEY: ${{ inputs.ai-api-key }}
     id: generate-content
-    uses: fjogeleit/http-request-action@v1
-    with:
-      url: 'https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent?key=${{ inputs.ai-api-key }}'
-      method: 'POST'
-      customHeaders: '{"Content-Type": "application/json"}'
-      data: >
-        {
-          "contents": [
-            {
-              "parts": [
-                {
-                  "text": "${{ steps.prepare-data.outputs.prompt }}"
-                }
-              ]
-            }
-          ],
-          "safetySettings": [
-            {
-              "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-              "threshold": "BLOCK_ONLY_HIGH"
-            }
-          ],
-          "generationConfig": {
-            "temperature": 0.2,
-            "topK": 20,
-            "topP": 0.8,
-            "maxOutputTokens": 1000,
-            "stopSequences": ["EOF"]
-          }
-        }
 
   - name: Process response
     id: process-response
     run: |
-      echo '${{ steps.generate-content.outputs.response }}' > response.json
-      content=$(jq -r '.candidates[0].content.parts[0].text // empty' response.json)
-      metadata=$(jq -r '.candidates[0].safetyRatings // empty' response.json)
+      content="${{ steps.generate-content.outputs.response }}"
+      metadata="${{ steps.generate-content.outputs.metadata }}"
 
       echo "generated-content<<EOF" >> $GITHUB_OUTPUT
       echo "$content" >> $GITHUB_OUTPUT
