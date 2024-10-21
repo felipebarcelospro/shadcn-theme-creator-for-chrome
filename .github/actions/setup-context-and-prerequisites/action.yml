@@ -75,27 +75,38 @@ runs:
       CONFIG_DATA=$(echo '${{ steps.load_config.outputs.config-data }}' | jq -r)
       NORMALIZED_CONFIG=$(echo "$CONFIG_DATA" | jq -c '{
         repository: {
+          name: .repository.name,
           type: (.repository.type // "monorepo"),
+          description: .repository.description,
           version_control: {
             main_branches: (.repository.version_control.main_branches // ["main", "develop"]),
             branch_prefixes: (.repository.version_control.branch_prefixes // {}),
-            merge_strategy: (.repository.version_control.merge_strategy // null),
-            protected_branches: (.repository.version_control.protected_branches // ["main", "develop"]),
+            branch_protection: .repository.version_control.branch_protection,
+            merge_strategy: .repository.version_control.merge_strategy,
+            auto_delete_merged_branches: .repository.version_control.auto_delete_merged_branches,
+            stale_branch_threshold: (.repository.version_control.stale_branch_threshold // 30),
             pr_creation_wait_time: (.repository.version_control.pr_creation_wait_time // 15),
-            stale_branch_threshold: (.repository.version_control.stale_branch_threshold // 30)
-          }
+            protected_branches: (.repository.version_control.protected_branches // ["main", "develop"])
+          },
+          setup: .repository.setup
         },
         packages: {
           global_settings: {
             ci_cd: {
-              package_manager: (.packages.global_settings.ci_cd.package_manager // "npm")
+              package_manager: (.packages.global_settings.ci_cd.package_manager // "npm"),
+              tools: .packages.global_settings.ci_cd.tools
             },
-            performance_monitoring: (.packages.global_settings.performance_monitoring // {})
+            security_checks: .packages.global_settings.security_checks,
+            performance_monitoring: .packages.global_settings.performance_monitoring
           },
           package_specific: (.packages.package_specific // {})
         },
-        metrics_generation: (.metrics_generation // {}),
-        security_dependency_management: (.security_dependency_management // {})
+        plugins: .plugins,
+        pr_management: .pr_management,
+        release_management: .release_management,
+        security_dependency_management: .security_dependency_management,
+        issue_management: .issue_management,
+        metrics_generation: .metrics_generation
       }')
       echo "normalized-config=$(echo "$NORMALIZED_CONFIG" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then

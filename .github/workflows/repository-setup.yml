@@ -40,6 +40,7 @@ jobs:
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          debug: 'true'
 
       - name: Create Git Flow Branches
         id: create-git-flow-branches
@@ -161,10 +162,10 @@ jobs:
       - name: Mark repository as configured
         id: mark-configured
         run: |
-          echo '{"configured": true}' > .github/config.yml
+          echo '{"configured": true}' > .github/enabled
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add .github/config.yml
+          git add .github/enabled
           git commit -m "chore: mark repository as configured"
           git push
         env:
