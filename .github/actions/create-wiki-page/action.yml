@@ -1,5 +1,5 @@
 name: 'Create Wiki Page'
-description: 'Creates a new wiki page in the repository'
+description: 'Creates a new wiki page in the repository using GitHub API'
 
 inputs:
   github-token:
@@ -13,55 +13,34 @@ inputs:
     required: true
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
-  - name: Debug Inputs
-    shell: bash -l {0}
-    run: |
-      echo "Debug: Creating wiki page with name '${{ inputs.page-name }}'"
-      echo "Debug: Content length: ${#PAGE_CONTENT}"
-    env:
-      PAGE_CONTENT: ${{ inputs.page-content }}
-
-  - name: Checkout wiki
-    uses: actions/checkout@v3
-    with:
-      repository: ${{ github.repository }}.wiki
-      token: ${{ inputs.github-token }}
-
   - name: Create wiki page
-    shell: bash -l {0}
-    run: |
-      echo "Debug: Writing content to ${{ inputs.page-name }}.md"
-      echo "$PAGE_CONTENT" > "${{ inputs.page-name }}.md"
-      echo "Debug: File created successfully"
+    shell: bash
     env:
-      PAGE_CONTENT: ${{ inputs.page-content }}
-
-  - name: Commit and push changes
-    shell: bash -l {0}
+      GH_TOKEN: ${{ inputs.github-token }}
     run: |
-      echo "Debug: Configuring git"
-      git config user.name "GitHub Action"
-      git config user.email "action@github.com"
-      echo "Debug: Adding file to git"
-      git add "${{ inputs.page-name }}.md"
-      echo "Debug: Committing changes"
-      git commit -m "Add ${{ inputs.page-name }} wiki page"
-      echo "Debug: Pushing changes"
-      git push
-      echo "Debug: Changes pushed successfully"
+      # Encode page content for API request
+      ENCODED_CONTENT=$(echo "${{ inputs.page-content }}" | jq -sRr @uri)
 
-  - name: Error handling
-    if: failure()
-    shell: bash -l {0}
-    run: |
-      echo "Error: Failed to create wiki page ${{ inputs.page-name }}"
-      echo "Please check the action logs for more details"
-      echo "Debug: Last few lines of the log:"
-      tail -n 10 $GITHUB_STEP_SUMMARY
+      # Create wiki page using GitHub API
+      RESPONSE=$(curl -s -X PUT \
+        -H "Authorization: token $GH_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/${{ github.repository }}/wiki/${{ inputs.page-name }}" \
+        -d "{\"message\":\"Create ${{ inputs.page-name }} wiki page\",\"content\":\"$ENCODED_CONTENT\"}")
+
+      # Check if the page was created successfully
+      if [[ $(echo "$RESPONSE" | jq -r '.html_url') != "null" ]]; then
+        echo "Wiki page created successfully"
+        echo "page-url=$(echo "$RESPONSE" | jq -r '.html_url')" >> $GITHUB_OUTPUT
+      else
+        echo "Failed to create wiki page"
+        echo "Error: $(echo "$RESPONSE" | jq -r '.message')"
+        exit 1
+      fi
 
 outputs:
   page-url:
     description: 'URL of the created wiki page'
-    value: ${{ github.server_url }}/${{ github.repository }}/wiki/${{ inputs.page-name }}
+    value: ${{ steps.create-wiki-page.outputs.page-url }}
