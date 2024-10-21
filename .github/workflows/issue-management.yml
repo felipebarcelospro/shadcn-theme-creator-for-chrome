@@ -18,7 +18,7 @@ jobs:
         uses: ./.github/actions/setup-context-and-prerequisites
         id: setup-context
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Auto Label
         uses: ./.github/actions/auto-label
@@ -26,7 +26,7 @@ jobs:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
           labeling-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.auto_label.rules }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Auto Assign
         uses: ./.github/actions/auto-assign
@@ -34,7 +34,7 @@ jobs:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
           assignment-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.auto_assign.expertise_map }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Generate Auto Response
         uses: ./.github/actions/ai-generate-content
@@ -47,14 +47,14 @@ jobs:
               "issue-body": "${{ github.event.issue.body }}"
             }
           template-path: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.auto_response.template_path }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Update Issue
         uses: ./.github/actions/update-issue
         with:
           issue-number: ${{ github.event.issue.number }}
           comment-body: ${{ steps.generate-auto-response.outputs.generated-content }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Create Related Project Card
         uses: ./.github/actions/create-project-card
@@ -62,21 +62,21 @@ jobs:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
           project-board-id: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.default_project_board }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Link Related Issues/PRs
         uses: ./.github/actions/link-related-items
         with:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Prioritize Issue
         uses: ./.github/actions/prioritize-issue
         with:
           issue-number: ${{ github.event.issue.number }}
           prioritization-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.prioritization.rules }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Set Milestone
         uses: ./.github/actions/set-milestone
@@ -84,7 +84,7 @@ jobs:
           item-type: 'issue'
           item-number: ${{ github.event.issue.number }}
           milestone-rules: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.milestone_setting }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Send Notifications
         uses: ./.github/actions/send-notification
@@ -96,7 +96,7 @@ jobs:
               "issue-title": "${{ github.event.issue.title }}",
               "action": "${{ github.event.action }}"
             }
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Track SLA
         uses: ./.github/actions/track-sla
@@ -105,7 +105,7 @@ jobs:
           item-number: ${{ github.event.issue.number }}
           sla-timeframe: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.sla_tracking.timeframe }}
           warning-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.sla_tracking.warning_threshold }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Close Stale Issues
         if: github.event_name == 'schedule'
@@ -113,4 +113,4 @@ jobs:
         with:
           stale-threshold: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.stale_issue_threshold }}
           exempt-labels: ${{ fromJson(steps.setup-context.outputs.config-data).issue_management.stale_exempt_labels }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}

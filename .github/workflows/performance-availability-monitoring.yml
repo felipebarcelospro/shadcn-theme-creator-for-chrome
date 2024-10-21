@@ -18,21 +18,21 @@ jobs:
         id: setup-context
         uses: ./.github/actions/setup-context-and-prerequisites
         with:
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Check Availability
         id: check-availability
         uses: ./.github/actions/check-site-availability
         with:
           urls: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific.web.ci_cd.performance_monitoring.urls_to_monitor }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Measure Performance
         id: measure-performance
         uses: ./.github/actions/measure-site-performance
         with:
           urls: ${{ fromJson(steps.setup-context.outputs.config-data).packages.package_specific.web.ci_cd.performance_monitoring.urls_to_monitor }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Analyze Results
         id: analyze-results
@@ -41,7 +41,7 @@ jobs:
           availability-status: ${{ steps.check-availability.outputs.availability_status }}
           performance-metrics: ${{ steps.measure-performance.outputs.performance_metrics }}
           thresholds: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).packages.global_settings.performance_monitoring.thresholds) }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Create Issues (if needed)
         id: create-issues
@@ -51,7 +51,7 @@ jobs:
           issue-type: ${{ steps.analyze-results.outputs.issue_type }}
           issue-details: ${{ steps.analyze-results.outputs.issue_details }}
           labels: ${{ toJson(fromJson(steps.setup-context.outputs.config-data).packages.global_settings.performance_monitoring.issue_creation.labels) }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Send Notifications
         id: send-notifications
@@ -63,7 +63,7 @@ jobs:
               "analysis-report": ${{ steps.analyze-results.outputs.analysis_report }},
               "issue-url": "${{ steps.create-issues.outputs.issue_url }}"
             }
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Send Webhook
         id: send-webhook
@@ -76,7 +76,7 @@ jobs:
               "availability-data": ${{ steps.check-availability.outputs.availability_status }}
             }
           webhook-url: ${{ fromJson(steps.setup-context.outputs.config-data).plugins.webhook.url }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
 
       - name: Create Monitoring Failure Issue
         id: create-monitoring-failure-issue
@@ -86,4 +86,4 @@ jobs:
           issue-title: "Performance Monitoring Failed"
           issue-body: "The performance and availability monitoring workflow encountered an error. Manual check required."
           labels: '["high-priority", "monitoring-error"]'
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ github.token }}
