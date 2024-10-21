@@ -116,7 +116,7 @@ runs:
         --arg branch "${GITHUB_REF#refs/heads/}" \
         --arg commit "$GITHUB_SHA" \
         --arg packageManager "$(cat $GITHUB_OUTPUT | grep '^package-manager=' | cut -d'=' -f2)" \
-        --argjson changedFiles "$(cat $GITHUB_OUTPUT | sed -n '/^changed_files<<EOF$/,/^EOF$/p' | sed '1d;$d' | jq -R . | jq -s .)" \
+        --slurpfile changedFiles <(cat $GITHUB_OUTPUT | sed -n '/^changed_files<<EOF$/,/^EOF$/p' | sed '1d;$d') \
         '{
           repoMetadata: $repoMetadata,
           config: $config,
@@ -128,7 +128,7 @@ runs:
           mergeStrategy: ($config.repository.version_control.merge_strategy // null),
           protectedBranches: ($config.repository.version_control.protected_branches // []),
           packageManager: $packageManager,
-          changedFiles: $changedFiles
+          changedFiles: $changedFiles[0]
         }')
       echo "repository-context<<EOF" >> $GITHUB_OUTPUT
       echo "$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
