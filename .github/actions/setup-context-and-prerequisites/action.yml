@@ -67,7 +67,6 @@ runs:
       echo "EOF" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Config data loaded and parsed"
-        echo "$CONFIG_DATA" | jq '.'
       fi
 
   - name: Normalize config data
@@ -115,7 +114,6 @@ runs:
       echo "EOF" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Config data normalized"
-        echo "$NORMALIZED_CONFIG" | jq '.'
       fi
 
   - name: Detect package manager
@@ -145,7 +143,6 @@ runs:
       echo "repo-metadata=$(echo "$REPO_METADATA" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Repository metadata fetched"
-        echo "$REPO_METADATA" | jq '.'
       fi
 
   - name: Get changed files
@@ -166,7 +163,6 @@ runs:
       echo "changed_files=$(echo "$CHANGED_FILES" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Changed files detected"
-        echo "$CHANGED_FILES"
       fi
 
   - name: Set environment variables
@@ -229,7 +225,6 @@ runs:
       echo "EOF" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Repository context set"
-        echo "$REPOSITORY_CONTEXT" | jq '.'
       fi
 
   - name: Set apps configuration
@@ -241,7 +236,6 @@ runs:
       echo "apps_configuration=$(echo "$APPS_CONFIG" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Apps configuration set"
-        echo "$APPS_CONFIG" | jq '.'
       fi
 
   - name: Set GitHub Pages URLs
@@ -256,7 +250,6 @@ runs:
       echo "github_pages_urls=$(echo "[\"$PAGES_URL\"]" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: GitHub Pages URLs set"
-        echo "$PAGES_URL"
       fi
 
   - name: Set metrics data
@@ -268,7 +261,6 @@ runs:
       echo "metrics_data=$(echo "$METRICS_DATA" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Metrics data set"
-        echo "$METRICS_DATA" | jq '.'
       fi
 
   - name: Set security checks configuration
@@ -280,7 +272,6 @@ runs:
       echo "security_checks=$(echo "$SECURITY_CHECKS" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Security checks configuration set"
-        echo "$SECURITY_CHECKS" | jq '.'
       fi
 
   - name: Set performance monitoring configuration
@@ -292,7 +283,6 @@ runs:
       echo "performance_monitoring=$(echo "$PERFORMANCE_MONITORING" | jq -R -s @json)" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Performance monitoring configuration set"
-        echo "$PERFORMANCE_MONITORING" | jq '.'
       fi
 
   - name: Completion message
@@ -301,6 +291,5 @@ runs:
       echo "Setup context and prerequisites completed successfully"
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Repository Context"
-        echo '${{ steps.set_repo_context.outputs.repository-context }}' | jq '.'
       fi
 

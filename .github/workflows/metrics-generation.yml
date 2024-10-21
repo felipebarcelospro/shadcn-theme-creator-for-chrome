@@ -48,6 +48,7 @@ jobs:
         id: generate-metrics-report
         uses: ./.github/actions/ai-generate-content
         with:
+          ai-api-key: ${{ secrets.GOOGLE_AI_API_KEY }}
           content-type: "metrics_analysis"
           context-data: |
             {
@@ -56,7 +57,6 @@ jobs:
               "improvement-areas": ${{ steps.generate-metrics.outputs.improvement-areas }}
             }
           template-path: .github/templates/performance_metrics_report_template.md
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Discussion Post
         id: create-discussion-post
@@ -73,6 +73,7 @@ jobs:
         if: ${{ steps.setup-context.outputs.contributor-engagement-enabled == 'true' }}
         uses: ./.github/actions/ai-generate-content
         with:
+          ai-api-key: ${{ secrets.GOOGLE_AI_API_KEY }}
           content-type: "contributor_engagement"
           context-data: |
             {
@@ -120,6 +121,7 @@ jobs:
         if: ${{ steps.setup-context.outputs.improvement-suggestions-enabled == 'true' }}
         uses: ./.github/actions/ai-generate-content
         with:
+          ai-api-key: ${{ secrets.GOOGLE_AI_API_KEY }}
           content-type: "improvement_suggestions"
           context-data: |
             {

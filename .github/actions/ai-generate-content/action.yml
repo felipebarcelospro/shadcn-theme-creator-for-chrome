@@ -22,9 +22,13 @@ inputs:
     description: 'Maximum length of the generated content in characters'
     required: false
     default: '2000'
-  github-token:
-    description: 'GitHub token for API access'
+  ai-api-key:
+    description: 'API key for the AI service'
     required: true
+  ai-model:
+    description: 'AI model to use for content generation'
+    required: true
+    default: 'gemini-1.5-pro-002'
 
 outputs:
   generated-content:
@@ -80,8 +84,8 @@ runs:
   - name: Generate content
     id: generate-content
     run: |
-      response=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent" \
-        -H "Authorization: Bearer ${{ secrets.GOOGLE_AI_API_KEY }}" \
+      response=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/${{ inputs.ai-model }}:generateContent" \
+        -H "Authorization: Bearer ${{ inputs.ai-api-key }}" \
         -H "Content-Type: application/json" \
         -d '{
           "contents": [
