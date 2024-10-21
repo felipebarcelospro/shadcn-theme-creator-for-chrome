@@ -47,7 +47,15 @@ runs:
         exit 1
       fi
       CONFIG_DATA=$(yq eval -o=json .github/config.yml)
-      echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
+      echo "config-data<<EOF" >> $GITHUB_OUTPUT
+      echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
+
+      # Validate essential config sections
+      if ! echo "$CONFIG_DATA" | jq -e '.repository' > /dev/null; then
+        echo "Error: 'repository' section is missing in config.yml"
+        exit 1
+      fi
 
   - name: Detect package manager
     shell: bash
@@ -69,7 +77,13 @@ runs:
     run: |
       REPO_METADATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
         "https://api.github.com/repos/$GITHUB_REPOSITORY")
-      echo "repo-metadata=$REPO_METADATA" >> $GITHUB_OUTPUT
+      if [ -z "$REPO_METADATA" ]; then
+        echo "Error: Failed to fetch repository metadata"
+        exit 1
+      fi
+      echo "repo-metadata<<EOF" >> $GITHUB_OUTPUT
+      echo "$REPO_METADATA" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
   - name: Get changed files
     shell: bash
@@ -85,31 +99,36 @@ runs:
       else
         CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r $GITHUB_SHA)
       fi
-      echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+      if [ -z "$CHANGED_FILES" ]; then
+        echo "Warning: No changed files detected"
+      fi
+      echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+      echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
   - name: Set environment variables
     shell: bash
     run: |
-      CONFIG_DATA=$(cat $GITHUB_OUTPUT | grep '^config-data=' | cut -d'=' -f2-)
+      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
       {
         echo "REPO_NAME=${GITHUB_REPOSITORY}"
         echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
         echo "GITHUB_SHA=${GITHUB_SHA}"
         echo "GITHUB_REF=${GITHUB_REF}"
-        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type // empty')"
-        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches // [] | join(",")')"
+        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type // "monorepo"')"
+        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches // ["main", "develop"] | join(",")')"
         echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes // {} | to_entries | map("\(.key)=\(.value)") | join(",")')"
         echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy // empty')"
-        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches // [] | join(",")')"
+        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches // ["main", "develop"] | join(",")')"
       } >> $GITHUB_ENV
       echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
 
   - name: Set repository context
     shell: bash
     run: |
-      REPO_METADATA=$(cat $GITHUB_OUTPUT | grep '^repo-metadata=' | cut -d'=' -f2-)
-      CONFIG_DATA=$(cat $GITHUB_OUTPUT | grep '^config-data=' | cut -d'=' -f2-)
-      CHANGED_FILES=$(cat $GITHUB_OUTPUT | grep '^changed_files=' | cut -d'=' -f2-)
+      REPO_METADATA=$(cat $GITHUB_OUTPUT | sed -n '/^repo-metadata<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      CHANGED_FILES=$(cat $GITHUB_OUTPUT | sed -n '/^changed_files<<EOF$/,/^EOF$/p' | sed '1d;$d')
       PACKAGE_MANAGER=$(cat $GITHUB_OUTPUT | grep '^package-manager=' | cut -d'=' -f2)
 
       REPOSITORY_CONTEXT=$(jq -n \
@@ -124,22 +143,26 @@ runs:
           config: $config,
           branch: $branch,
           commit: $commit,
-          repoType: ($config.repository.type // null),
-          mainBranches: ($config.repository.version_control.main_branches // []),
+          repoType: ($config.repository.type // "monorepo"),
+          mainBranches: ($config.repository.version_control.main_branches // ["main", "develop"]),
           branchPrefixes: ($config.repository.version_control.branch_prefixes // {}),
           mergeStrategy: ($config.repository.version_control.merge_strategy // null),
-          protectedBranches: ($config.repository.version_control.protected_branches // []),
+          protectedBranches: ($config.repository.version_control.protected_branches // ["main", "develop"]),
           packageManager: $packageManager,
           changedFiles: $changedFiles
         }')
-      echo "repository-context=$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
+      echo "repository-context<<EOF" >> $GITHUB_OUTPUT
+      echo "$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
   - name: Set apps configuration
     shell: bash
     run: |
-      CONFIG_DATA=$(cat $GITHUB_OUTPUT | grep '^config-data=' | cut -d'=' -f2-)
+      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
       APPS_CONFIG=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific // {}')
-      echo "apps_configuration=$APPS_CONFIG" >> $GITHUB_OUTPUT
+      echo "apps_configuration<<EOF" >> $GITHUB_OUTPUT
+      echo "$APPS_CONFIG" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
 
   - name: Set GitHub Pages URLs
     shell: bash
@@ -149,4 +172,9 @@ runs:
 
   - name: Completion message
     shell: bash
-    run: echo "Setup context and prerequisites completed successfully"
+    run: |
+      echo "Setup context and prerequisites completed successfully"
+      if [ "${{ inputs.debug }}" = "true" ]; then
+        echo "Debug: Repository Context"
+        cat $GITHUB_OUTPUT | sed -n '/^repository-context<<EOF$/,/^EOF$/p' | sed '1d;$d' | jq '.'
+      fi
