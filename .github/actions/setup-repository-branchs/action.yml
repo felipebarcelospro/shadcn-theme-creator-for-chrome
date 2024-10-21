@@ -1,0 +1,51 @@
+name: 'Setup Repository Branches'
+description: 'Creates or updates multiple branches in the repository'
+
+inputs:
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+  branches:
+    description: 'JSON array of branch names to create or update'
+    required: true
+  base-branch:
+    description: 'Name of the base branch'
+    required: true
+    default: 'main'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Checkout repository
+    uses: actions/checkout@v3
+    with:
+      token: ${{ inputs.github-token }}
+      fetch-depth: 0
+
+  - name: Parse branches
+    id: parse-branches
+    shell: bash
+    run: |
+      echo "branches=$(echo '${{ inputs.branches }}' | jq -c '.')" >> $GITHUB_OUTPUT
+
+  - name: Setup branches
+    uses: ./.github/actions/create-or-update-branch
+    strategy:
+      matrix:
+        branch: ${{ fromJson(steps.parse-branches.outputs.branches) }}
+    with:
+      github-token: ${{ inputs.github-token }}
+      branch-name: ${{ matrix.branch }}
+      base-branch: ${{ inputs.base-branch }}
+
+  - name: Check branch setup status
+    if: failure()
+    shell: bash
+    run: |
+      echo "An error occurred during branch setup for ${{ matrix.branch }}"
+
+  - name: Summarize branch setup
+    shell: bash
+    run: |
+      echo "Branch setup completed"
+      echo "Successfully processed branches: ${{ steps.parse-branches.outputs.branches }}"

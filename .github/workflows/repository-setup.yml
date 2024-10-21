@@ -55,10 +55,10 @@ jobs:
           github-token: ${{ env.GH_TOKEN }}
           debug: 'true'
 
-      - name: Create Git Flow Branches
-        uses: ./.github/actions/create-or-update-branch
+      - name: Setup Repository Branches
+        uses: ./.github/actions/setup-repository-branchs
         with:
-          branch-name: ${{ steps.setup-context.outputs.main_branch }}
+          branches: ${{ toJson(matrix.protected_branches) }}
           base-branch: 'main'
           github-token: ${{ env.GH_TOKEN }}
         continue-on-error: true
