@@ -62,7 +62,9 @@ runs:
         echo "Error: Failed to parse config.yml"
         exit 1
       fi
-      echo "config-data=$(echo "$CONFIG_DATA" | jq -R -s @json)" >> $GITHUB_OUTPUT
+      echo "config-data<<EOF" >> $GITHUB_OUTPUT
+      echo "$CONFIG_DATA" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Config data loaded and parsed"
         echo "$CONFIG_DATA" | jq '.'
@@ -72,7 +74,7 @@ runs:
     id: normalize_config
     shell: bash
     run: |
-      CONFIG_DATA=$(echo '${{ steps.load_config.outputs.config-data }}' | jq -r)
+      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
       NORMALIZED_CONFIG=$(echo "$CONFIG_DATA" | jq -c '{
         repository: {
           name: .repository.name,
@@ -108,7 +110,9 @@ runs:
         issue_management: .issue_management,
         metrics_generation: .metrics_generation
       }')
-      echo "normalized-config=$(echo "$NORMALIZED_CONFIG" | jq -R -s @json)" >> $GITHUB_OUTPUT
+      echo "normalized-config<<EOF" >> $GITHUB_OUTPUT
+      echo "$NORMALIZED_CONFIG" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Config data normalized"
         echo "$NORMALIZED_CONFIG" | jq '.'
@@ -193,10 +197,10 @@ runs:
     id: set_repo_context
     shell: bash
     run: |
-      REPO_METADATA=$(echo '${{ steps.fetch_repo_metadata.outputs.repo-metadata }}' | jq -r)
-      NORMALIZED_CONFIG=$(echo '${{ steps.normalize_config.outputs.normalized-config }}' | jq -r)
-      CHANGED_FILES=$(echo '${{ steps.get_changed_files.outputs.changed_files }}' | jq -r)
-      PACKAGE_MANAGER=$(echo '${{ steps.detect_package_manager.outputs.package-manager }}' | jq -r)
+      REPO_METADATA='${{ steps.fetch_repo_metadata.outputs.repo-metadata }}'
+      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      CHANGED_FILES='${{ steps.get_changed_files.outputs.changed_files }}'
+      PACKAGE_MANAGER='${{ steps.detect_package_manager.outputs.package-manager }}'
 
       REPOSITORY_CONTEXT=$(jq -n \
         --argjson repoMetadata "$REPO_METADATA" \
@@ -204,7 +208,7 @@ runs:
         --arg branch "${GITHUB_REF#refs/heads/}" \
         --arg commit "$GITHUB_SHA" \
         --arg packageManager "$PACKAGE_MANAGER" \
-        --argjson changedFiles "$(echo "$CHANGED_FILES" | jq -R -s 'split("\n")[:-1]')" \
+        --argjson changedFiles "$CHANGED_FILES" \
         '{
           repoMetadata: $repoMetadata,
           config: $config,
@@ -220,7 +224,9 @@ runs:
           prCreationWaitTime: $config.repository.version_control.pr_creation_wait_time,
           staleBranchThreshold: $config.repository.version_control.stale_branch_threshold
         }')
-      echo "repository-context=$(echo "$REPOSITORY_CONTEXT" | jq -R -s @json)" >> $GITHUB_OUTPUT
+      echo "repository-context<<EOF" >> $GITHUB_OUTPUT
+      echo "$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
       if [ "${{ inputs.debug }}" = "true" ]; then
         echo "Debug: Repository context set"
         echo "$REPOSITORY_CONTEXT" | jq '.'
