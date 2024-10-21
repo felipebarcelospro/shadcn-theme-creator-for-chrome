@@ -132,10 +132,10 @@ jobs:
       - name: Create Discussion Posts
         uses: ./.github/actions/create-discussion-post
         with:
+          github-token: ${{ env.GH_TOKEN }}
           discussion-title: "Welcome to the Repository"
           discussion-content: ${{ needs.generate-content.outputs.generate-discussion-content }}
           category: ${{ env.SETUP_CONTEXT.config.repository.initial_discussion_category }}
-          github-token: ${{ env.GH_TOKEN }}
 
   setup-repository-features:
     needs: check-repository-setup
@@ -182,13 +182,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup Dependabot
-        uses: ./.github/actions/setup-dependabot
-        with:
-          github-token: ${{ env.GH_TOKEN }}
-          ecosystems: ${{ env.SETUP_CONTEXT.config.packages.global_settings.security_checks.tools }}
-          schedule: ${{ env.SETUP_CONTEXT.config.packages.global_settings.security_checks.schedule }}
 
       - name: Setup CODEOWNERS
         uses: ./.github/actions/setup-codeowners

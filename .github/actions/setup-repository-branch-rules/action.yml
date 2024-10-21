@@ -6,57 +6,38 @@ inputs:
     description: 'GitHub token for API access'
     required: true
   branch-patterns:
-    description: 'JSON array of branch patterns to protect'
+    description: 'JSON string of branch patterns to protect'
     required: true
   protection-rules:
-    description: 'JSON object containing protection rules'
+    description: 'JSON string of protection rules to apply'
     required: true
-
-outputs:
-  rules-applied:
-    description: 'Summary of applied branch protection rules'
 
 runs:
   using: "composite"
   steps:
-  - name: Parse branch patterns and protection rules
-    id: parse-inputs
-    shell: bash
-    run: |
-      echo "Branch patterns: ${{ inputs.branch-patterns }}"
-      echo "Protection rules: ${{ inputs.protection-rules }}"
-
   - name: Apply branch protection rules
-    uses: actions/github-script@v6
+    shell: bash
     env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
       BRANCH_PATTERNS: ${{ inputs.branch-patterns }}
       PROTECTION_RULES: ${{ inputs.protection-rules }}
-    with:
-      github-token: ${{ inputs.github-token }}
-      script: |
-        const branchPatterns = JSON.parse(process.env.BRANCH_PATTERNS);
-        const protectionRules = JSON.parse(process.env.PROTECTION_RULES);
+    run: |
+      branchPatterns=$(echo "$BRANCH_PATTERNS" | jq -r '.[]')
+      for pattern in $branchPatterns; do
+        echo "Applying protection rules to branch pattern: $pattern"
 
-        for (const pattern of branchPatterns) {
-          console.log(`Applying protection rules to branch pattern: ${pattern}`);
+        response=$(curl -s -X PUT \
+          -H "Authorization: token $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/repos/$GITHUB_REPOSITORY/branches/$pattern/protection" \
+          -d "$PROTECTION_RULES")
 
-          try {
-            await github.rest.repos.updateBranchProtection({
-              ...context.repo,
-              branch: pattern,
-              required_status_checks: protectionRules.required_status_checks,
-              enforce_admins: protectionRules.enforce_admins,
-              required_pull_request_reviews: protectionRules.required_pull_request_reviews,
-              restrictions: protectionRules.restrictions,
-              required_linear_history: protectionRules.required_linear_history,
-              allow_force_pushes: protectionRules.allow_force_pushes,
-              allow_deletions: protectionRules.allow_deletions
-            });
-            console.log(`Successfully applied protection rules to ${pattern}`);
-          } catch (error) {
-            console.error(`Error applying protection rules to ${pattern}: ${error.message}`);
-          }
-        }
+        if [[ $(echo "$response" | jq -r '.message') == "null" ]]; then
+          echo "Successfully applied protection rules to $pattern"
+        else
+          echo "Error applying protection rules to $pattern: $(echo "$response" | jq -r '.message')"
+        fi
+      done
 
   - name: Generate summary
     id: generate-summary
