@@ -60,15 +60,8 @@ runs:
   - name: Detect package manager
     shell: bash
     run: |
-      if [ -f "package-lock.json" ]; then
-        echo "package-manager=npm" >> $GITHUB_OUTPUT
-      elif [ -f "yarn.lock" ]; then
-        echo "package-manager=yarn" >> $GITHUB_OUTPUT
-      elif [ -f "pnpm-lock.yaml" ]; then
-        echo "package-manager=pnpm" >> $GITHUB_OUTPUT
-      else
-        echo "package-manager=unknown" >> $GITHUB_OUTPUT
-      fi
+      PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager // "unknown"')
+      echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
 
   - name: Fetch repository metadata
     shell: bash
@@ -167,7 +160,11 @@ runs:
   - name: Set GitHub Pages URLs
     shell: bash
     run: |
-      PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+      CONFIG_DATA=$(cat $GITHUB_OUTPUT | sed -n '/^config-data<<EOF$/,/^EOF$/p' | sed '1d;$d')
+      PAGES_URL=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific.web.ci_cd.deployment.production.url // empty')
+      if [ -z "$PAGES_URL" ]; then
+        PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+      fi
       echo "github_pages_urls=[\"$PAGES_URL\"]" >> $GITHUB_OUTPUT
 
   - name: Completion message
