@@ -31,23 +31,25 @@ outputs:
 runs:
   using: "composite"
   steps:
+  - name: Setup Bun
+    uses: oven-sh/setup-bun@v2
+    with:
+      bun-version: latest
+
   - name: Cache dependencies and config
     uses: actions/cache@v3
     id: cache
     with:
       path: |
-        ~/.npm
-        ~/.yarn
-        ~/.pnpm-store
+        ~/.bun
         .github/config.yml
-      key: ${{ runner.os }}-deps-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml', '.github/config.yml') }}
+      key: ${{ runner.os }}-deps-${{ hashFiles('**/bun.lockb', '.github/config.yml') }}
 
   - name: Install action dependencies
     if: steps.cache.outputs.cache-hit != 'true'
     shell: bash
     run: |
-      npm install --no-save js-yaml
-      npm install --no-save @octokit/rest@latest
+      bun add js-yaml @octokit/rest@latest
 
   - name: Setup Context and Prerequisites
     shell: bash
@@ -67,44 +69,19 @@ runs:
       if [ ! -f ".github/config.yml" ]; then
         echo "Error: config.yml is missing"
         exit 1
-      fi
-      CONFIG_DATA=$(cat .github/config.yml | yq eval -j .)
+      }
+      CONFIG_DATA=$(cat .github/config.yml | bun run js-yaml -j)
       echo "config-data=$CONFIG_DATA" >> $GITHUB_OUTPUT
       debug "Config data loaded and parsed"
 
-      # Detect package manager
-      if [ -n "$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager')" ]; then
-        PACKAGE_MANAGER=$(echo "$CONFIG_DATA" | jq -r '.packages.global_settings.ci_cd.package_manager')
-      elif [ -f "package-lock.json" ]; then
-        PACKAGE_MANAGER="npm"
-      elif [ -f "yarn.lock" ]; then
-        PACKAGE_MANAGER="yarn"
-      elif [ -f "pnpm-lock.yaml" ]; then
-        PACKAGE_MANAGER="pnpm"
-      else
-        echo "Error: No supported package manager lock file found"
-        exit 1
-      fi
+      # Detect package manager (always Bun in this case)
+      PACKAGE_MANAGER="bun"
       echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
       debug "Package manager detected: $PACKAGE_MANAGER"
 
       # Install dependencies if cache miss
       if [ "${{ steps.cache.outputs.cache-hit }}" != "true" ]; then
-        case $PACKAGE_MANAGER in
-          npm)
-            npm ci
-            ;;
-          yarn)
-            yarn install --frozen-lockfile
-            ;;
-          pnpm)
-            pnpm install --frozen-lockfile
-            ;;
-          *)
-            echo "Error: Unsupported package manager: $PACKAGE_MANAGER"
-            exit 1
-            ;;
-        esac
+        bun install
         echo "installation-status=success" >> $GITHUB_OUTPUT
         debug "Dependencies installed successfully"
       else
@@ -124,22 +101,22 @@ runs:
         echo "GITHUB_SHA=${GITHUB_SHA}"
         echo "GITHUB_REF=${GITHUB_REF}"
         echo "PACKAGE_MANAGER=$PACKAGE_MANAGER"
-        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | jq -r '.repository.type')"
-        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.main_branches')"
-        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.branch_prefixes')"
-        echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.merge_strategy')"
-        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | jq -r '.repository.version_control.protected_branches')"
+        echo "REPO_TYPE=$(echo "$CONFIG_DATA" | bun run jq -r '.repository.type')"
+        echo "MAIN_BRANCHES=$(echo "$CONFIG_DATA" | bun run jq -r '.repository.version_control.main_branches')"
+        echo "BRANCH_PREFIXES=$(echo "$CONFIG_DATA" | bun run jq -r '.repository.version_control.branch_prefixes')"
+        echo "MERGE_STRATEGY=$(echo "$CONFIG_DATA" | bun run jq -r '.repository.version_control.merge_strategy')"
+        echo "PROTECTED_BRANCHES=$(echo "$CONFIG_DATA" | bun run jq -r '.repository.version_control.protected_branches')"
       } >> $GITHUB_ENV
       echo "environment-variables=Environment variables set" >> $GITHUB_OUTPUT
 
       # Set repository context
-      REPOSITORY_CONTEXT=$(jq -n \
+      REPOSITORY_CONTEXT=$(bun run jq -n \
         --argjson repoMetadata "$REPO_METADATA" \
         --argjson config "$CONFIG_DATA" \
         --arg branch "${GITHUB_REF#refs/heads/}" \
         --arg commit "$GITHUB_SHA" \
         --arg packageManager "$PACKAGE_MANAGER" \
-        --argjson changedFiles "$(echo "$CHANGED_FILES" | jq -R . | jq -s .)" \
+        --argjson changedFiles "$(echo "$CHANGED_FILES" | bun run jq -R . | bun run jq -s .)" \
         '{
           repoMetadata: $repoMetadata,
           config: $config,
@@ -156,7 +133,7 @@ runs:
       echo "repository-context=$REPOSITORY_CONTEXT" >> $GITHUB_OUTPUT
 
       # Set apps configuration
-      echo "apps_configuration=$(echo "$CONFIG_DATA" | jq -r '.packages.package_specific')" >> $GITHUB_OUTPUT
+      echo "apps_configuration=$(echo "$CONFIG_DATA" | bun run jq -r '.packages.package_specific')" >> $GITHUB_OUTPUT
 
       # Set GitHub Pages URLs
       PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
@@ -169,4 +146,4 @@ runs:
     shell: bash
     run: |
       rm -rf node_modules
-      npm cache clean --force
+      bun cache clean
