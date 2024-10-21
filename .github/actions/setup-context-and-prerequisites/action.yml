@@ -65,8 +65,8 @@ runs:
     id: normalize_config
     shell: bash
     run: |
-      CONFIG_DATA='${{ steps.load_config.outputs.config-data }}'
-      NORMALIZED_CONFIG=$(echo "$CONFIG_DATA" | jq '{
+      CONFIG_DATA="${{ steps.load_config.outputs.config-data }}"
+      NORMALIZED_CONFIG=$(echo "$CONFIG_DATA" | jq -c '{
         repository: {
           type: (.repository.type // "monorepo"),
           version_control: {
@@ -96,7 +96,7 @@ runs:
     id: detect_package_manager
     shell: bash
     run: |
-      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
       PACKAGE_MANAGER=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.global_settings.ci_cd.package_manager')
       echo "package-manager=$PACKAGE_MANAGER" >> $GITHUB_OUTPUT
 
@@ -135,7 +135,7 @@ runs:
     id: set_env_vars
     shell: bash
     run: |
-      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
       {
         echo "REPO_NAME=${GITHUB_REPOSITORY}"
         echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
@@ -155,10 +155,10 @@ runs:
     id: set_repo_context
     shell: bash
     run: |
-      REPO_METADATA='${{ steps.fetch_repo_metadata.outputs.repo-metadata }}'
-      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
-      CHANGED_FILES='${{ steps.get_changed_files.outputs.changed_files }}'
-      PACKAGE_MANAGER='${{ steps.detect_package_manager.outputs.package-manager }}'
+      REPO_METADATA="${{ steps.fetch_repo_metadata.outputs.repo-metadata }}"
+      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
+      CHANGED_FILES="${{ steps.get_changed_files.outputs.changed_files }}"
+      PACKAGE_MANAGER="${{ steps.detect_package_manager.outputs.package-manager }}"
 
       REPOSITORY_CONTEXT=$(jq -n \
         --argjson repoMetadata "$REPO_METADATA" \
@@ -188,7 +188,7 @@ runs:
     id: set_apps_config
     shell: bash
     run: |
-      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
       APPS_CONFIG=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.package_specific')
       echo "apps_configuration=$APPS_CONFIG" >> $GITHUB_OUTPUT
 
@@ -196,7 +196,7 @@ runs:
     id: set_github_pages_urls
     shell: bash
     run: |
-      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
       PAGES_URL=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.package_specific.web.ci_cd.deployment.production.url // empty')
       if [ -z "$PAGES_URL" ]; then
         PAGES_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
@@ -207,7 +207,7 @@ runs:
     id: set_metrics_data
     shell: bash
     run: |
-      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
       METRICS_DATA=$(echo "$NORMALIZED_CONFIG" | jq -r '.metrics_generation')
       echo "metrics_data=$METRICS_DATA" >> $GITHUB_OUTPUT
 
@@ -215,7 +215,7 @@ runs:
     id: set_security_checks
     shell: bash
     run: |
-      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
       SECURITY_CHECKS=$(echo "$NORMALIZED_CONFIG" | jq -r '.security_dependency_management')
       echo "security_checks=$SECURITY_CHECKS" >> $GITHUB_OUTPUT
 
@@ -223,7 +223,7 @@ runs:
     id: set_performance_monitoring
     shell: bash
     run: |
-      NORMALIZED_CONFIG='${{ steps.normalize_config.outputs.normalized-config }}'
+      NORMALIZED_CONFIG="${{ steps.normalize_config.outputs.normalized-config }}"
       PERFORMANCE_MONITORING=$(echo "$NORMALIZED_CONFIG" | jq -r '.packages.global_settings.performance_monitoring')
       echo "performance_monitoring=$PERFORMANCE_MONITORING" >> $GITHUB_OUTPUT
 
