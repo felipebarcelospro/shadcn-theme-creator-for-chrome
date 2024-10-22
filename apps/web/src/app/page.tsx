@@ -4,6 +4,7 @@ import { Button } from "@repo/ui/components/ui/button";
 import { Card } from "@repo/ui/components/ui/card";
 import { Metadata } from "next";
 import { WaitlistDialog } from "./components/waitlist-dialog";
+import { useState, useEffect } from "react"; // P1a8f
 
 export const metadata: Metadata = {
   title: "Shadcn/UI Theme Creator for Chrome",
@@ -20,6 +21,17 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
+  const [headline, setHeadline] = useState(""); // P4359
+  const headlines = [
+    "Boost productivity and create stunning Shadcn/UI UI themes in real-time.",
+    "Customize, preview, and export Shadcn/UI themes with ease using our Chrome extension."
+  ]; // P4359
+
+  useEffect(() => {
+    const randomHeadline = headlines[Math.floor(Math.random() * headlines.length)];
+    setHeadline(randomHeadline);
+  }, []); // P8c94
+
   return (    
     <main className="container mx-auto px-4 py-8 sm:py-12 md:py-16">
       <section className="text-center mb-12 sm:mb-16 md:mb-24">
@@ -53,7 +65,7 @@ export default function Home() {
         </p>
 
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6 md:mb-8 !leading-snug md:max-w-3xl mx-auto">
-          {config.projectTagline}
+          {headline} {/* Pf32b */}
         </h1>
 
         <p className="text-lg sm:text-xl md:text-2xl mb-8 sm:mb-10 md:mb-12 text-muted-foreground max-w-3xl mx-auto">
